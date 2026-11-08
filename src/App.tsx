@@ -235,6 +235,13 @@ export default function App() {
       if (!eventoAtual) return prev;
 
       const c = opcao.consequencias;
+      if (
+        c.custoFinanceiro !== undefined &&
+        c.custoFinanceiro > prev.vida.saldoBancario
+      ) {
+        showToast('Saldo insuficiente para essa decisão. Escolha outra alternativa do evento.');
+        return prev;
+      }
       let novoSaldo = prev.vida.saldoBancario;
       if (c.custoFinanceiro) novoSaldo -= c.custoFinanceiro;
       if (c.ganhoFinanceiro) novoSaldo += c.ganhoFinanceiro;
