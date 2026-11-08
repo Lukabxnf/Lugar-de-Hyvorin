@@ -1,4 +1,4 @@
-import { CARREIRAS, CURSOS, MORADIAS, VEICULOS_CATALOGO } from './data';
+import { CARREIRAS, CARGOS_POLITICOS, CURSOS, MORADIAS, VEICULOS_CATALOGO } from './data';
 import { registrarTransacaoFinanceira } from './finance';
 import {
   ContaPagar,
@@ -214,25 +214,31 @@ export function simularMesVida(
   let estresseTrabalho = 0;
 
   if (novaVida.empregoAtual) {
-    const carreira = CARREIRAS.find(c => c.id === novaVida.empregoAtual?.carreiraId);
-    if (carreira) {
-      const salarioBase = novaVida.empregoAtual.salarioAcordado || carreira.salario;
+    const cargoPolitico = novaVida.empregoAtual.cargoPoliticoId
+      ? CARGOS_POLITICOS[novaVida.empregoAtual.cargoPoliticoId]
+      : undefined;
+    const carreira = cargoPolitico
+      ? undefined
+      : CARREIRAS.find(c => c.id === novaVida.empregoAtual?.carreiraId);
+
+    if (cargoPolitico || carreira) {
+      const salarioBase = novaVida.empregoAtual.salarioAcordado || cargoPolitico?.salarioMensal || carreira?.salario || 0;
       const faltas = Math.min(22, Math.max(0, Math.floor(novaVida.empregoAtual.faltasNoMes || 0)));
       const descontoFaltas = salarioBase * (faltas / 22);
       rendaTrabalho = Math.max(0, salarioBase - descontoFaltas);
-      estresseTrabalho = carreira.estresse;
+      estresseTrabalho = carreira?.estresse ?? 7;
       novaVida.empregoAtual = {
         ...novaVida.empregoAtual,
         mesesNoCargo: novaVida.empregoAtual.mesesNoCargo + 1,
         faltasNoMes: 0,
       };
       if (faltas > 0) {
-        logs.push(`Desconto salarial por ${faltas} falta(s) no mês: R$ ${Math.round(descontoFaltas).toLocaleString('pt-BR')}.`);
+        logs.push(`Desconto remuneratório por ${faltas} falta(s) no mês: R$ ${Math.round(descontoFaltas).toLocaleString('pt-BR')}.`);
       }
 
-      // Atualiza experiência na Carteira de Trabalho
+      // Um vínculo político também conta como atividade profissional na CTPS.
       novaVida.carteira.mesesTotaisContribuicao += 1;
-      const area = carreira.area || 'geral';
+      const area = cargoPolitico ? 'politica' : (carreira?.area || 'geral');
       novaVida.carteira.experienciaPorArea[area] = (novaVida.carteira.experienciaPorArea[area] || 0) + 1;
     }
   }
