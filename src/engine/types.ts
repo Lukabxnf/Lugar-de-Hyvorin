@@ -44,6 +44,30 @@ export interface CargoPoliticoInfo {
 
 export type TipoMoradia = 'pais' | 'aluguel_simples' | 'apartamento_padrao' | 'apartamento_luxo' | 'mansao';
 
+export interface OfertaImovel {
+  id: string;
+  valor: number;
+  mes: number;
+  ano: number;
+}
+
+export interface ImovelProprio {
+  id: string;
+  tipo: TipoMoradia;
+  nome: string;
+  valorCompra: number;
+  valorMercadoAtual: number;
+  mesCompra: number;
+  anoCompra: number;
+  alugadoParaTerceiros: boolean;
+  aluguelMensal: number;
+  anuncio?: {
+    precoPedido: number;
+    mesesAnunciado: number;
+    ofertaPendente?: OfertaImovel;
+  };
+}
+
 export interface MoradiaInfo {
   id: TipoMoradia;
   nome: string;
@@ -346,6 +370,8 @@ export interface VidaPessoal {
   
   moradia: TipoMoradia;
   casaPropria: boolean;
+  imoveis?: ImovelProprio[]; // inventário permanente, independente da residência ocupada
+  imovelResidenciaId?: string;
   educacao: NivelEducacao;
   cursoAtual?: {
     cursoId: string;
@@ -551,6 +577,7 @@ export interface EstadoJogo {
   anoAtual: number; // ex: 2026
   mesesTotais: number; // 0, 1, 2...
   horasTotais: number;
+  indicePrecosAcumulado?: number; // nível nominal do catálogo desde o início da partida
   
   vida: VidaPessoal;
   empresas: Empresa[]; // Permite múltiplas empresas
