@@ -11,6 +11,16 @@ import {
 } from './types';
 
 /**
+ * Converte uma taxa anual percentual em taxa mensal efetiva.
+ * Exemplo: 5,47% a.a. é capitalizado como (1 + 0,0547)^(1/12) - 1.
+ */
+export function calcularTaxaMensalEfetiva(taxaAnualPercentual: number): number {
+  if (!Number.isFinite(taxaAnualPercentual)) return 0;
+  const taxaAnual = Math.max(-99.99, taxaAnualPercentual) / 100;
+  return Math.pow(1 + taxaAnual, 1 / 12) - 1;
+}
+
+/**
  * Calcula a idade exata com base na data de nascimento e na data atual do jogo.
  */
 export function calcularIdadeExata(nascimento: DataCalendario, dataAtual: DataCalendario): number {
@@ -201,11 +211,12 @@ export function simularMesVida(
   // Salário político tem precedência caso seja maior ou acumulável
   const rendaTotalTrabalho = Math.max(rendaTrabalho, salarioPolitico);
 
-  // 3. Rendimento de Aplicações Financeiras (CDI / Selic)
+  // 3. Rendimento de aplicações pelo CDI, usando capitalização mensal efetiva.
   let rendimentoInvestimentos = 0;
   if (novaVida.saldoBancario > 0) {
-    const taxaCdiMensal = ((macro.taxaSelic - 0.2) / 100) / 12;
-    rendimentoInvestimentos = novaVida.saldoBancario * Math.max(0, taxaCdiMensal);
+    const taxaCdiAnual = Math.max(0, macro.taxaSelic - 0.2);
+    const taxaCdiMensal = calcularTaxaMensalEfetiva(taxaCdiAnual);
+    rendimentoInvestimentos = novaVida.saldoBancario * taxaCdiMensal;
   }
 
   // Deposita as entradas financeiras no saldo bancário
