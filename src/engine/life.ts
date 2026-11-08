@@ -421,28 +421,32 @@ export function simularMesVida(
     novaVida.limiteCreditoPreAprovado = Math.round(rendaMensalMedia * 3 * fatorScore + (novaVida.saldoBancario * 0.2));
   }
 
-  // 9. Evolução Acadêmica (Cursos, Semestres e Diplomas)
+  // 9. Evolução Acadêmica: o tempo delimita o semestre, mas não aprova nem diploma sozinho.
   if (novaVida.cursoMatriculado && !novaVida.cursoMatriculado.concluido) {
     const cm = novaVida.cursoMatriculado;
     cm.mesesDecorridos += 1;
 
-    // A cada 6 meses fecha um semestre acadêmico
-    if (cm.mesesDecorridos % 6 === 0 || cm.mesesDecorridos >= cm.mesesTotais) {
-      // Avaliação de Provas e Frequência
-      const frequencia = cm.aulasRequeridas > 0 ? (cm.aulasAssistidas / cm.aulasRequeridas) : 1;
-      const bonusIntelecto = (novaVida.intelecto / 100) * 3;
-      const notaFinal = Math.min(10, Number((5.5 + bonusIntelecto + (frequencia * 2)).toFixed(1)));
-      cm.notaMedia = notaFinal;
-      cm.provasRealizadas += 1;
+    const duracaoSemestre = Math.max(1, Math.ceil(cm.mesesTotais / Math.max(1, cm.totalSemestres)));
+    const mesesNoSemestre = (cm.mesesNoSemestre ?? (cm.mesesDecorridos - 1) % duracaoSemestre) + 1;
+    cm.mesesNoSemestre = mesesNoSemestre;
 
-      if (notaFinal >= 6.0 && frequencia >= 0.65) {
+    if (mesesNoSemestre >= duracaoSemestre) {
+      const frequencia = cm.aulasRequeridas > 0
+        ? cm.aulasAssistidas / cm.aulasRequeridas
+        : 0;
+      const notaFinal = Math.max(0, Math.min(10, Number(cm.notaMedia.toFixed(1))));
+      const provasNecessarias = Math.max(1, cm.provasRequeridas || 1);
+      const cumpriuProvas = cm.provasRealizadas >= provasNecessarias;
+      const aprovado = notaFinal >= 6.0 && frequencia >= 0.65 && cumpriuProvas;
+
+      if (aprovado) {
+        const semestreConcluido = cm.semestreAtual;
         cm.aprovado = true;
         cm.semestreAtual += 1;
-        logs.push(`📚 Semestre Aprovado: Você concluiu o ${cm.semestreAtual - 1}º semestre de '${cm.nome}' com média ${notaFinal}!`);
         novaVida.intelecto = Math.min(100, Number((novaVida.intelecto + 3.5).toFixed(1)));
+        logs.push(`📚 Semestre Aprovado: você concluiu o ${semestreConcluido}º semestre de '${cm.nome}' com média ${notaFinal} e frequência de ${Math.round(frequencia * 100)}%.`);
 
-        // Se completou todos os semestres
-        if (cm.semestreAtual > cm.totalSemestres || cm.mesesDecorridos >= cm.mesesTotais) {
+        if (cm.semestreAtual > cm.totalSemestres) {
           cm.concluido = true;
           const diploma = `Diploma: ${cm.nome}`;
           if (!novaVida.titulosConquistados.includes(diploma)) {
@@ -452,16 +456,25 @@ export function simularMesVida(
             novaVida.educacao = cm.concedeNivel;
           }
           novaVida.reputacao = Math.min(100, novaVida.reputacao + 8);
-          logs.push(`🎓 COLAÇÃO DE GRAU: Você concluiu com louvor '${cm.nome}' e recebeu seu diploma formal!`);
+          logs.push(`🎓 COLAÇÃO DE GRAU: você concluiu '${cm.nome}' e recebeu seu diploma formal.`);
         }
       } else {
         cm.aprovado = false;
-        logs.push(`⚠️ Dependência Acadêmica: Frequência ou nota baixa (${notaFinal}) em '${cm.nome}'. É necessário refazer matérias.`);
+        const motivos = [
+          !cumpriuProvas ? `avaliações realizadas ${cm.provasRealizadas}/${provasNecessarias}` : '',
+          frequencia < 0.65 ? `frequência ${Math.round(frequencia * 100)}%` : '',
+          notaFinal < 6.0 ? `média ${notaFinal}` : '',
+        ].filter(Boolean).join(', ');
+        logs.push(`⚠️ Semestre não aprovado em '${cm.nome}': ${motivos}. O semestre deverá ser repetido.`);
       }
 
-      // Reinicia métricas do novo semestre
-      cm.aulasAssistidas = 0;
-      cm.aulasRequeridas = 120;
+      // Novo ciclo acadêmico. A conclusão continua condicionada à aprovação de todos os semestres.
+      if (!cm.concluido) {
+        cm.mesesNoSemestre = 0;
+        cm.aulasAssistidas = 0;
+        cm.aulasRequeridas = 120;
+        cm.provasRealizadas = 0;
+      }
     }
   }
 
