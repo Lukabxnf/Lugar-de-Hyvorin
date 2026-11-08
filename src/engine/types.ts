@@ -355,6 +355,8 @@ export interface VidaPessoal {
   
   empregoAtual?: {
     carreiraId: string;
+    // Quando preenchido, o vínculo é um mandato eletivo e não um emprego comum.
+    cargoPoliticoId?: CargoPoliticoId;
     mesesNoCargo: number;
     salarioAcordado: number;
     faltasNoMes?: number;
