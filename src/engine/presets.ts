@@ -496,6 +496,11 @@ export function criarEstadoInicial(perfilId = 'estudante'): EstadoJogo {
     despesaPublicaMes: 302.5,
     confiancaEmpresarial: 58,
     riscoPais: 205,
+    inflacaoExterna: 2.0,
+    taxaJurosExterna: 4.75,
+    saldoComercialMes: 8.0,
+    fluxoCapitalMes: 2.0,
+    reservasInternacionais: 350.0,
   };
 
   const empresasIniciais: Empresa[] = [];
