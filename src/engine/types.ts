@@ -393,6 +393,11 @@ export interface PoliticaGoverno {
   fundoPartidarioMes: number;
   emCampanha: boolean;
   cargoDisputado?: CargoPoliticoId;
+  campanhaInicioMesTotal?: number;
+  ultimaEleicaoMesTotal?: number;
+  ultimaEleicaoCargo?: CargoPoliticoId;
+  inicioMandatoMesTotal?: number;
+  reeleicoesConsecutivas?: number;
   propostasAtivas: string[];
 }
 
