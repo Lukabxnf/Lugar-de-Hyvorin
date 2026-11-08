@@ -39,7 +39,7 @@ import {
 } from '../engine/types';
 import { CARREIRAS, CURSOS, MORADIAS, VEICULOS_CATALOGO } from '../engine/data';
 import { calcularIdadeExata } from '../engine/life';
-import { registrarTransacaoFinanceira } from '../engine/finance';
+import { formatarMoedaCompacta, registrarTransacaoFinanceira } from '../engine/finance';
 
 interface LifeViewProps {
   estado: EstadoJogo;
@@ -255,6 +255,13 @@ export const LifeView: React.FC<LifeViewProps> = ({
       vida: {
         ...vida,
         saldoBancario: vida.saldoBancario - custo,
+        historicoFinanceiro: registrarTransacaoFinanceira(
+          { ...vida, saldoBancario: vida.saldoBancario - custo },
+          { dia: estado.diaAtual, mes: estado.mesAtual, ano: estado.anoAtual },
+          'despesa_paga',
+          'Saída social e transporte para conhecer pessoas',
+          -custo
+        ).historicoFinanceiro,
         energia: Math.max(0, vida.energia - 5),
         felicidade: Math.min(100, vida.felicidade + 4),
         familia: {
@@ -339,6 +346,15 @@ export const LifeView: React.FC<LifeViewProps> = ({
       vida: {
         ...vida,
         saldoBancario: vida.saldoBancario - custo,
+        historicoFinanceiro: custo > 0
+          ? registrarTransacaoFinanceira(
+              { ...vida, saldoBancario: vida.saldoBancario - custo },
+              { dia: estado.diaAtual, mes: estado.mesAtual, ano: estado.anoAtual },
+              'despesa_paga',
+              tipoAcao === 'almoco' ? 'Almoço social' : 'Encontro social',
+              -custo
+            ).historicoFinanceiro
+          : vida.historicoFinanceiro,
         energia: Math.max(0, vida.energia - gastoEnergia),
         felicidade: Math.min(100, vida.felicidade + (ganho * 0.4)),
         familia: novaFamilia,
@@ -424,6 +440,13 @@ export const LifeView: React.FC<LifeViewProps> = ({
       vida: {
         ...vida,
         saldoBancario: vida.saldoBancario - custoCartorio,
+        historicoFinanceiro: registrarTransacaoFinanceira(
+          { ...vida, saldoBancario: vida.saldoBancario - custoCartorio },
+          { dia: estado.diaAtual, mes: estado.mesAtual, ano: estado.anoAtual },
+          'despesa_paga',
+          'Registro civil do casamento',
+          -custoCartorio
+        ).historicoFinanceiro,
         felicidade: Math.min(100, vida.felicidade + 30),
         familia: {
           ...vida.familia,
@@ -609,6 +632,13 @@ export const LifeView: React.FC<LifeViewProps> = ({
       vida: {
         ...vida,
         saldoBancario: vida.saldoBancario - curso.custoMensal,
+        historicoFinanceiro: registrarTransacaoFinanceira(
+          { ...vida, saldoBancario: vida.saldoBancario - curso.custoMensal },
+          { dia: estado.diaAtual, mes: estado.mesAtual, ano: estado.anoAtual },
+          'despesa_paga',
+          `Matrícula: ${curso.nome}`,
+          -curso.custoMensal
+        ).historicoFinanceiro,
         cursoMatriculado: novoCursoMatr,
         cursoAtual: {
           cursoId: curso.id,
@@ -735,6 +765,7 @@ export const LifeView: React.FC<LifeViewProps> = ({
         {[
           { id: 'perfil', label: '👤 Perfil & Avatar' },
           { id: 'geral', label: '💳 Finanças & Score' },
+          { id: 'historico', label: '📒 Livro-caixa' },
           { id: 'rotina', label: '⏰ Rotina & Horários' },
           { id: 'carreira', label: '💼 Trabalho & CTPS' },
           { id: 'familia', label: '❤️ Família & Relações' },
@@ -755,6 +786,69 @@ export const LifeView: React.FC<LifeViewProps> = ({
           </button>
         ))}
       </div>
+
+      {/* Livro-caixa: histórico rastreável das entradas, saídas e obrigações. */}
+      {activeSubSection === 'historico' && (
+        <section className="space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+              <div>
+                <h2 className="text-lg font-black text-slate-100">Livro-caixa da partida</h2>
+                <p className="text-xs text-slate-400 mt-1">Entradas, saídas e obrigações registradas pelo motor. São mantidos os 200 movimentos mais recentes.</p>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] text-slate-500 uppercase font-bold">Saldo disponível</div>
+                <div className="font-mono text-lg text-emerald-400 font-bold">{formatarMoedaCompacta(vida.saldoBancario)}</div>
+              </div>
+            </div>
+            {(vida.historicoFinanceiro || []).length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-sm text-slate-400">
+                Ainda não há movimentos registrados nesta partida. Os próximos fechamentos mensais e operações financeiras serão listados aqui.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {(vida.historicoFinanceiro || []).slice(0, 30).map(transacao => {
+                  const nomes: Record<string, string> = {
+                    salario: 'Salário',
+                    rendimento_cdi: 'Rendimento CDI',
+                    parcela_emprestimo: 'Parcela de empréstimo',
+                    despesa_paga: 'Despesa paga',
+                    conta_vencida: 'Conta vencida',
+                    juros_mora: 'Juros de mora',
+                    emprestimo: 'Empréstimo contratado',
+                    evento: 'Decisão de evento',
+                    transferencia: 'Transferência',
+                  };
+                  const cor = transacao.valor > 0
+                    ? 'text-emerald-400'
+                    : transacao.valor < 0
+                    ? 'text-rose-400'
+                    : 'text-slate-400';
+                  return (
+                    <div key={transacao.id} className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 rounded-xl bg-slate-950/70 border border-slate-800 px-3 py-3">
+                      <div className="min-w-0">
+                        <div className="text-sm text-slate-200 font-semibold break-words">{transacao.descricao}</div>
+                        <div className="text-[11px] text-slate-500 mt-1">
+                          {transacao.data} • {nomes[transacao.tipo] || transacao.tipo}
+                          {transacao.valorObrigacao !== undefined ? ` • Obrigação: ${formatarMoedaCompacta(transacao.valorObrigacao)}` : ''}
+                        </div>
+                      </div>
+                      <div className="sm:text-right">
+                        <div className={`font-mono font-bold text-sm ${cor}`}>
+                          {transacao.valor > 0 ? '+' : ''}{formatarMoedaCompacta(transacao.valor)}
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-1">
+                          Saldo após: {formatarMoedaCompacta(transacao.saldoApos)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* 1. SEÇÃO PERFIL & AVATAR */}
       {activeSubSection === 'perfil' && (
