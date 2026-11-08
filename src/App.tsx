@@ -18,6 +18,7 @@ import { EventDecisionModal } from './components/EventDecisionModal';
 
 import { EstadoJogo, OpcaoEvento } from './engine/types';
 import { aplicarImpactoAfinidadeFamiliar } from './engine/events';
+import { registrarTransacaoFinanceira } from './engine/finance';
 import { criarEstadoInicial } from './engine/presets';
 import { avancarHorasSimulacao, avancarMinutosSimulacao, avancarMesSimulacao, avancarMultiplosMeses } from './engine/simulation';
 
@@ -52,6 +53,7 @@ function sanitizarEstado(raw: any): EstadoJogo {
       scoreCredito: raw.vida?.scoreCredito ?? 750,
       limiteCreditoPreAprovado: raw.vida?.limiteCreditoPreAprovado ?? 4500,
       contasVencidas: raw.vida?.contasVencidas || [],
+      historicoFinanceiro: raw.vida?.historicoFinanceiro || [],
       emprestimosContratados: raw.vida?.emprestimosContratados || [],
       titulosConquistados: raw.vida?.titulosConquistados || ['Certificado de Ensino Médio'],
       habilidades: raw.vida?.habilidades || base.vida.habilidades,
@@ -270,9 +272,8 @@ export default function App() {
 
       showToast(c.mensagemResultado);
 
-      return {
-        ...prev,
-        vida: {
+      const vidaComRegistro = registrarTransacaoFinanceira(
+        {
           ...prev.vida,
           saldoBancario: novoSaldo,
           saude: novaSaude,
@@ -282,6 +283,15 @@ export default function App() {
           reputacao: Math.max(0, Math.min(100, novaReputacao)),
           familia: novaFamilia,
         },
+        { dia: prev.diaAtual, mes: prev.mesAtual, ano: prev.anoAtual },
+        'evento',
+        `${eventoAtual.titulo}: ${opcao.texto}`,
+        (c.ganhoFinanceiro || 0) - (c.custoFinanceiro || 0)
+      );
+
+      return {
+        ...prev,
+        vida: vidaComRegistro,
         eventosPendentes: prev.eventosPendentes.slice(1),
         eventosResolvidos: [resolvido, ...prev.eventosResolvidos].slice(0, 30),
       };
