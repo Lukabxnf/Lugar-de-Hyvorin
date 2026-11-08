@@ -367,6 +367,30 @@ export function avancarMesSimulacao(estado: EstadoJogo): EstadoJogo {
     destaques.push('Campanha encerrada: o período eleitoral passou sem que a candidatura fosse às urnas.');
   }
 
+  // Se o mandato termina neste fechamento, encerra também o vínculo profissional na CTPS.
+  let vidaFinal = novaVida;
+  if (
+    estado.politica.cargoAtual !== 'cidadao' &&
+    politicaFinal.cargoAtual === 'cidadao' &&
+    novaVida.empregoAtual?.cargoPoliticoId
+  ) {
+    const nomeCargoEncerrado = CARGOS_POLITICOS[novaVida.empregoAtual.cargoPoliticoId].nome;
+    let registroEncerrado = false;
+    const historicoRegistros = (novaVida.carteira.historicoRegistros || []).map(registro => {
+      if (!registroEncerrado && registro.cargo === nomeCargoEncerrado && !registro.mesFim) {
+        registroEncerrado = true;
+        return { ...registro, mesFim: novoMes, anoFim: novoAno };
+      }
+      return registro;
+    });
+    vidaFinal = {
+      ...novaVida,
+      empregoAtual: undefined,
+      carteira: { ...novaVida.carteira, historicoRegistros },
+    };
+    destaques.push(`Vínculo profissional encerrado na CTPS: ${nomeCargoEncerrado}.`);
+  }
+
   // Calendário Eleitoral check
   const { tipoEleicao, mesesAteEleicao, anoEleicao } = proximoPleito;
   if (mesesAteEleicao === 6) {
@@ -395,15 +419,18 @@ export function avancarMesSimulacao(estado: EstadoJogo): EstadoJogo {
     selic: novaMacro.taxaSelic,
     desemprego: novaMacro.taxaDesemprego,
     cambioDolar: novaMacro.cambioDolar,
-    saldoPessoal: Math.round(novaVida.saldoBancario),
+    saldoPessoal: Math.round(vidaFinal.saldoBancario),
     aprovacaoPolitica: novaPolitica.aprovacaoPopular,
   };
 
   const novoHistorico = [...estado.historico, novoPonto].slice(-48);
 
   // 9. Resumo do Mês
-  const receitasPessoais =
-    salarioPolitico + (novaVida.empregoAtual ? (novaVida.empregoAtual.salarioAcordado || 4000) : 0);
+  // A remuneração política já é o vínculo profissional do ocupante; não é somada a um segundo salário.
+  const receitasPessoais = Math.max(
+    salarioPolitico,
+    novaVida.empregoAtual?.salarioAcordado || 0
+  );
   const despesasPessoais = Math.max(0, saldoAnterior - novaVida.saldoBancario + receitasPessoais);
 
   return {
@@ -412,7 +439,7 @@ export function avancarMesSimulacao(estado: EstadoJogo): EstadoJogo {
     mesAtual: novoMes,
     anoAtual: novoAno,
     mesesTotais: novoMesesTotais,
-    vida: novaVida,
+    vida: vidaFinal,
     empresas: novasEmpresas,
     empresa: novasEmpresas[0],
     macro: novaMacro,
@@ -421,7 +448,7 @@ export function avancarMesSimulacao(estado: EstadoJogo): EstadoJogo {
     historico: novoHistorico,
     ultimoResumoMes: {
       saldoAnterior: Math.round(saldoAnterior),
-      saldoAtual: Math.round(novaVida.saldoBancario),
+      saldoAtual: Math.round(vidaFinal.saldoBancario),
       receitasPessoais: Math.round(receitasPessoais),
       despesasPessoais: Math.round(despesasPessoais),
       lucroEmpresarialTotal: Math.round(lucroEmpresarialTotal),
