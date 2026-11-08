@@ -13,7 +13,7 @@ export function precoImovelAtual(tipo: TipoMoradia, indice = 1): number {
 
 /** Converte casaPrópria de saves antigos em bem individual, sem venda implícita. */
 export function migrarImoveisLegados(vida: VidaPessoal, indice = 1, ano = 2026, mes = 1): VidaPessoal {
-  if (Array.isArray(vida.imoveis)) return vida;
+  if (Array.isArray(vida.imoveis) && (vida.imoveis.length > 0 || !vida.casaPropria)) return vida;
   const valor = precoImovelAtual(vida.moradia, indice);
   if (vida.casaPropria && valor > 0) {
     const item: ImovelProprio = {
