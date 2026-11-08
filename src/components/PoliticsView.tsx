@@ -312,6 +312,10 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
 
   // 4. Articular com o Parlamento / Base Aliada
   const handleArticularParlamento = () => {
+    if (!temMandatoEletivo) {
+      onShowMessage('As funções de governo só são liberadas após a posse em um cargo eletivo.');
+      return;
+    }
     const custo = 25_000;
     if (vida.saldoBancario < custo) {
       onShowMessage('Saldo insuficiente para despesas de articulação e almoços de lideranças.');
@@ -333,6 +337,10 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
 
   // 5. Pautar e Votar Proposta de Lei
   const handleVotarProposta = (proposta: PropostaPolitica) => {
+    if (!temMandatoEletivo) {
+      onShowMessage('Você precisa ocupar um cargo eletivo para apresentar ou votar propostas.');
+      return;
+    }
     const { aprovada, votosFavoraveis, mensagem } = votarProposta(proposta, politica);
 
     if (aprovada) {
@@ -393,7 +401,7 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
       )}
 
       {/* SECTION: CARREIRA & HIERARQUIA */}
-      {activeSubTab === 'carreira' && (
+      {temMandatoEletivo && activeSubTab === 'carreira' && (
         <div className="space-y-6">
           {/* Active Mandate Card */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
@@ -689,7 +697,7 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
       )}
 
       {/* SECTION: GABINETE & REFORMAS */}
-      {activeSubTab === 'gabinete' && (
+      {temMandatoEletivo && activeSubTab === 'gabinete' && (
         <div className="space-y-6">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex items-center justify-between">
             <div>
