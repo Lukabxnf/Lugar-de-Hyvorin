@@ -19,6 +19,7 @@ import { EventDecisionModal } from './components/EventDecisionModal';
 import { EstadoJogo, OpcaoEvento } from './engine/types';
 import { aplicarImpactoAfinidadeFamiliar } from './engine/events';
 import { registrarTransacaoFinanceira } from './engine/finance';
+import { migrarImoveisLegados } from './engine/imoveis';
 import { criarEstadoInicial } from './engine/presets';
 import { avancarMesSimulacao, avancarMultiplosMeses } from './engine/simulation';
 import { simularHoraVida } from './engine/life';
@@ -47,7 +48,7 @@ function sanitizarEstado(raw: any): EstadoJogo {
     horasTotais: raw.horasTotais ?? 0,
     empresas,
     empresa: empresas[0],
-    vida: {
+    vida: migrarImoveisLegados({
       ...base.vida,
       ...raw.vida,
       nomeCompleto: raw.vida?.nomeCompleto || raw.vida?.nome || base.vida.nomeCompleto,
@@ -69,7 +70,7 @@ function sanitizarEstado(raw: any): EstadoJogo {
       veiculos: raw.vida?.veiculos || base.vida.veiculos,
       carteira: raw.vida?.carteira || base.vida.carteira,
       rotina: raw.vida?.rotina || base.vida.rotina,
-    },
+    }, raw.indicePrecosAcumulado ?? 1, raw.anoAtual ?? 2026, raw.mesAtual ?? 1),
     macro: {
       ...base.macro,
       ...raw.macro,
