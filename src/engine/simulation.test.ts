@@ -7,7 +7,7 @@ import { analisarCreditoPessoal, calcularPatrimonioLiquido, formatarMoedaCompact
 import { cargoCompativelComEleicao, isAnoEleitoral } from './politics';
 import { aplicarImpactoAfinidadeFamiliar, sortearEventoDecisao } from './events';
 import { criarEstadoInicial } from './presets';
-import { avancarHorasSimulacao, avancarMinutosSimulacao, avancarMesSimulacao } from './simulation';
+import { avancarHorasSimulacao, avancarMinutosSimulacao, avancarMesSimulacao, diasNoMes } from './simulation';
 import { Macroeconomia, VidaPessoal, Empresa, DataCalendario, Relacionamento } from './types';
 
 test('Macro: Taylor Rule responds by raising Selic when inflation is above target', () => {
@@ -32,27 +32,31 @@ test('Macro: Taylor Rule responds by raising Selic when inflation is above targe
   assert.ok(ataCopom.includes('eleva'), 'Copom minutes should state rate increase');
 });
 
-test('Time & Clock: avancarHorasSimulacao advances hours, days and day of week', () => {
-  const estado = criarEstadoInicial('estudante');
+test('Time & Clock: full-hour advancement keeps the clock aligned and retains weekday progression', () => {
+  const base = criarEstadoInicial('estudante');
+  const estado = {
+    ...base,
+    vida: { ...base.vida, empregoAtual: undefined, cursoMatriculado: undefined, cursoAtual: undefined },
+  };
   assert.equal(estado.horaAtual, 8);
   assert.equal(estado.diaAtual, 1);
   assert.equal(estado.diaSemanaAtual, 'Segunda-feira');
 
-  // Avança 1 hora
   const estado1h = avancarHorasSimulacao(estado, 1);
   assert.equal(estado1h.horaAtual, 9);
+  assert.equal(estado1h.minutoAtual, 0);
   assert.equal(estado1h.diaAtual, 1);
-  assert.equal(estado1h.diaSemanaAtual, 'Segunda-feira');
 
-  // Avança 15 horas (8 + 1 + 15 = 24 -> 00:00 do dia 2, Terça-feira)
   const estado24h = avancarHorasSimulacao(estado1h, 15);
   assert.equal(estado24h.horaAtual, 0);
+  assert.equal(estado24h.minutoAtual, 0);
   assert.equal(estado24h.diaAtual, 2);
   assert.equal(estado24h.diaSemanaAtual, 'Terça-feira');
 });
 
-test('Clock: real-time speed units advance minutes without prematurely advancing an hour', () => {
-  const estado = criarEstadoInicial('estudante');
+test('Clock: legacy minute advancement remains compatible for saves and tests', () => {
+  const base = criarEstadoInicial('estudante');
+  const estado = { ...base, vida: { ...base.vida, empregoAtual: undefined, cursoMatriculado: undefined, cursoAtual: undefined } };
   const dezMinutos = avancarMinutosSimulacao(estado, 10);
 
   assert.equal(dezMinutos.horaAtual, 8);
@@ -66,8 +70,14 @@ test('Clock: real-time speed units advance minutes without prematurely advancing
   assert.equal(horaCompleta.horasTotais, 1);
 });
 
-test('Clock: day and month rollover happen only after crossing midnight', () => {
-  const estado = criarEstadoInicial('estudante');
+test('Calendar: daily rollover uses actual month lengths, including leap years', () => {
+  assert.equal(diasNoMes(2026, 1), 31);
+  assert.equal(diasNoMes(2026, 2), 28);
+  assert.equal(diasNoMes(2028, 2), 29);
+  assert.equal(diasNoMes(2026, 4), 30);
+
+  const base = criarEstadoInicial('estudante');
+  const estado = { ...base, vida: { ...base.vida, empregoAtual: undefined, cursoMatriculado: undefined, cursoAtual: undefined } };
   const fimDoDia = {
     ...estado,
     horaAtual: 23,
@@ -76,26 +86,42 @@ test('Clock: day and month rollover happen only after crossing midnight', () => 
     diaSemanaAtual: 'Segunda-feira' as const,
   };
   const novoDia = avancarMinutosSimulacao(fimDoDia, 10);
-
   assert.equal(novoDia.horaAtual, 0);
-  assert.equal(novoDia.minutoAtual, 0);
   assert.equal(novoDia.diaAtual, 2);
   assert.equal(novoDia.diaSemanaAtual, 'Terça-feira');
-  assert.equal(novoDia.horasTotais, fimDoDia.horasTotais + 1);
 
-  const fimDoMes = {
+  const fimDeJaneiro = {
     ...estado,
     horaAtual: 23,
     minutoAtual: 50,
-    diaAtual: 30,
+    diaAtual: 31,
   };
-  const novoMes = avancarMinutosSimulacao(fimDoMes, 10);
-
+  const novoMes = avancarMinutosSimulacao(fimDeJaneiro, 10);
   assert.equal(novoMes.diaAtual, 1);
   assert.equal(novoMes.mesAtual, 2);
   assert.equal(novoMes.mesesTotais, 1);
   assert.equal(novoMes.horaAtual, 0);
   assert.equal(novoMes.minutoAtual, 0);
+});
+
+test('Agenda: work and course commitments appear at their scheduled hour and pause the clock', () => {
+  const inicial = criarEstadoInicial('estudante');
+  const expediente = avancarHorasSimulacao(inicial, 1);
+  assert.equal(expediente.horaAtual, 8);
+  assert.equal(expediente.eventosPendentes[0]?.categoria, 'trabalho');
+  assert.equal(expediente.eventosPendentes[0]?.opcoes[0]?.consequencias.atividade, 'trabalhando');
+  assert.equal(expediente.eventosPendentes[0]?.opcoes[1]?.consequencias.deltaFaltasTrabalho, 1);
+
+  const noite = {
+    ...inicial,
+    horaAtual: 18,
+    vida: { ...inicial.vida, empregoAtual: undefined },
+  };
+  const aula = avancarHorasSimulacao(noite, 1);
+  assert.equal(aula.horaAtual, 19);
+  assert.equal(aula.eventosPendentes[0]?.categoria, 'pessoal');
+  assert.equal(aula.eventosPendentes[0]?.opcoes[0]?.consequencias.atividade, 'estudando');
+  assert.equal(aula.eventosPendentes[0]?.opcoes[0]?.consequencias.aulaFormal, true);
 });
 
 test('Macro: exchange rate reacts to risk and capital conditions without a fixed R$ 7.20 ceiling', () => {
@@ -141,25 +167,75 @@ test('Macro: primary balance and debt react to changing revenue, spending and in
   assert.ok(recessaoFiscal.dividaPublicaPib > cenarioBase.dividaPublicaPib);
 });
 
-test('Life Routine: sleeping recovers energy while working expends energy', () => {
+test('Life: the clock never forces sleep or work; only chosen activities affect the character', () => {
   const estado = criarEstadoInicial('estudante');
   const macro = estado.macro;
 
-  // Pessoa dormindo às 2h da madrugada
-  const vidaDormindo: VidaPessoal = {
+  const vidaLivre: VidaPessoal = {
     ...estado.vida,
     energia: 40,
+    atividadeAtual: 'livre',
+    horasRestantesAtividade: 0,
   };
-  const { novaVida: vidaAposSono } = simularHoraVida(vidaDormindo, macro, 2, 'Segunda-feira');
-  assert.ok(vidaAposSono.energia > 40, 'Sleeping must restore energy');
+  const { novaVida: depoisDaMadrugada } = simularHoraVida(vidaLivre, macro, 2, 'Segunda-feira');
+  assert.equal(depoisDaMadrugada.atividadeAtual, 'livre');
+  assert.ok(depoisDaMadrugada.energia < 40, 'Being awake at night must not trigger automatic sleep');
 
-  // Pessoa trabalhando às 10h da manhã
+  const vidaDormindo: VidaPessoal = {
+    ...vidaLivre,
+    energia: 40,
+    atividadeAtual: 'dormindo',
+    horasRestantesAtividade: 2,
+  };
+  const primeiraHoraSono = simularHoraVida(vidaDormindo, macro, 3, 'Segunda-feira').novaVida;
+  assert.ok(primeiraHoraSono.energia > 40, 'A chosen sleep activity must restore energy');
+  assert.equal(primeiraHoraSono.horasRestantesAtividade, 1);
+  const segundaHoraSono = simularHoraVida(primeiraHoraSono, macro, 4, 'Segunda-feira').novaVida;
+  assert.equal(segundaHoraSono.horasRestantesAtividade, 0);
+  assert.equal(segundaHoraSono.atividadeAtual, 'livre');
+
   const vidaTrabalhando: VidaPessoal = {
     ...estado.vida,
     energia: 80,
+    atividadeAtual: 'trabalhando',
+    horasRestantesAtividade: 1,
   };
   const { novaVida: vidaAposTrabalho } = simularHoraVida(vidaTrabalhando, macro, 10, 'Segunda-feira');
-  assert.ok(vidaAposTrabalho.energia < 80, 'Working must expend energy');
+  assert.ok(vidaAposTrabalho.energia < 80, 'An accepted work commitment must expend energy');
+  assert.equal(vidaAposTrabalho.atividadeAtual, 'livre');
+});
+
+test('Education: independent study does not count as scheduled class attendance', () => {
+  const estado = criarEstadoInicial('estudante');
+  const curso = estado.vida.cursoMatriculado!;
+  const vidaEstudando: VidaPessoal = {
+    ...estado.vida,
+    atividadeAtual: 'estudando',
+    horasRestantesAtividade: 1,
+    aulaFormal: false,
+  };
+  const independente = simularHoraVida(vidaEstudando, estado.macro, 20, 'Segunda-feira').novaVida;
+  assert.equal(independente.cursoMatriculado?.aulasAssistidas, curso.aulasAssistidas);
+
+  const aulaFormal: VidaPessoal = {
+    ...vidaEstudando,
+    horasRestantesAtividade: 1,
+    aulaFormal: true,
+  };
+  const presente = simularHoraVida(aulaFormal, estado.macro, 20, 'Segunda-feira').novaVida;
+  assert.equal(presente.cursoMatriculado?.aulasAssistidas, curso.aulasAssistidas + 1);
+});
+
+test('Employment: work absences reduce the monthly paycheck and reset after closing', () => {
+  const estado = criarEstadoInicial('estudante');
+  const vidaComFaltas: VidaPessoal = {
+    ...estado.vida,
+    empregoAtual: { ...estado.vida.empregoAtual!, faltasNoMes: 2 },
+  };
+  const comFaltas = simularMesVida(vidaComFaltas, estado.macro, 0, { dia: 1, mes: 2, ano: 2026 }).novaVida;
+  const semFaltas = simularMesVida(estado.vida, estado.macro, 0, { dia: 1, mes: 2, ano: 2026 }).novaVida;
+  assert.ok(comFaltas.saldoBancario < semFaltas.saldoBancario);
+  assert.equal(comFaltas.empregoAtual?.faltasNoMes, 0);
 });
 
 test('Life: dynamic age calculation from birth date is strictly accurate', () => {
