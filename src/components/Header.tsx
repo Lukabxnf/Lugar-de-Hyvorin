@@ -53,6 +53,8 @@ export const Header: React.FC<HeaderProps> = ({
   const [showGroqSettings, setShowGroqSettings] = useState(false);
   const [settingsSection, setSettingsSection] = useState<'geral' | 'api'>('geral');
   const [groqKeyDraft, setGroqKeyDraft] = useState('');
+  const [testandoChave, setTestandoChave] = useState(false);
+  const [resultadoTeste, setResultadoTeste] = useState('');
   const cargo = CARGOS_POLITICOS[estado.politica.cargoAtual];
   const eleicaoInfo = isAnoEleitoral(estado.mesesTotais);
   const empresasDoJogador = estado.empresas || (estado.empresa ? [estado.empresa] : []);
@@ -66,6 +68,34 @@ export const Header: React.FC<HeaderProps> = ({
     `Participações empresariais: ${formatarMoedaCompacta(resumoPatrimonio.participacoesEmpresariais)}`,
     `Passivos: ${formatarMoedaCompacta(resumoPatrimonio.passivosTotais)}`,
   ].join(' | ');
+
+  const testarConexao = async () => {
+    const chave = groqKeyDraft.trim() || groqKey;
+    if (!chave) {
+      setResultadoTeste('Informe uma chave antes de testar a conexão.');
+      return;
+    }
+    setTestandoChave(true);
+    setResultadoTeste('');
+    try {
+      const resposta = await fetch('/api/groq/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: chave }),
+        signal: AbortSignal.timeout(12000),
+      });
+      const dados = await resposta.json().catch(() => null);
+      setResultadoTeste(
+        typeof dados?.mensagem === 'string'
+          ? dados.mensagem
+          : 'Não foi possível confirmar a conexão.'
+      );
+    } catch {
+      setResultadoTeste('Falha de comunicação. Verifique a internet e o servidor do jogo.');
+    } finally {
+      setTestandoChave(false);
+    }
+  };
 
   const mesNome = NOMES_MESES[(estado.mesAtual || 1) - 1];
 
@@ -211,7 +241,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           <button
-            onClick={() => { setGroqKeyDraft(''); setSettingsSection('geral'); setShowGroqSettings(true); }}
+            onClick={() => { setGroqKeyDraft(''); setResultadoTeste(''); setSettingsSection('geral'); setShowGroqSettings(true); }}
             className={`px-3 py-2 rounded-lg flex items-center gap-1.5 text-xs font-bold border transition ${groqKey ? 'bg-emerald-950/70 text-emerald-300 border-emerald-700/60' : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'}`}
             title="Configurações gerais"
           >
@@ -287,8 +317,15 @@ export const Header: React.FC<HeaderProps> = ({
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-emerald-500"
                 />
               </label>
+              <div className="space-y-1.5">
+                <button type="button" onClick={() => { void testarConexao(); }} disabled={testandoChave || (!groqKeyDraft.trim() && !groqKey)}
+                  className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-700 disabled:opacity-40">
+                  {testandoChave ? 'Verificando conexão...' : 'Testar conexão da API'}
+                </button>
+                {resultadoTeste && <p role="status" className="text-xs text-slate-300">{resultadoTeste}</p>}
+              </div>
               <div className="flex justify-between gap-2">
-                <button type="button" onClick={() => { onDeleteGroqKey(); setGroqKeyDraft(''); }} disabled={!groqKey} className="px-3 py-2 rounded-lg border border-red-900/70 text-red-300 text-xs disabled:opacity-40 flex items-center gap-1.5">
+                <button type="button" onClick={() => { onDeleteGroqKey(); setGroqKeyDraft(''); setResultadoTeste(''); }} disabled={!groqKey} className="px-3 py-2 rounded-lg border border-red-900/70 text-red-300 text-xs disabled:opacity-40 flex items-center gap-1.5">
                   <Trash2 className="w-3.5 h-3.5" /> Apagar chave
                 </button>
                 <button type="button" onClick={() => { if (groqKeyDraft.trim()) { onSaveGroqKey(groqKeyDraft); setGroqKeyDraft(''); } setShowGroqSettings(false); }} disabled={!groqKeyDraft.trim()} className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold disabled:opacity-40">
