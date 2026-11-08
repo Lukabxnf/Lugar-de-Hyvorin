@@ -35,7 +35,7 @@ export function comprarImovel(vida: VidaPessoal, tipo: TipoMoradia, indice: numb
     tipo, nome: MORADIAS[tipo].nome, valorCompra: custo, valorMercadoAtual: custo,
     mesCompra: data.mes, anoCompra: data.ano, alugadoParaTerceiros: false, aluguelMensal: 0,
   };
-  let atual = { ...vida, saldoBancario: arred(vida.saldoBancario - custo), imoveis: [...inventario(vida), novo] };
+  let atual: VidaPessoal = { ...vida, saldoBancario: arred(vida.saldoBancario - custo), imoveis: [...inventario(vida), novo] };
   atual = registrarTransacaoFinanceira(atual, data, 'despesa_paga', `Compra do imóvel: ${novo.nome}`, -custo);
   // A nova compra não remove nem vende o imóvel anterior e não força mudança.
   return { vida: atual, sucesso: true, mensagem: `${novo.nome} comprado e adicionado ao seu patrimônio. Você pode mudar, alugar ou anunciar separadamente.` };
@@ -81,7 +81,7 @@ export function responderOfertaImovel(
     const valor = oferta.valor;
     const propriedade = inventario(vida).filter(i => i.id !== id);
     const vendiaResidencia = vida.imovelResidenciaId === id;
-    let nova = {
+    let nova: VidaPessoal = {
       ...vida, imoveis: propriedade, saldoBancario: arred(vida.saldoBancario + valor),
       ...(vendiaResidencia ? { imovelResidenciaId: undefined, moradia: 'pais' as TipoMoradia, casaPropria: false } : {}),
     };
