@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import {
   AvatarConfig,
+  CargoPoliticoId,
   ContaPagar,
   EmprestimoContratado,
   EstadoJogo,
@@ -41,6 +42,7 @@ import {
 import { CARREIRAS, CARGOS_POLITICOS, CURSOS, MORADIAS, VEICULOS_CATALOGO } from '../engine/data';
 import { calcularIdadeExata } from '../engine/life';
 import { CharacterPortrait } from './CharacterPortrait';
+import { cargoCompativelComEleicao, isAnoEleitoral } from '../engine/politics';
 import { analisarCreditoPessoal, formatarMoedaCompacta, registrarTransacaoFinanceira } from '../engine/finance';
 
 interface LifeViewProps {
@@ -48,6 +50,7 @@ interface LifeViewProps {
   onUpdateEstado: (novoEstado: EstadoJogo) => void;
   onShowMessage: (msg: string) => void;
   onStartTime?: () => void;
+  onOpenPolitics?: () => void;
 }
 
 export const LifeView: React.FC<LifeViewProps> = ({
@@ -55,6 +58,7 @@ export const LifeView: React.FC<LifeViewProps> = ({
   onUpdateEstado,
   onShowMessage,
   onStartTime,
+  onOpenPolitics,
 }) => {
   const { vida, macro, politica, diaAtual, mesAtual, anoAtual, horaAtual, diaSemanaAtual } = estado;
   const [activeSubSection, setActiveSubSection] = useState<
@@ -715,6 +719,14 @@ export const LifeView: React.FC<LifeViewProps> = ({
   const handleCandidatarCarreira = (carreiraId: string) => {
     const carreira = CARREIRAS.find(c => c.id === carreiraId);
     if (!carreira) return;
+    if (politica.cargoAtual !== 'cidadao' || vida.empregoAtual?.cargoPoliticoId) {
+      onShowMessage('Você já ocupa um mandato eletivo. Não é permitido acumular outro emprego formal.');
+      return;
+    }
+    if (vida.empregoAtual) {
+      onShowMessage('Você já possui um vínculo de trabalho. Encerre o contrato atual antes de assumir outra vaga.');
+      return;
+    }
 
     const ordemEdu: Record<NivelEducacao, number> = {
       fundamental: 0,
@@ -769,14 +781,44 @@ export const LifeView: React.FC<LifeViewProps> = ({
 
   const handlePedirDemissao = () => {
     if (!vida.empregoAtual) return;
+    const emprego = vida.empregoAtual;
+    const carreiraAtual = emprego.cargoPoliticoId
+      ? undefined
+      : CARREIRAS.find(item => item.id === emprego.carreiraId);
+    const cargoPoliticoAtual = emprego.cargoPoliticoId
+      ? CARGOS_POLITICOS[emprego.cargoPoliticoId]
+      : undefined;
+    const tituloVinculo = cargoPoliticoAtual?.nome || carreiraAtual?.titulo;
+    let registroEncerrado = false;
+    const historicoRegistros = (vida.carteira.historicoRegistros || []).map(registro => {
+      if (!registroEncerrado && tituloVinculo && registro.cargo === tituloVinculo && !registro.mesFim) {
+        registroEncerrado = true;
+        return { ...registro, mesFim: mesAtual, anoFim: anoAtual };
+      }
+      return registro;
+    });
+
     onUpdateEstado({
       ...estado,
       vida: {
         ...vida,
         empregoAtual: undefined,
+        carteira: { ...vida.carteira, historicoRegistros },
       },
+      ...(emprego.cargoPoliticoId ? {
+        politica: {
+          ...politica,
+          cargoAtual: 'cidadao' as const,
+          mesesNoCargo: 0,
+          emCampanha: false,
+          cargoDisputado: undefined,
+          campanhaInicioMesTotal: undefined,
+        },
+      } : {}),
     });
-    onShowMessage('Você solicitou rescisão do seu contrato de trabalho formal.');
+    onShowMessage(emprego.cargoPoliticoId
+      ? `Você renunciou ao mandato de ${cargoPoliticoAtual?.nome || 'cargo eletivo'}. O vínculo foi encerrado na CTPS.`
+      : 'Você solicitou rescisão do seu contrato de trabalho formal. O vínculo foi encerrado na CTPS.');
   };
 
   const handleComprarVeiculo = (modeloId: string) => {
@@ -1574,15 +1616,23 @@ export const LifeView: React.FC<LifeViewProps> = ({
               <div className="p-4 rounded-xl bg-slate-800/60 border border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
                 <div>
                   <span className="font-bold text-slate-200 text-sm block">
-                    {CARREIRAS.find(c => c.id === vida.empregoAtual?.carreiraId)?.titulo}
+                    {vida.empregoAtual.cargoPoliticoId
+                      ? CARGOS_POLITICOS[vida.empregoAtual.cargoPoliticoId].nome
+                      : CARREIRAS.find(c => c.id === vida.empregoAtual?.carreiraId)?.titulo || 'Vínculo profissional'}
                   </span>
                   <span className="text-slate-400">
-                    Salário Formal: <strong className="text-emerald-400 font-mono">R$ {vida.empregoAtual.salarioAcordado?.toLocaleString('pt-BR')}</strong> • Tempo no Cargo: {vida.empregoAtual.mesesNoCargo} meses
+                    {vida.empregoAtual.cargoPoliticoId ? 'Subsídio do mandato: ' : 'Salário formal: '}
+                    <strong className="text-emerald-400 font-mono">R$ {vida.empregoAtual.salarioAcordado?.toLocaleString('pt-BR')}</strong> • Tempo no Cargo: {vida.empregoAtual.mesesNoCargo} meses
                   </span>
                 </div>
-                <span className="px-3 py-1 rounded-full bg-emerald-950 text-emerald-400 font-bold uppercase text-[10px]">
-                  Contrato Ativo
-                </span>
+                <div className="flex flex-col items-end gap-2">
+                  <span className={`px-3 py-1 rounded-full font-bold uppercase text-[10px] ${vida.empregoAtual.cargoPoliticoId ? 'bg-indigo-950 text-indigo-300' : 'bg-emerald-950 text-emerald-400'}`}>
+                    {vida.empregoAtual.cargoPoliticoId ? 'Mandato eletivo' : 'Contrato ativo'}
+                  </span>
+                  <button onClick={handlePedirDemissao} className="text-[10px] font-bold text-rose-300 hover:text-rose-200">
+                    {vida.empregoAtual.cargoPoliticoId ? 'Renunciar ao mandato' : 'Pedir demissão'}
+                  </button>
+                </div>
               </div>
             ) : (
               <p className="text-xs text-slate-400">Você não possui emprego formal de carteira assinada no momento.</p>
@@ -1592,32 +1642,103 @@ export const LifeView: React.FC<LifeViewProps> = ({
           {/* Vagas Abertas no Mercado */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
             <h4 className="font-bold text-slate-100 mb-3 text-xs uppercase tracking-wider text-emerald-400">
-              Vagas Abertas & Requisitos Legais
+              Vagas de Trabalho & Requisitos
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {CARREIRAS.map(car => (
-                <div key={car.id} className="p-3.5 rounded-xl bg-slate-800/40 border border-slate-700 text-xs space-y-2">
-                  <div className="flex justify-between items-start">
-                    <span className="font-bold text-slate-200">{car.titulo}</span>
-                    <span className="font-mono text-emerald-400 font-bold">R$ {car.salario.toLocaleString('pt-BR')}</span>
+            {politica.cargoAtual !== 'cidadao' ? (
+              <p className="rounded-xl border border-indigo-500/30 bg-indigo-950/30 p-4 text-sm text-indigo-200">
+                Seu mandato eletivo é seu vínculo profissional atual. Você não pode assumir outro emprego formal enquanto ocupar esse cargo.
+              </p>
+            ) : vida.empregoAtual ? (
+              <p className="rounded-xl border border-slate-700 bg-slate-950/50 p-4 text-sm text-slate-400">
+                Você já possui um vínculo de trabalho. Encerre o contrato atual para se candidatar a outra vaga.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {CARREIRAS.map(car => (
+                  <div key={car.id} className="p-3.5 rounded-xl bg-slate-800/40 border border-slate-700 text-xs space-y-2">
+                    <div className="flex justify-between items-start">
+                      <span className="font-bold text-slate-200">{car.titulo}</span>
+                      <span className="font-mono text-emerald-400 font-bold">R$ {car.salario.toLocaleString('pt-BR')}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">{car.descricao}</p>
+                    <div className="text-[10px] text-slate-400 space-y-0.5">
+                      <div>Requisito: {car.requisitoEducacao.toUpperCase()} • Intelecto mín: {car.requisitoIntelecto}</div>
+                      <div>Experiência: {car.experienciaMinimaMeses} meses • Horário: {car.horarioInicio}:00 às {car.horarioFim}:00</div>
+                    </div>
+                    <button
+                      onClick={() => handleCandidatarCarreira(car.id)}
+                      className="w-full py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition"
+                    >
+                      Candidatar-se
+                    </button>
                   </div>
-                  <p className="text-[11px] text-slate-400">{car.descricao}</p>
-                  <div className="text-[10px] text-slate-400 space-y-0.5">
-                    <div>Requisito: {car.requisitoEducacao.toUpperCase()} • Intelecto mín: {car.requisitoIntelecto}</div>
-                    <div>Horário: {car.horarioInicio}:00 às {car.horarioFim}:00 • Estresse: {car.estresse}/10</div>
-                  </div>
-                  <button
-                    onClick={() => handleCandidatarCarreira(car.id)}
-                    disabled={vida.empregoAtual?.carreiraId === car.id}
-                    className="w-full py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white transition"
-                  >
-                    {vida.empregoAtual?.carreiraId === car.id ? 'Cargo Atual' : 'Candidatar-se'}
-                  </button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
+          {/* Carreira Pública Eletiva: candidatura como processo profissional */}
+          {politica.cargoAtual === 'cidadao' && !vida.empregoAtual && (() => {
+            const eleicao = isAnoEleitoral(estado.mesesTotais);
+            const opcoes: CargoPoliticoId[] = [
+              'vereador', 'prefeito', 'deputado_estadual',
+              'deputado_federal', 'senador', 'governador', 'presidente',
+            ];
+            const cargos = opcoes.filter(id => cargoCompativelComEleicao(eleicao.tipoEleicao, id));
+            return (
+              <section className="bg-slate-900/90 border border-amber-500/20 rounded-2xl p-5 space-y-4">
+                <div>
+                  <h4 className="font-bold text-slate-100 flex items-center gap-2"><Briefcase className="w-4 h-4 text-amber-400" /> Carreira Pública Eletiva</h4>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Cargo eletivo é um vínculo profissional. Você atende aos requisitos e disputa a eleição; se for eleito, o mandato entra na CTPS e substitui qualquer emprego formal.
+                  </p>
+                </div>
+                <div className="rounded-lg bg-slate-950/70 border border-slate-800 px-3 py-2 text-xs text-slate-300">
+                  Próximo pleito: <strong className="text-amber-300">{eleicao.tipoEleicao === 'geral' ? 'Eleições gerais' : 'Eleições municipais'} de outubro de {eleicao.anoEleicao}</strong>
+                  <span className="text-slate-500"> • {eleicao.mesesAteEleicao} mês(es) até a votação</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {cargos.map(id => {
+                    const cargo = CARGOS_POLITICOS[id];
+                    const atendeIdade = vida.idade >= 18;
+                    const atendeRequisitos = atendeIdade && vida.reputacao >= cargo.requisitoReputacao && vida.intelecto >= cargo.requisitoIntelecto;
+                    return (
+                      <div key={id} className="rounded-xl border border-slate-700 bg-slate-950/60 p-4 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <strong className="text-sm text-slate-100">{cargo.nome}</strong>
+                          <span className="font-mono text-emerald-300 text-xs">R$ {cargo.salarioMensal.toLocaleString('pt-BR')}/mês</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">{cargo.descricao}</p>
+                        <div className="text-[10px] text-slate-400">
+                          Requisitos: 18 anos • Reputação {cargo.requisitoReputacao} • Intelecto {cargo.requisitoIntelecto}
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          Fundo de campanha sugerido: {formatarMoedaCompacta(cargo.custoCampanhaSugerido)}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={!atendeRequisitos || !eleicao.ehAnoEleitoral}
+                          onClick={() => {
+                            onUpdateEstado({
+                              ...estado,
+                              politica: { ...politica, cargoDisputado: id },
+                            });
+                            onOpenPolitics?.();
+                          }}
+                          className="w-full rounded-lg py-2 text-xs font-bold bg-amber-600 hover:bg-amber-500 disabled:bg-slate-800 disabled:text-slate-500 text-white transition"
+                        >
+                          {!atendeIdade ? 'Idade mínima não atingida' :
+                            !atendeRequisitos ? 'Requisitos não atendidos' :
+                            !eleicao.ehAnoEleitoral ? 'Pré-campanha: aguarde a janela eleitoral' :
+                            'Iniciar candidatura'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })()}
       )}
 
       {/* 7. VEÍCULOS: garagem e concessionária */}
