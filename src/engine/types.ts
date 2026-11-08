@@ -210,6 +210,7 @@ export interface Empresa {
   funcionarios: number;
   salarioMedio: number;
   capacidadeMaquinas: number; // limite maximo de producao
+  capacidadeArmazenamento?: number; // limite físico de estoque; opcional em saves antigos
   precoVenda: number;
   estoque: number;
   caixaPJ: number;
@@ -219,6 +220,7 @@ export interface Empresa {
   ultimoMes: {
     receita: number;
     custoInsumos: number;
+    custoArmazenagem?: number;
     custoFolha: number;
     jurosDivida: number;
     impostos: number;
