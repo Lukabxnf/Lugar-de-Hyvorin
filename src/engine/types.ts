@@ -354,6 +354,12 @@ export interface Macroeconomia {
   despesaPublicaMes: number; // em R$ bilhões
   confiancaEmpresarial: number; // 0 a 100
   riscoPais: number; // pontos base (ex: 200 bps)
+  // Indicadores externos usados pelo câmbio; opcionais para compatibilidade com saves antigos.
+  inflacaoExterna?: number; // % a.a.
+  taxaJurosExterna?: number; // % a.a.
+  saldoComercialMes?: number; // US$ bilhões
+  fluxoCapitalMes?: number; // US$ bilhões
+  reservasInternacionais?: number; // US$ bilhões
 }
 
 export type TipoPropostaPolitica = 'lei' | 'decreto' | 'medida_provisoria' | 'reforma';
@@ -407,6 +413,7 @@ export interface HistoricoPonto {
   inflacao: number;
   selic: number;
   desemprego: number;
+  cambioDolar?: number;
   saldoPessoal: number;
   aprovacaoPolitica: number;
 }
