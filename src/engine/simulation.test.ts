@@ -400,6 +400,28 @@ test('Politics: election calendar is anchored to October and alternates general/
   assert.equal(setembro2026.mesesAteEleicao, 1);
 });
 
+test('Politics: an active campaign expires after October if no ballot is cast', () => {
+  const inicial = criarEstadoInicial('estudante');
+  const outubro = {
+    ...inicial,
+    mesesTotais: 9,
+    mesAtual: 10,
+    anoAtual: 2026,
+    politica: {
+      ...inicial.politica,
+      emCampanha: true,
+      cargoDisputado: 'presidente' as const,
+      campanhaInicioMesTotal: 0,
+    },
+  };
+
+  const novembro = avancarMesSimulacao(outubro);
+  assert.equal(novembro.mesAtual, 11);
+  assert.equal(novembro.politica.emCampanha, false);
+  assert.equal(novembro.politica.cargoDisputado, undefined);
+  assert.ok(novembro.ultimoResumoMes?.destaques.some(d => d.includes('Campanha encerrada')));
+});
+
 test('Politics: candidate offices match the correct election level', () => {
   assert.equal(cargoCompativelComEleicao('municipal', 'vereador'), true);
   assert.equal(cargoCompativelComEleicao('municipal', 'prefeito'), true);
