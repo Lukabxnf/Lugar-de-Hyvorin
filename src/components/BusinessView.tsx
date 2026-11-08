@@ -138,12 +138,13 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
 
   // 2. Modificar funcionários
   const handleAlterarFuncionarios = (delta: number) => {
-    if (!currentEmpresa || !Number.isSafeInteger(delta) || delta === 0) return;
+    if (!currentEmpresa || !Number.isSafeInteger(delta)) return false;
+    if (delta === 0) return true;
     if (delta > 0) {
       const analise = avaliarContratacaoEmpresa(currentEmpresa, delta);
       if (!analise.aprovada) {
         onShowMessage(analise.motivo);
-        return;
+        return false;
       }
       const atualizada = {
         ...currentEmpresa,
@@ -152,17 +153,17 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
       };
       saveUpdatedEmpresas(empresasList.map(e => e.id === atualizada.id ? atualizada : e), atualizada.id);
       onShowMessage(`Contratação registrada: +${delta} funcionário(s). Custo de admissão: R$ ${analise.custoAdmissao.toLocaleString('pt-BR')}.`);
-      return;
+      return true;
     }
     if (currentEmpresa.funcionarios + delta < 1) {
       onShowMessage('A empresa precisa manter ao menos um responsável pela operação.');
-      return;
+      return false;
     }
     // Rescisões e encargos não são gratuitos. O caixa da pessoa física não paga a dívida da PJ.
     const custoRescisao = Math.abs(delta) * currentEmpresa.salarioMedio * 1.5;
     if (!Number.isFinite(custoRescisao) || currentEmpresa.caixaPJ < custoRescisao) {
       onShowMessage('Caixa da empresa insuficiente para as rescisões e encargos trabalhistas.');
-      return;
+      return false;
     }
     const atualizada = {
       ...currentEmpresa,
@@ -171,6 +172,7 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
     };
     saveUpdatedEmpresas(empresasList.map(e => e.id === atualizada.id ? atualizada : e), atualizada.id);
     onShowMessage(`Equipe reduzida. Rescisões e encargos: R$ ${custoRescisao.toLocaleString('pt-BR')}.`);
+    return true;
   };
 
   // 3. Modificar preço de venda (suporte a input direto e delta)
@@ -769,7 +771,8 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
                   min={0}
                   step={100}
                   className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-200"
-                />                <div className="grid grid-cols-3 gap-1">
+                />
+                <div className="grid grid-cols-3 gap-1">
                   <button type="button" onClick={() => handleAtalhoRetirada(0.25)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">25%</button>
                   <button type="button" onClick={() => handleAtalhoRetirada(0.5)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">50%</button>
                   <button type="button" onClick={() => handleAtalhoRetirada(1)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">Retirar tudo</button>
@@ -795,7 +798,8 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
                   min={0}
                   step={100}
                   className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-200"
-                />                <div className="grid grid-cols-3 gap-1">
+                />
+                <div className="grid grid-cols-3 gap-1">
                   <button type="button" onClick={() => handleAtalhoAporte(0.25)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">25%</button>
                   <button type="button" onClick={() => handleAtalhoAporte(0.5)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">50%</button>
                   <button type="button" onClick={() => handleAtalhoAporte(1)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">Aportar tudo</button>
