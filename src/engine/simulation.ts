@@ -454,7 +454,7 @@ export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFec
     ultimoResumoMes: resumoFechamento,
     historicoFechamentos: [...(estado.historicoFechamentos || []), {
       mes: novoMes, ano: novoAno, resumo: resumoFechamento,
-    }].slice(-48),,
+    }].slice(-48),
   };
 
   // O evento proposto pela IA é novo, mas limitado a atributos verificáveis.
