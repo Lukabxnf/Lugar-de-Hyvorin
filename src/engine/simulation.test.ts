@@ -6,7 +6,7 @@ import { simularMesEmpresa } from './business';
 import { cargoCompativelComEleicao, isAnoEleitoral } from './politics';
 import { criarEstadoInicial } from './presets';
 import { avancarHorasSimulacao, avancarMinutosSimulacao, avancarMesSimulacao } from './simulation';
-import { Macroeconomia, VidaPessoal, Empresa, DataCalendario } from './types';
+import { Macroeconomia, VidaPessoal, Empresa, DataCalendario, Relacionamento } from './types';
 
 test('Macro: Taylor Rule responds by raising Selic when inflation is above target', () => {
   const macroAltaInflacao: Macroeconomia = {
