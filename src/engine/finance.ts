@@ -1,5 +1,5 @@
 import { MORADIAS } from './data';
-import { DataCalendario, Empresa, TipoTransacaoFinanceira, TransacaoFinanceira, VidaPessoal } from './types';
+import { DataCalendario, Empresa, Macroeconomia, TipoTransacaoFinanceira, TransacaoFinanceira, VidaPessoal } from './types';
 
 export interface ResumoPatrimonio {
   caixaPessoal: number;
@@ -113,5 +113,97 @@ export function registrarTransacaoFinanceira(
   return {
     ...vida,
     historicoFinanceiro: [transacao, ...(vida.historicoFinanceiro || [])].slice(0, 200),
+  };
+}
+
+
+export interface AnaliseCreditoPessoal {
+  aprovado: boolean;
+  taxaMensalEfetiva: number;
+  valorParcela: number;
+  capacidadeParcelaDisponivel: number;
+  motivo?: string;
+}
+
+/**
+ * Simula uma proposta de crédito com juros efetivos e capacidade de pagamento.
+ * A taxa usa a Selic anual, spread de risco do score e prêmio de risco-país.
+ * O comprometimento total de parcelas não pode ultrapassar 30% da renda mensal
+ * verificável do personagem.
+ */
+export function analisarCreditoPessoal(
+  macro: Macroeconomia,
+  scoreCredito: number,
+  rendaMensalVerificada: number,
+  parcelasExistentes: number,
+  valorSolicitado: number,
+  prazoMeses: number
+): AnaliseCreditoPessoal {
+  const score = Math.max(0, Math.min(1000, scoreCredito));
+  const renda = Math.max(0, Number.isFinite(rendaMensalVerificada) ? rendaMensalVerificada : 0);
+  const comprometimentoAtual = Math.max(0, Number.isFinite(parcelasExistentes) ? parcelasExistentes : 0);
+
+  const spreadAnualScore = 12 + ((1000 - score) / 1000) * 24;
+  const spreadAnualPais = Math.max(0, macro.riscoPais - 100) * 0.01;
+  const taxaAnualTotal = Math.max(0, macro.taxaSelic) + spreadAnualScore + spreadAnualPais;
+  const taxaAnualDecimal = taxaAnualTotal / 100;
+  const taxaMensalEfetiva = Math.pow(1 + taxaAnualDecimal, 1 / 12) - 1;
+
+  const valorValido = Number.isFinite(valorSolicitado) && valorSolicitado > 0;
+  const prazoValido = Number.isInteger(prazoMeses) && prazoMeses >= 6 && prazoMeses <= 120;
+  const capacidadeParcelaDisponivel = Math.max(0, renda * 0.30 - comprometimentoAtual);
+
+  if (!valorValido || !prazoValido) {
+    return {
+      aprovado: false,
+      taxaMensalEfetiva,
+      valorParcela: 0,
+      capacidadeParcelaDisponivel,
+      motivo: 'Valor ou prazo do contrato inválido.',
+    };
+  }
+
+  if (renda <= 0) {
+    return {
+      aprovado: false,
+      taxaMensalEfetiva,
+      valorParcela: 0,
+      capacidadeParcelaDisponivel: 0,
+      motivo: 'Não há renda mensal verificável para sustentar as parcelas.',
+    };
+  }
+
+  const fatorJuros = Math.pow(1 + taxaMensalEfetiva, prazoMeses);
+  const valorParcela = taxaMensalEfetiva <= 0
+    ? valorSolicitado / prazoMeses
+    : valorSolicitado * (
+        taxaMensalEfetiva * fatorJuros
+      ) / (fatorJuros - 1);
+
+  if (score < 400) {
+    return {
+      aprovado: false,
+      taxaMensalEfetiva,
+      valorParcela,
+      capacidadeParcelaDisponivel,
+      motivo: 'Score de crédito abaixo do mínimo para contratação.',
+    };
+  }
+
+  if (valorParcela > capacidadeParcelaDisponivel) {
+    return {
+      aprovado: false,
+      taxaMensalEfetiva,
+      valorParcela,
+      capacidadeParcelaDisponivel,
+      motivo: 'A parcela ultrapassa a capacidade mensal disponível após os compromissos atuais.',
+    };
+  }
+
+  return {
+    aprovado: true,
+    taxaMensalEfetiva,
+    valorParcela,
+    capacidadeParcelaDisponivel,
   };
 }
