@@ -7,6 +7,7 @@ import { analisarCreditoPessoal, calcularPatrimonioLiquido, formatarMoedaCompact
 import { cargoCompativelComEleicao, isAnoEleitoral } from './politics';
 import { aplicarImpactoAfinidadeFamiliar, sortearEventoDecisao } from './events';
 import { criarEstadoInicial } from './presets';
+import { CARGOS_POLITICOS } from './data';
 import { avancarHorasSimulacao, avancarMinutosSimulacao, avancarMesSimulacao, diasNoMes } from './simulation';
 import { Macroeconomia, VidaPessoal, Empresa, DataCalendario, Relacionamento } from './types';
 
@@ -616,4 +617,104 @@ test('Politics: candidate offices match the correct election level', () => {
   assert.equal(cargoCompativelComEleicao('municipal', 'presidente'), false);
   assert.equal(cargoCompativelComEleicao('geral', 'presidente'), true);
   assert.equal(cargoCompativelComEleicao('geral', 'prefeito'), false);
+});
+
+test('Public office: elected mandate is a single CTPS job with one monthly salary', () => {
+  const estado = criarEstadoInicial('estudante');
+  const salario = CARGOS_POLITICOS.vereador.salarioMensal;
+  const vidaComMandato: VidaPessoal = {
+    ...estado.vida,
+    empregoAtual: {
+      carreiraId: 'politico_vereador',
+      cargoPoliticoId: 'vereador',
+      mesesNoCargo: 0,
+      salarioAcordado: salario,
+      faltasNoMes: 0,
+    },
+  };
+
+  const { novaVida } = simularMesVida(
+    vidaComMandato,
+    estado.macro,
+    salario,
+    { dia: 1, mes: 2, ano: 2026 }
+  );
+  const salarios = (novaVida.historicoFinanceiro || []).filter(item => item.tipo === 'salario');
+
+  assert.equal(salarios.length, 1, 'The office salary must not be added twice');
+  assert.equal(salarios[0].valor, salario);
+  assert.equal(novaVida.empregoAtual?.mesesNoCargo, 1);
+  assert.equal(novaVida.carteira.experienciaPorArea.politica, 1);
+});
+
+test('Public office: absences reduce mandate pay and reset after monthly close', () => {
+  const estado = criarEstadoInicial('estudante');
+  const salario = CARGOS_POLITICOS.vereador.salarioMensal;
+  const vidaComFalta: VidaPessoal = {
+    ...estado.vida,
+    empregoAtual: {
+      carreiraId: 'politico_vereador',
+      cargoPoliticoId: 'vereador',
+      mesesNoCargo: 3,
+      salarioAcordado: salario,
+      faltasNoMes: 1,
+    },
+  };
+  const { novaVida } = simularMesVida(
+    vidaComFalta,
+    estado.macro,
+    salario,
+    { dia: 1, mes: 2, ano: 2026 }
+  );
+  const salarioPago = (novaVida.historicoFinanceiro || []).find(item => item.tipo === 'salario');
+
+  assert.ok(salarioPago);
+  assert.ok(Math.abs(salarioPago!.valor - salario * 21 / 22) < 0.01);
+  assert.equal(novaVida.empregoAtual?.faltasNoMes, 0);
+});
+
+test('Public office: ending a four-year mandate closes the political CTPS record', () => {
+  const base = criarEstadoInicial('estudante');
+  const salario = CARGOS_POLITICOS.vereador.salarioMensal;
+  const registro = {
+    empresaOuOrgao: 'Poder Público Municipal',
+    cargo: CARGOS_POLITICOS.vereador.nome,
+    salario,
+    mesInicio: 1,
+    anoInicio: 2026,
+    mesesContribuicao: 48,
+  };
+  const estado = {
+    ...base,
+    mesAtual: 1,
+    anoAtual: 2030,
+    mesesTotais: 48,
+    politica: {
+      ...base.politica,
+      cargoAtual: 'vereador' as const,
+      mesesNoCargo: 48,
+    },
+    vida: {
+      ...base.vida,
+      empregoAtual: {
+        carreiraId: 'politico_vereador',
+        cargoPoliticoId: 'vereador' as const,
+        mesesNoCargo: 48,
+        salarioAcordado: salario,
+        faltasNoMes: 0,
+      },
+      carteira: {
+        ...base.vida.carteira,
+        historicoRegistros: [registro, ...base.vida.carteira.historicoRegistros],
+      },
+    },
+  };
+
+  const resultado = avancarMesSimulacao(estado);
+  const registroFinal = resultado.vida.carteira.historicoRegistros.find(item => item.cargo === CARGOS_POLITICOS.vereador.nome);
+
+  assert.equal(resultado.politica.cargoAtual, 'cidadao');
+  assert.equal(resultado.vida.empregoAtual, undefined);
+  assert.equal(registroFinal?.mesFim, 2);
+  assert.equal(registroFinal?.anoFim, 2030);
 });
