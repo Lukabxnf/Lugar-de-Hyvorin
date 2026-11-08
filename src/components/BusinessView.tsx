@@ -762,15 +762,14 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
                   <ArrowUpRight className="w-3.5 h-3.5" /> Retirar Dividendos
                 </span>
                 <div className="text-[11px] text-slate-500">Disponível no caixa PJ: {formatarMoedaCompacta(currentEmpresa?.caixaPJ || 0)}</div>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="Digite o valor em R$"
-                  value={quantiaRetirada}
-                  onChange={(e) => setQuantiaRetirada(e.target.value.replace(/[^0-9]/g, ''))}
+                <NumericField
+                  ariaLabel="Retirar Dividendos em reais"
+                  value={Number(quantiaRetirada) || 0}
+                  onCommit={valor => setQuantiaRetirada(String(valor))}
+                  min={0}
+                  step={100}
                   className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-200"
-                />
-                <div className="grid grid-cols-3 gap-1">
+                />                <div className="grid grid-cols-3 gap-1">
                   <button type="button" onClick={() => handleAtalhoRetirada(0.25)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">25%</button>
                   <button type="button" onClick={() => handleAtalhoRetirada(0.5)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">50%</button>
                   <button type="button" onClick={() => handleAtalhoRetirada(1)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">Retirar tudo</button>
@@ -789,15 +788,14 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
                   <ArrowDownLeft className="w-3.5 h-3.5" /> Aporte de Capital
                 </span>
                 <div className="text-[11px] text-slate-500">Disponível na conta PF: {formatarMoedaCompacta(vida.saldoBancario)}</div>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="Digite o valor em R$"
-                  value={quantiaAporte}
-                  onChange={(e) => setQuantiaAporte(e.target.value.replace(/[^0-9]/g, ''))}
+                <NumericField
+                  ariaLabel="Aporte de Capital em reais"
+                  value={Number(quantiaAporte) || 0}
+                  onCommit={valor => setQuantiaAporte(String(valor))}
+                  min={0}
+                  step={100}
                   className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-200"
-                />
-                <div className="grid grid-cols-3 gap-1">
+                />                <div className="grid grid-cols-3 gap-1">
                   <button type="button" onClick={() => handleAtalhoAporte(0.25)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">25%</button>
                   <button type="button" onClick={() => handleAtalhoAporte(0.5)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">50%</button>
                   <button type="button" onClick={() => handleAtalhoAporte(1)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">Aportar tudo</button>
