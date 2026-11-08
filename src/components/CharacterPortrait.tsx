@@ -67,7 +67,7 @@ export const CharacterPortrait: React.FC<CharacterPortraitProps> = ({ config, cl
       <path d="M100 163 H140 V211 Q120 231 100 211Z" fill={`url(#${gradientId}-skin-shade)`} />
       <ellipse cx="76" cy="112" rx="13" ry="20" fill={skin.base} />
       <ellipse cx="164" cy="112" rx="13" ry="20" fill={skin.base} />
-      <path d="M120 38 C82 38 61 68 64 117 C66 160 89 190 120 193 C151 190 174 160 176 117 C179 68 158 38 120 38Z" fill="url(#skin-shade)" />
+      <path d="M120 38 C82 38 61 68 64 117 C66 160 89 190 120 193 C151 190 174 160 176 117 C179 68 158 38 120 38Z" fill={`url(#${gradientId}-skin-shade)`} />
       <path d="M71 112 Q76 96 87 105" stroke={skin.shadow} strokeWidth="3" fill="none" opacity=".45" />
       <path d="M169 112 Q164 96 153 105" stroke={skin.shadow} strokeWidth="3" fill="none" opacity=".45" />
       <ellipse cx="95" cy="119" rx="10" ry="6.5" fill="#fff8f0" />
