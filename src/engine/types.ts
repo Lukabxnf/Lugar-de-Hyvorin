@@ -164,6 +164,9 @@ export interface Relacionamento {
   personalidade?: string;
   mesesConvivencia?: number;
   mesesSemContato?: number;
+  interacoesSignificativas?: number;
+  mesesNoRelacionamento?: number;
+  mesesCasado?: number;
   custoMensalApoio?: number; // Filhos geram despesas de criação
   filhoDetalhes?: {
     diaNascimento: number;
