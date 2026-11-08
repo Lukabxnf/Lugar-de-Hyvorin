@@ -20,7 +20,7 @@ import { EstadoJogo, OpcaoEvento } from './engine/types';
 import { aplicarImpactoAfinidadeFamiliar } from './engine/events';
 import { registrarTransacaoFinanceira } from './engine/finance';
 import { criarEstadoInicial } from './engine/presets';
-import { avancarHorasSimulacao, avancarMinutosSimulacao, avancarMesSimulacao, avancarMultiplosMeses } from './engine/simulation';
+import { avancarHorasSimulacao, avancarMesSimulacao, avancarMultiplosMeses } from './engine/simulation';
 
 const STORAGE_KEY = 'cidadao_sim_save_v1';
 
@@ -39,6 +39,7 @@ function sanitizarEstado(raw: any): EstadoJogo {
     ...base,
     ...raw,
     horaAtual: raw.horaAtual ?? 8,
+    minutoAtual: 0,
     diaAtual: raw.diaAtual ?? 1,
     diaSemanaAtual: raw.diaSemanaAtual ?? 'Segunda-feira',
     horasTotais: raw.horasTotais ?? 0,
@@ -58,7 +59,8 @@ function sanitizarEstado(raw: any): EstadoJogo {
       titulosConquistados: raw.vida?.titulosConquistados || ['Certificado de Ensino Médio'],
       habilidades: raw.vida?.habilidades || base.vida.habilidades,
       rotinaHorarios: raw.vida?.rotinaHorarios || base.vida.rotinaHorarios,
-      atividadeAtual: raw.vida?.atividadeAtual || 'livre',
+      atividadeAtual: (raw.vida?.horasRestantesAtividade || 0) > 0 ? (raw.vida?.atividadeAtual || 'livre') : 'livre',
+      horasRestantesAtividade: Math.max(0, Math.floor(raw.vida?.horasRestantesAtividade || 0)),
       energia: raw.vida?.energia ?? 85,
       familia: raw.vida?.familia || base.vida.familia,
       veiculos: raw.vida?.veiculos || base.vida.veiculos,
@@ -75,6 +77,8 @@ function sanitizarEstado(raw: any): EstadoJogo {
     },
     eventosPendentes: raw.eventosPendentes || [],
     eventosResolvidos: raw.eventosResolvidos || [],
+    agendaDisparadaDia: raw.agendaDisparadaDia,
+    agendaEventosDisparados: raw.agendaEventosDisparados || [],
   };
 }
 
@@ -179,12 +183,7 @@ export default function App() {
     showToast(`Nova jornada iniciada com sucesso!`);
   }, [showToast]);
 
-  // Avança minutos do relógio de jogo; a rotina pessoal é processada nas viradas de hora.
-  const handleAdvanceMinutes = useCallback((qtdMinutos = 10) => {
-    setEstado((prev) => avancarMinutosSimulacao(prev, qtdMinutos));
-  }, []);
-
-  // Compatibilidade com ações internas que já solicitam horas completas.
+  // O relógio opera em horas inteiras; X1 = uma hora simulada por segundo real.
   const handleAdvanceHours = useCallback((qtdHoras = 1) => {
     setEstado((prev) => avancarHorasSimulacao(prev, qtdHoras));
   }, []);
@@ -224,11 +223,11 @@ export default function App() {
     if (!isPlaying) return;
 
     const interval = window.setInterval(() => {
-      handleAdvanceMinutes(playSpeed * 10);
+      handleAdvanceHours(playSpeed);
     }, 1000);
 
     return () => window.clearInterval(interval);
-  }, [isPlaying, playSpeed, handleAdvanceMinutes]);
+  }, [isPlaying, playSpeed, handleAdvanceHours]);
 
   // Resolução de Evento de Decisão Interativo
   const handleEscolherOpcaoEvento = useCallback((opcao: OpcaoEvento) => {
@@ -282,6 +281,16 @@ export default function App() {
           intelecto: Math.max(0, Math.min(100, prev.vida.intelecto + (c.deltaIntelecto || 0))),
           reputacao: Math.max(0, Math.min(100, novaReputacao)),
           familia: novaFamilia,
+          atividadeAtual: c.atividade || prev.vida.atividadeAtual,
+          horasRestantesAtividade: c.atividade
+            ? Math.max(1, Math.floor(c.duracaoAtividadeHoras || 1))
+            : (prev.vida.horasRestantesAtividade || 0),
+          empregoAtual: c.deltaFaltasTrabalho && prev.vida.empregoAtual
+            ? {
+                ...prev.vida.empregoAtual,
+                faltasNoMes: (prev.vida.empregoAtual.faltasNoMes || 0) + Math.max(0, Math.floor(c.deltaFaltasTrabalho)),
+              }
+            : prev.vida.empregoAtual,
         },
         { dia: prev.diaAtual, mes: prev.mesAtual, ano: prev.anoAtual },
         'evento',
@@ -297,6 +306,12 @@ export default function App() {
       };
     });
   }, [showToast]);
+
+  // Comparecer a um compromisso inicia a atividade e retoma o relógio automaticamente.
+  const handleEscolherOpcaoEventoComRetomada = useCallback((opcao: OpcaoEvento) => {
+    handleEscolherOpcaoEvento(opcao);
+    if (opcao.consequencias.atividade) setIsPlaying(true);
+  }, [handleEscolherOpcaoEvento]);
 
   // Election victory trigger
   const handleElectionVictory = useCallback((cargoNome: string, votos: number) => {
@@ -343,7 +358,7 @@ export default function App() {
             estado={estado}
             onUpdateEstado={setEstado}
             onShowMessage={showToast}
-            onAvancarHoras={handleAdvanceHours}
+            onStartTime={() => setIsPlaying(true)}
           />
         )}
 
@@ -422,7 +437,7 @@ export default function App() {
       {/* Modal de Crises & Decisões Interativas */}
       <EventDecisionModal
         evento={eventoPendenteAtual}
-        onEscolherOpcao={handleEscolherOpcaoEvento}
+        onEscolherOpcao={handleEscolherOpcaoEventoComRetomada}
       />
     </div>
   );
