@@ -214,8 +214,21 @@ export function avancarMesSimulacao(estado: EstadoJogo): EstadoJogo {
   );
   destaques.push(...logsPolitica);
 
+  // Campanha não pode sobreviver ao mês oficial da votação.
+  let politicaFinal = novaPolitica;
+  const proximoPleito = isAnoEleitoral(novoMesesTotais);
+  if (novaPolitica.emCampanha && !proximoPleito.ehAnoEleitoral) {
+    politicaFinal = {
+      ...novaPolitica,
+      emCampanha: false,
+      cargoDisputado: undefined,
+      campanhaInicioMesTotal: undefined,
+    };
+    destaques.push('Campanha encerrada: o período eleitoral passou sem que a candidatura fosse às urnas.');
+  }
+
   // Calendário Eleitoral check
-  const { tipoEleicao, mesesAteEleicao, anoEleicao } = isAnoEleitoral(novoMesesTotais);
+  const { tipoEleicao, mesesAteEleicao, anoEleicao } = proximoPleito;
   if (mesesAteEleicao === 6) {
     const noticiaEleicao: NoticiaGazeta = {
       id: `eleicao_aviso_${novoMesesTotais}`,
@@ -263,7 +276,7 @@ export function avancarMesSimulacao(estado: EstadoJogo): EstadoJogo {
     empresas: novasEmpresas,
     empresa: novasEmpresas[0],
     macro: novaMacro,
-    politica: novaPolitica,
+    politica: politicaFinal,
     noticias: novasNoticias,
     historico: novoHistorico,
     ultimoResumoMes: {
