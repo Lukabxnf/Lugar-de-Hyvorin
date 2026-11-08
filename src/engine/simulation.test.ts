@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { simularMesMacroeconomia } from './macro';
 import { calcularIdadeExata, calcularTaxaMensalEfetiva, evoluirRelacionamentoMensal, simularHoraVida, simularMesVida } from './life';
 import { simularMesEmpresa } from './business';
-import { calcularPatrimonioLiquido, formatarMoedaCompacta } from './finance';
+import { analisarCreditoPessoal, calcularPatrimonioLiquido, formatarMoedaCompacta } from './finance';
 import { cargoCompativelComEleicao, isAnoEleitoral } from './politics';
 import { aplicarImpactoAfinidadeFamiliar, sortearEventoDecisao } from './events';
 import { criarEstadoInicial } from './presets';
@@ -254,6 +254,33 @@ test('Business: large legacy inventory is preserved and production pauses until 
   assert.equal(result.ultimoMes.unidadesProduzidas, 0);
   assert.equal(result.capacidadeArmazenamento, legacyStock);
   assert.ok(result.ultimoMes.custoArmazenagem! > 0);
+});
+
+test('Credit: effective rate reacts to Selic, credit score and country risk', () => {
+  const macro = criarEstadoInicial('estudante').macro;
+  const bomRisco = analisarCreditoPessoal(
+    { ...macro, taxaSelic: 10, riscoPais: 100 },
+    900, 6000, 0, 5000, 24
+  );
+  const riscoAlto = analisarCreditoPessoal(
+    { ...macro, taxaSelic: 15, riscoPais: 700 },
+    300, 6000, 0, 5000, 24
+  );
+
+  assert.ok(riscoAlto.taxaMensalEfetiva > bomRisco.taxaMensalEfetiva);
+  assert.equal(riscoAlto.aprovado, false);
+});
+
+test('Credit: installment must fit verified income after current commitments', () => {
+  const macro = criarEstadoInicial('estudante').macro;
+  const noIncome = analisarCreditoPessoal(macro, 900, 0, 0, 2000, 24);
+  const overCapacity = analisarCreditoPessoal(macro, 850, 3000, 700, 10000, 12);
+  const affordable = analisarCreditoPessoal(macro, 850, 10000, 500, 3000, 48);
+
+  assert.equal(noIncome.aprovado, false);
+  assert.equal(overCapacity.aprovado, false);
+  assert.equal(affordable.aprovado, true);
+  assert.ok(affordable.valorParcela <= affordable.capacidadeParcelaDisponivel);
 });
 
 test('Finance: net worth includes property, vehicles and company equity without double-counting cash', () => {
