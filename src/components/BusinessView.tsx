@@ -19,6 +19,7 @@ import { Empresa, EstadoJogo } from '../engine/types';
 import { SETORES_EMPRESA } from '../engine/data';
 import { avaliarContratacaoEmpresa } from '../engine/business';
 import { formatarMoedaCompacta, registrarTransacaoFinanceira } from '../engine/finance';
+import { NumericField } from './NumericField';
 
 interface BusinessViewProps {
   estado: EstadoJogo;
@@ -55,8 +56,6 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
   const [quantiaAporte, setQuantiaAporte] = useState('');
   // Inputs textuais separados do estado financeiro: evita que o piso mínimo
   // sobrescreva o primeiro dígito enquanto o jogador ainda está digitando.
-  const [rascunhosPreco, setRascunhosPreco] = useState<Record<string, string>>({});
-  const [rascunhosSalario, setRascunhosSalario] = useState<Record<string, string>>({});
 
   // Active selected company
   const currentEmpresa = empresasList.find((e) => e.id === selectedEmpresaId) || empresasList[0];
@@ -181,7 +180,6 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
     const valorValido = Math.max(1, novoPreco);
     const atualizada = { ...currentEmpresa, precoVenda: valorValido };
     const lista = empresasList.map((e) => (e.id === currentEmpresa.id ? atualizada : e));
-    setRascunhosPreco((atual) => { const proximo = { ...atual }; delete proximo[currentEmpresa.id]; return proximo; });
     saveUpdatedEmpresas(lista, currentEmpresa.id);
   };
 
@@ -201,7 +199,6 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
     const valorValido = Math.max(1518, novoSalario); // salário mínimo nacional
     const atualizada = { ...currentEmpresa, salarioMedio: valorValido };
     const lista = empresasList.map((e) => (e.id === currentEmpresa.id ? atualizada : e));
-    setRascunhosSalario((atual) => { const proximo = { ...atual }; delete proximo[currentEmpresa.id]; return proximo; });
     saveUpdatedEmpresas(lista, currentEmpresa.id);
   };
 
@@ -694,136 +691,48 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
               </span>
             </div>
 
-            {/* Price control: Numeric Input + Slider + Buttons */}
-            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-semibold text-slate-300">Preço Unitário de Venda (R$)</div>
-                  <div className="text-[11px] text-slate-400">
-                    Referência de mercado: <strong className="text-slate-300">R$ {setor.precoVendaBase}</strong>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleDefinirPreco(currentEmpresa.precoVenda - 5)}
-                    className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center font-bold"
-                    title="Diminuir R$ 5"
-                  >
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    aria-label="Preço unitário de venda"
-                    value={rascunhosPreco[currentEmpresa.id] ?? String(currentEmpresa.precoVenda)}
-                    onChange={(e) => setRascunhosPreco((atual) => ({ ...atual, [currentEmpresa.id]: e.target.value.replace(/[^0-9]/g, '') }))}
-                    onBlur={() => {
-                      const texto = rascunhosPreco[currentEmpresa.id];
-                      if (texto === undefined) return;
-                      const valor = Number(texto);
-                      if (texto.trim() && Number.isFinite(valor) && valor >= 1) handleDefinirPreco(valor);
-                      else setRascunhosPreco((atual) => { const proximo = { ...atual }; delete proximo[currentEmpresa.id]; return proximo; });
-                    }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                    className="w-28 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-center font-mono font-bold text-sm text-emerald-400 focus:outline-none focus:border-emerald-500"
-                  />
-                  <button
-                    onClick={() => handleDefinirPreco(currentEmpresa.precoVenda + 5)}
-                    className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center font-bold"
-                    title="Aumentar R$ 5"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-              <input
-                type="range"
-                min={Math.max(5, Math.round(setor.precoVendaBase * 0.3))}
-                max={Math.round(setor.precoVendaBase * 2.5)}
-                value={currentEmpresa.precoVenda}
-                onChange={(e) => handleDefinirPreco(Number(e.target.value))}
-                className="w-full accent-emerald-500 cursor-pointer"
-              />
-            </div>
-
-            {/* Employees control */}
-            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
-              <div>
-                <div className="text-xs font-semibold text-slate-300">Quadro de Colaboradores</div>
-                <div className="text-[11px] text-slate-400">
-                  Capacidade de mão de obra: {currentEmpresa.funcionarios * setor.produtividadeFuncionario} un./mês
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleAlterarFuncionarios(-1)}
-                  className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center font-bold"
-                >
-                  <Minus className="w-3.5 h-3.5" />
-                </button>
-                <span className="font-mono font-bold text-sm text-slate-100 min-w-16 text-center">
-                  {currentEmpresa.funcionarios} func.
-                </span>
-                <button
-                  onClick={() => handleAlterarFuncionarios(1)}
-                  className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center font-bold"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Salary control: Numeric Input + Slider + Buttons */}
-            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-semibold text-slate-300">Salário Médio Oferecido (R$)</div>
-                  <div className="text-[11px] text-slate-400">
-                    Piso nacional: R$ 1.518 • Salários maiores elevam produtividade
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleDefinirSalario(currentEmpresa.salarioMedio - 200)}
-                    className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center font-bold"
-                    title="Diminuir R$ 200"
-                  >
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    aria-label="Salário médio oferecido"
-                    value={rascunhosSalario[currentEmpresa.id] ?? String(currentEmpresa.salarioMedio)}
-                    onChange={(e) => setRascunhosSalario((atual) => ({ ...atual, [currentEmpresa.id]: e.target.value.replace(/[^0-9]/g, '') }))}
-                    onBlur={() => {
-                      const texto = rascunhosSalario[currentEmpresa.id];
-                      if (texto === undefined) return;
-                      const valor = Number(texto);
-                      if (texto.trim() && Number.isFinite(valor) && valor >= 1518) handleDefinirSalario(valor);
-                      else setRascunhosSalario((atual) => { const proximo = { ...atual }; delete proximo[currentEmpresa.id]; return proximo; });
-                    }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                    className="w-28 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-center font-mono font-bold text-sm text-amber-400 focus:outline-none focus:border-amber-500"
-                  />
-                  <button
-                    onClick={() => handleDefinirSalario(currentEmpresa.salarioMedio + 200)}
-                    className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center font-bold"
-                    title="Aumentar R$ 200"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-              <input
-                type="range"
-                min="1518"
-                max="25000"
-                step="100"
-                value={currentEmpresa.salarioMedio}
-                onChange={(e) => handleDefinirSalario(Number(e.target.value))}
-                className="w-full accent-amber-500 cursor-pointer"
-              />
+            {/* Campos numéricos livres: sem sliders nem botões de +/- */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <label className="rounded-xl border border-slate-700 bg-slate-950 p-3 space-y-2">
+                <span className="block text-xs font-semibold text-slate-200">Preço unitário (R$)</span>
+                <NumericField
+                  key={`preco_${currentEmpresa.id}`}
+                  value={currentEmpresa.precoVenda}
+                  onCommit={handleDefinirPreco}
+                  ariaLabel="Preço de venda"
+                  step={5}
+                  min={1}
+                  max={Number.MAX_SAFE_INTEGER}
+                />
+                <span className="block text-xs text-slate-500">Referência de mercado: R$ {(setor.precoVendaBase * (estado.indicePrecosAcumulado || 1)).toFixed(2)}</span>
+              </label>
+              <label className="rounded-xl border border-slate-700 bg-slate-950 p-3 space-y-2">
+                <span className="block text-xs font-semibold text-slate-200">Funcionários</span>
+                <NumericField
+                  key={`equipe_${currentEmpresa.id}`}
+                  value={currentEmpresa.funcionarios}
+                  onCommit={quantidade => handleAlterarFuncionarios(quantidade - currentEmpresa.funcionarios)}
+                  ariaLabel="Quantidade de funcionários"
+                  step={1}
+                  min={1}
+                  max={Number.MAX_SAFE_INTEGER}
+                  integer
+                />
+                <span className="block text-xs text-slate-500">Contratações exigem caixa, equipamento e reserva para folha.</span>
+              </label>
+              <label className="rounded-xl border border-slate-700 bg-slate-950 p-3 space-y-2">
+                <span className="block text-xs font-semibold text-slate-200">Salário médio (R$)</span>
+                <NumericField
+                  key={`salario_${currentEmpresa.id}`}
+                  value={currentEmpresa.salarioMedio}
+                  onCommit={handleDefinirSalario}
+                  ariaLabel="Salário médio da equipe"
+                  step={100}
+                  min={1518}
+                  max={Number.MAX_SAFE_INTEGER}
+                />
+                <span className="block text-xs text-slate-500">Ofertas acima do piso aumentam a folha mensal.</span>
+              </label>
             </div>
 
             {/* Expand machinery */}
