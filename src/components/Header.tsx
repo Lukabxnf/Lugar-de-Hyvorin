@@ -57,6 +57,8 @@ export const Header: React.FC<HeaderProps> = ({
   const [resultadoTeste, setResultadoTeste] = useState('');
   const cargo = CARGOS_POLITICOS[estado.politica.cargoAtual];
   const eleicaoInfo = isAnoEleitoral(estado.mesesTotais);
+  const temCarreiraPolitica = !!estado.politica.carreiraPoliticaIniciada || estado.politica.cargoAtual !== 'cidadao' || estado.politica.emCampanha;
+  const temEmpresaAtiva = (estado.empresas || []).some(empresa => empresa.ativa);
   const empresasDoJogador = estado.empresas || (estado.empresa ? [estado.empresa] : []);
   const resumoPatrimonio = calcularPatrimonioLiquido(estado.vida, empresasDoJogador);
   const patrimonioPessoal = resumoPatrimonio.patrimonioLiquido;
@@ -118,7 +120,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 hidden sm:block">
-                Simulador de Vida, Negócios, Macroeconomia & Política
+                Simulador de vida, profissões, patrimônio e escolhas
               </p>
             </div>
           </div>
@@ -132,8 +134,8 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Election alert indicator */}
-          <button
-            onClick={() => onSelectTab('politica')}
+          {temCarreiraPolitica && <button
+            onClick={() => onSelectTab('trabalho')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition border ${
               eleicaoInfo.mesesAteEleicao === 0
                 ? 'bg-amber-500 text-slate-950 border-amber-400 animate-pulse font-bold'
@@ -141,13 +143,13 @@ export const Header: React.FC<HeaderProps> = ({
                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                 : 'bg-slate-800 text-slate-400 border-slate-700'
             }`}
-            title="Clique para ir à aba de Política"
+            title="Carreira política dentro de Trabalho"
           >
             <Vote className="w-3.5 h-3.5" />
             {eleicaoInfo.mesesAteEleicao === 0
               ? `Votação ${eleicaoInfo.tipoEleicao === 'geral' ? 'Geral' : 'Municipal'} Agora!`
               : `Eleição ${eleicaoInfo.anoEleicao}: ${eleicaoInfo.mesesAteEleicao}m`}
-          </button>
+          </button>}
         </div>
 
         {/* Player Snapshot (Center) */}
@@ -186,44 +188,19 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Office Badge */}
-          <div
-            onClick={() => onSelectTab('politica')}
-            className={`cursor-pointer flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition shrink-0 ${
-              cargo.id === 'cidadao'
-                ? 'bg-slate-800/60 border-slate-700/60 hover:border-slate-500'
-                : 'bg-indigo-950/60 border-indigo-600/50 hover:border-indigo-400'
-            }`}
-            title="Ver detalhes de carreira política e poder"
-          >
-            <Landmark className={`w-4 h-4 ${cargo.id === 'cidadao' ? 'text-slate-400' : 'text-indigo-400'}`} />
-            <div>
-              <div className={`text-[9px] font-semibold uppercase ${cargo.id === 'cidadao' ? 'text-slate-300' : 'text-indigo-300'}`}>
-                {cargo.nome}
-              </div>
-              <div className="text-[11px] text-slate-300 font-medium">
-                {cargo.id === 'cidadao' ? 'Cidadão Eleitor' : `Aprov: ${Math.round(estado.politica.aprovacaoPopular)}%`}
-              </div>
-            </div>
-          </div>
-
-          {/* Macro Rates */}
-          <div
-            onClick={() => onSelectTab('macro')}
-            className="cursor-pointer flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/60 hover:border-slate-500 transition shrink-0"
-            title="Ver indicadores da Macroeconomia"
-          >
-            <TrendingUp className="w-4 h-4 text-cyan-400" />
-            <div>
-              <div className="text-[9px] text-slate-400 font-semibold uppercase">Selic / IPCA</div>
-              <div className="text-[11px] font-mono text-cyan-300">
-                {estado.macro.taxaSelic.toFixed(2)}% | {estado.macro.inflacaoIpca12m.toFixed(2)}%
-              </div>
-            </div>
-          </div>
+          {/* Cargo político só existe após começar a trajetória pública. */}
+          {cargo.id !== 'cidadao' && (
+            <button type="button" onClick={() => onSelectTab('trabalho')}
+              className="flex shrink-0 items-center gap-2 rounded-lg border border-indigo-700/50 bg-indigo-950/40 px-3 py-2 text-left">
+              <Landmark className="h-4 w-4 text-indigo-400" />
+              <span className="text-xs font-semibold text-slate-200">
+                {cargo.nome} · Aprovação {Math.round(estado.politica.aprovacaoPopular)}%
+              </span>
+            </button>
+          )}
         </div>
 
-        {/* Time Step & Controls (Right) */}
+                {/* Time Step & Controls (Right) */}
         <div className="flex items-center gap-2 w-full xl:w-auto justify-end">
           <div className="flex items-center gap-1.5" aria-label="Avanço do calendário">
             {([1, 6, 12] as const).map((months) => (

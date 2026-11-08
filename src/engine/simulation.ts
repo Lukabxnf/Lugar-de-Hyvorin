@@ -1,6 +1,7 @@
 import { simularMesMacroeconomia } from './macro';
 import { simularHoraVida, simularMesVida } from './life';
 import { simularMesEmpresa } from './business';
+import { simularMesImoveis } from './imoveis';
 import { isAnoEleitoral, simularMesPolitica } from './politics';
 import { sortearEventoDecisao, sortearEventoMensal } from './events';
 import { CARREIRAS, CARGOS_POLITICOS, CURSOS } from './data';
@@ -315,6 +316,12 @@ export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFec
     destaques.push(ataCopom);
   }
 
+  // Catálogo nominal acompanha o nível agregado de preços, mês a mês.
+  const indiceAnterior = Number.isFinite(estado.indicePrecosAcumulado) && (estado.indicePrecosAcumulado || 0) > 0
+    ? estado.indicePrecosAcumulado!
+    : 1;
+  const indiceAtual = indiceAnterior * Math.pow(1 + novaMacro.inflacaoIpca12m / 100, 1 / 12);
+
   // 4. Salário do Cargo Político
   const cargoInfo = CARGOS_POLITICOS[estado.politica.cargoAtual];
   const salarioPolitico = cargoInfo.salarioMensal;
@@ -324,9 +331,14 @@ export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFec
     estado.vida,
     novaMacro,
     salarioPolitico,
-    { dia: estado.diaAtual, mes: novoMes, ano: novoAno }
+    { dia: estado.diaAtual, mes: novoMes, ano: novoAno },
+    indiceAtual
   );
   destaques.push(...logsVida);
+  const { novaVida: vidaComImoveis, logs: logsImoveis } = simularMesImoveis(
+    novaVida, novaMacro, { dia: 1, mes: novoMes, ano: novoAno }, indiceAnterior, indiceAtual
+  );
+  destaques.push(...logsImoveis);
 
   // 6. Simular Múltiplas Empresas (Portfolio Empresarial)
   const listaEmpresas: Empresa[] = estado.empresas || (estado.empresa ? [estado.empresa] : []);
@@ -335,7 +347,7 @@ export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFec
 
   for (const emp of listaEmpresas) {
     if (emp.ativa) {
-      const { novaEmpresa: empAtualizada, logs: logsEmpresa } = simularMesEmpresa(emp, novaMacro);
+      const { novaEmpresa: empAtualizada, logs: logsEmpresa } = simularMesEmpresa(emp, novaMacro, indiceAtual);
       novasEmpresas.push(empAtualizada);
       lucroEmpresarialTotal += empAtualizada.ultimoMes.lucroLiquido;
       destaques.push(...logsEmpresa);
@@ -396,7 +408,7 @@ export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFec
     selic: novaMacro.taxaSelic,
     desemprego: novaMacro.taxaDesemprego,
     cambioDolar: novaMacro.cambioDolar,
-    saldoPessoal: Math.round(novaVida.saldoBancario),
+    saldoPessoal: Math.round(vidaComImoveis.saldoBancario),
     aprovacaoPolitica: novaPolitica.aprovacaoPopular,
   };
 
@@ -405,15 +417,24 @@ export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFec
   // 9. Resumo do Mês
   const receitasPessoais =
     salarioPolitico + (novaVida.empregoAtual ? (novaVida.empregoAtual.salarioAcordado || 4000) : 0);
-  const despesasPessoais = Math.max(0, saldoAnterior - novaVida.saldoBancario + receitasPessoais);
+  const despesasPessoais = Math.max(0, saldoAnterior - vidaComImoveis.saldoBancario + receitasPessoais);
 
+  const resumoFechamento = {
+    saldoAnterior: Math.round(saldoAnterior),
+    saldoAtual: Math.round(vidaComImoveis.saldoBancario),
+    receitasPessoais: Math.round(receitasPessoais),
+    despesasPessoais: Math.round(despesasPessoais),
+    lucroEmpresarialTotal: Math.round(lucroEmpresarialTotal),
+    destaques: destaques.slice(0, 8),
+  };
   const atualizado: EstadoJogo = {
     ...estado,
     diaAtual: 1,
     mesAtual: novoMes,
     anoAtual: novoAno,
     mesesTotais: novoMesesTotais,
-    vida: novaVida,
+    indicePrecosAcumulado: indiceAtual,
+    vida: vidaComImoveis,
     empresas: novasEmpresas,
     empresa: novasEmpresas[0],
     macro: novaMacro,
@@ -424,20 +445,16 @@ export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFec
       mes: novoMes,
       ano: novoAno,
       sintese: propostaIA?.justificativa || destaques[0] || 'Mês sem grandes acontecimentos.',
-      saldoPessoal: Math.round(novaVida.saldoBancario),
+      saldoPessoal: Math.round(vidaComImoveis.saldoBancario),
       inflacao: novaMacro.inflacaoIpca12m,
       desemprego: novaMacro.taxaDesemprego,
       dolar: novaMacro.cambioDolar,
       decisoesRecentes: (estado.eventosResolvidos || []).slice(0, 5).map(decisao => `${decisao.titulo}: ${decisao.opcaoEscolhida}`),
     }].slice(-120),
-    ultimoResumoMes: {
-      saldoAnterior: Math.round(saldoAnterior),
-      saldoAtual: Math.round(novaVida.saldoBancario),
-      receitasPessoais: Math.round(receitasPessoais),
-      despesasPessoais: Math.round(despesasPessoais),
-      lucroEmpresarialTotal: Math.round(lucroEmpresarialTotal),
-      destaques: destaques.slice(0, 5),
-    },
+    ultimoResumoMes: resumoFechamento,
+    historicoFechamentos: [...(estado.historicoFechamentos || []), {
+      mes: novoMes, ano: novoAno, resumo: resumoFechamento,
+    }].slice(-48),
   };
 
   // O evento proposto pela IA é novo, mas limitado a atributos verificáveis.
@@ -473,7 +490,7 @@ export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFec
   }
 
   // Reserva local em caso de resposta ausente/inválida ou falta de crédito da API.
-  if (Math.random() < 0.3) {
+  if (Math.random() < 0.8) {
     const eventoDoMes = sortearEventoDecisao(atualizado);
     if (eventoDoMes) return { ...atualizado, eventosPendentes: [eventoDoMes] };
   }

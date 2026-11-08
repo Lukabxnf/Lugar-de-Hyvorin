@@ -172,7 +172,8 @@ export function simularMesVida(
   vida: VidaPessoal,
   macro: Macroeconomia,
   salarioPolitico = 0,
-  dataAtual: DataCalendario = { dia: 1, mes: 1, ano: 2026 }
+  dataAtual: DataCalendario = { dia: 1, mes: 1, ano: 2026 },
+  indicePrecos = 1
 ): { novaVida: VidaPessoal; logs: string[] } {
   const logs: string[] = [];
   const novaVida: VidaPessoal = {
@@ -273,6 +274,17 @@ export function simularMesVida(
       categoria: 'aluguel',
       descricao: novaVida.casaPropria ? `Condomínio/IPTU de ${moradiaInfo.nome}` : `Aluguel de ${moradiaInfo.nome}`,
       valor: Math.round(custoMoradia),
+    });
+  }
+
+  // Imóveis de investimento seguem seus donos e possuem custos mesmo quando vazios.
+  for (const propriedade of novaVida.imoveis || []) {
+    if (propriedade.id === novaVida.imovelResidenciaId) continue;
+    const info = MORADIAS[propriedade.tipo];
+    if (info) despesasDoMes.push({
+      categoria: 'imposto',
+      descricao: `IPTU, condomínio e manutenção do imóvel ${propriedade.nome}`,
+      valor: Math.round(info.custoMensal * 0.3),
     });
   }
 
@@ -385,7 +397,15 @@ export function simularMesVida(
   // Se o saldo bancário cobrir a despesa, paga normalmente.
   // SE NÃO COBRIR: gera ContaPagar (dívida vencida) sem criar cheque especial automático!
   let novasContasVencidas = 0;
-  for (const item of despesasDoMes) {
+  for (const itemOriginal of despesasDoMes) {
+    const indice = Number.isFinite(indicePrecos) && indicePrecos > 0 ? indicePrecos : 1;
+    // Empréstimos são contratos nominais e não podem receber inflação extra.
+    const item = {
+      ...itemOriginal,
+      valor: itemOriginal.descricao.startsWith('Parcela ')
+        ? itemOriginal.valor
+        : Math.round(itemOriginal.valor * indice),
+    };
     if (novaVida.saldoBancario >= item.valor) {
       novaVida.saldoBancario -= item.valor;
       registrar('despesa_paga', item.descricao, -item.valor);
@@ -649,6 +669,16 @@ export function simularMesVida(
   }
 
   novaVida.felicidade = Math.max(5, Math.min(100, Number((novaVida.felicidade + deltaFelicidade * 0.5).toFixed(1))));
+
+  // Veículos são bens patrimoniais: inflação altera preços nominais, enquanto
+  // desgaste e idade reduzem valor real. Não desaparecem quando se compra outro.
+  const fatorInflacaoMes = Math.pow(1 + Math.max(-50, macro.inflacaoIpca12m) / 100, 1 / 12);
+  novaVida.veiculos = (novaVida.veiculos || []).map(veiculo => ({
+    ...veiculo,
+    valorMercadoAtual: Math.max(0, Math.round(
+      Math.max(0, veiculo.valorMercadoAtual) * fatorInflacaoMes * 0.991
+    )),
+  }));
 
   // Networking cresce com intelecto e reputação
   const ganhoNetworking = novaVida.reputacao * 0.02 + novaVida.intelecto * 0.015;

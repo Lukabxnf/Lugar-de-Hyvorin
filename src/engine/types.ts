@@ -44,6 +44,31 @@ export interface CargoPoliticoInfo {
 
 export type TipoMoradia = 'pais' | 'aluguel_simples' | 'apartamento_padrao' | 'apartamento_luxo' | 'mansao';
 
+export interface OfertaImovel {
+  id: string;
+  valor: number;
+  mes: number;
+  ano: number;
+}
+
+export interface ImovelProprio {
+  id: string;
+  tipo: TipoMoradia;
+  nome: string;
+  valorCompra: number;
+  valorMercadoAtual: number;
+  mesCompra: number;
+  anoCompra: number;
+  alugadoParaTerceiros: boolean;
+  aluguelAnunciado?: boolean;
+  aluguelMensal: number;
+  anuncio?: {
+    precoPedido: number;
+    mesesAnunciado: number;
+    ofertaPendente?: OfertaImovel;
+  };
+}
+
 export interface MoradiaInfo {
   id: TipoMoradia;
   nome: string;
@@ -238,6 +263,7 @@ export interface Empresa {
 export interface AvatarConfig {
   // Aparência do avatar. Campos opcionais preservam compatibilidade com partidas antigas.
   sexo?: 'masculino' | 'feminino';
+  formatoRosto?: 'oval' | 'fino' | 'largo' | 'redondo';
   pele: 'clara' | 'morena' | 'negra' | 'oriental';
   cabeloCor: 'castanho' | 'preto' | 'loiro' | 'ruivo' | 'grisalho';
   cabeloEstilo: 'curto' | 'medio' | 'longo' | 'crespo' | 'careca';
@@ -346,6 +372,8 @@ export interface VidaPessoal {
   
   moradia: TipoMoradia;
   casaPropria: boolean;
+  imoveis?: ImovelProprio[]; // inventário permanente, independente da residência ocupada
+  imovelResidenciaId?: string;
   educacao: NivelEducacao;
   cursoAtual?: {
     cursoId: string;
@@ -431,6 +459,7 @@ export interface PoliticaGoverno {
   fundoEleitoralPessoal: number; // R$
   fundoPartidarioMes: number;
   emCampanha: boolean;
+  carreiraPoliticaIniciada?: boolean;
   cargoDisputado?: CargoPoliticoId;
   campanhaInicioMesTotal?: number;
   ultimaEleicaoMesTotal?: number;
@@ -551,6 +580,7 @@ export interface EstadoJogo {
   anoAtual: number; // ex: 2026
   mesesTotais: number; // 0, 1, 2...
   horasTotais: number;
+  indicePrecosAcumulado?: number; // nível nominal do catálogo desde o início da partida
   
   vida: VidaPessoal;
   empresas: Empresa[]; // Permite múltiplas empresas
@@ -572,6 +602,18 @@ export interface EstadoJogo {
   agendaDisparadaDia?: string;
   agendaEventosDisparados?: string[];
   
+  historicoFechamentos?: Array<{
+    mes: number;
+    ano: number;
+    resumo: {
+      saldoAnterior: number;
+      saldoAtual: number;
+      receitasPessoais: number;
+      despesasPessoais: number;
+      lucroEmpresarialTotal: number;
+      destaques: string[];
+    };
+  }>;
   ultimoResumoMes?: {
     saldoAnterior: number;
     saldoAtual: number;

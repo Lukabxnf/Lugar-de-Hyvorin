@@ -174,7 +174,7 @@ export function sortearEventoDecisao(estado: EstadoJogo): EventoDecisao | null {
     ? contatosFamiliares[Math.floor(Math.random() * contatosFamiliares.length)]
     : undefined;
 
-  if (contatoFamiliar && r < 0.25) {
+  if (contatoFamiliar && r < 0.23) {
     const ehFilho = contatoFamiliar.tipo === 'filho';
     const titulo = ehFilho
       ? `${contatoFamiliar.nome} precisa da sua atenção`
@@ -233,7 +233,7 @@ export function sortearEventoDecisao(estado: EstadoJogo): EventoDecisao | null {
 
   // 1. Se tem empresa ativa
   const empresaAtiva = empresas?.find(e => e.ativa);
-  if (empresaAtiva && r < 0.25) {
+  if (empresaAtiva && r >= 0.23 && r < 0.55) {
     return {
       id: `ev_emp_${Date.now()}`,
       categoria: 'empresa',
@@ -277,7 +277,7 @@ export function sortearEventoDecisao(estado: EstadoJogo): EventoDecisao | null {
   }
 
   // 2. Se tem mandato político
-  if (politica.cargoAtual !== 'cidadao' && r < 0.5) {
+  if (politica.cargoAtual !== 'cidadao' && r >= 0.55 && r < 0.72) {
     return {
       id: `ev_pol_${Date.now()}`,
       categoria: 'politica',
@@ -312,7 +312,7 @@ export function sortearEventoDecisao(estado: EstadoJogo): EventoDecisao | null {
   }
 
   // 3. Evento pessoal de Trabalho ou Finanças
-  if (vida.empregoAtual && r < 0.75) {
+  if (vida.empregoAtual && r >= 0.72 && r < 0.84) {
     return {
       id: `ev_trab_${Date.now()}`,
       categoria: 'trabalho',
@@ -341,6 +341,92 @@ export function sortearEventoDecisao(estado: EstadoJogo): EventoDecisao | null {
             deltaEnergia: 5,
             deltaFelicidade: 2,
             mensagemResultado: 'Você manteve seu equilíbrio de rotina sem assumir sobrecargas desnecessárias.',
+          },
+        },
+      ],
+    };
+  }
+
+  // Problemas concretos da vida: a saúde pode piorar, e adiar cuidados tem custo.
+  if (r >= 0.84 && r < 0.93) {
+    const custoConsulta = Math.round(250 * (estado.indicePrecosAcumulado || 1));
+    return {
+      id: `ev_saude_${anoAtual}_${mesAtual}_${Date.now()}`,
+      categoria: 'pessoal', urgencia: vida.saude < 45 ? 'alta' : 'media',
+      titulo: 'Problema de saúde inesperado',
+      descricao: 'Você passou alguns dias com dores e sintomas persistentes. Uma avaliação profissional pode ajudar, mas exigirá tempo e dinheiro. Ignorar os sintomas também envolve riscos.',
+      dataOcorrencia: dataFormatada,
+      opcoes: [
+        {
+          id: 'buscar_atendimento',
+          texto: 'Procurar atendimento e seguir a orientação médica',
+          descricaoImpacto: `Despesa de R$ ${custoConsulta.toLocaleString('pt-BR')}, com melhores condições de recuperação.`,
+          consequencias: {
+            custoFinanceiro: custoConsulta, deltaSaude: 4, deltaEnergia: -3,
+            mensagemResultado: 'Você procurou atendimento e começou a se recuperar.',
+          },
+        },
+        {
+          id: 'reduzir_atividade',
+          texto: 'Reduzir compromissos e descansar',
+          descricaoImpacto: 'Gasta energia e tempo, mas pode aliviar os sintomas sem despesa imediata.',
+          consequencias: {
+            deltaSaude: 1, deltaEnergia: -5, deltaFelicidade: -2,
+            mensagemResultado: 'Você diminuiu suas atividades e acompanhou a evolução do mal-estar.',
+          },
+        },
+        {
+          id: 'ignorar_sintomas',
+          texto: 'Continuar normalmente e ignorar os sintomas',
+          descricaoImpacto: 'Preserva a rotina agora, mas há risco de agravamento do quadro.',
+          consequencias: {
+            deltaSaude: -9, deltaEnergia: -9, deltaFelicidade: -3,
+            mensagemResultado: 'Os sintomas pioraram e sua saúde foi afetada.',
+          },
+        },
+      ],
+    };
+  }
+
+  // Crise afetiva real: altera o vínculo com a pessoa, não apenas uma mensagem.
+  if (vida.familia?.conjuge && r >= 0.93) {
+    const parceiro = vida.familia.conjuge;
+    return {
+      id: `ev_relacao_${anoAtual}_${mesAtual}_${Date.now()}`,
+      categoria: 'familia',
+      urgencia: 'media',
+      titulo: `${parceiro.nome} está triste e quer conversar`,
+      descricao: `${parceiro.nome} conta que tem se sentido distante de você e pede mais atenção. Sua resposta pode fortalecer ou desgastar a relação nos próximos meses.`,
+      dataOcorrencia: dataFormatada,
+      opcoes: [
+        {
+          id: 'escutar_parceiro',
+          texto: 'Ouvir com calma e organizar mais tempo juntos',
+          descricaoImpacto: 'Exige disposição e atenção, mas fortalece o vínculo.',
+          consequencias: {
+            deltaAfinidadeRelId: parceiro.id, deltaAfinidadeValor: 12,
+            deltaEnergia: -8, deltaFelicidade: 3,
+            mensagemResultado: `Você ouviu ${parceiro.nome} e os dois se sentiram mais próximos.`,
+          },
+        },
+        {
+          id: 'conversa_rapida',
+          texto: 'Prometer conversar melhor depois',
+          descricaoImpacto: 'Resolve parcialmente o desconforto.',
+          consequencias: {
+            deltaAfinidadeRelId: parceiro.id, deltaAfinidadeValor: 1,
+            deltaEnergia: -2,
+            mensagemResultado: `${parceiro.nome} aceitou esperar, mas a situação ainda precisa de atenção.`,
+          },
+        },
+        {
+          id: 'desconsiderar_parceiro',
+          texto: 'Desconsiderar o pedido',
+          descricaoImpacto: 'Poupa esforço agora, mas aumenta o distanciamento.',
+          consequencias: {
+            deltaAfinidadeRelId: parceiro.id, deltaAfinidadeValor: -15,
+            deltaFelicidade: -7,
+            mensagemResultado: `${parceiro.nome} se sentiu ignorado e a relação ficou mais frágil.`,
           },
         },
       ],

@@ -38,6 +38,13 @@ export const CharacterPortrait: React.FC<CharacterPortraitProps> = ({ config, cl
   const feminino = config.sexo === 'feminino';
   const cabeloVisivel = estilo !== 'careca';
   const barbaVisivel = !feminino && !!config.barba && config.barba !== 'nenhuma';
+  const contornos = {
+    oval: 'M120 38 C82 38 61 68 64 117 C66 160 89 190 120 193 C151 190 174 160 176 117 C179 68 158 38 120 38Z',
+    fino: 'M120 36 C92 37 69 67 69 113 C70 157 100 192 120 197 C140 192 170 157 171 113 C171 67 148 37 120 36Z',
+    largo: 'M120 39 C77 37 56 67 58 116 C61 165 82 187 120 192 C158 187 179 165 182 116 C184 67 163 37 120 39Z',
+    redondo: 'M120 42 C78 38 60 69 60 112 C61 162 84 185 120 188 C156 185 179 162 180 112 C180 69 162 38 120 42Z',
+  };
+  const contorno = contornos[config.formatoRosto || 'oval'];
 
   return (
     <svg viewBox="0 0 240 280" role="img" aria-label={`Retrato de personagem ${feminino ? 'feminino' : 'masculino'}`}
@@ -67,7 +74,7 @@ export const CharacterPortrait: React.FC<CharacterPortraitProps> = ({ config, cl
       <path d="M100 163 H140 V211 Q120 231 100 211Z" fill={`url(#${gradientId}-skin-shade)`} />
       <ellipse cx="76" cy="112" rx="13" ry="20" fill={skin.base} />
       <ellipse cx="164" cy="112" rx="13" ry="20" fill={skin.base} />
-      <path d="M120 38 C82 38 61 68 64 117 C66 160 89 190 120 193 C151 190 174 160 176 117 C179 68 158 38 120 38Z" fill={`url(#${gradientId}-skin-shade)`} />
+      <path d={contorno} fill={`url(#${gradientId}-skin-shade)`} />
       <path d="M71 112 Q76 96 87 105" stroke={skin.shadow} strokeWidth="3" fill="none" opacity=".45" />
       <path d="M169 112 Q164 96 153 105" stroke={skin.shadow} strokeWidth="3" fill="none" opacity=".45" />
       <ellipse cx="95" cy="119" rx="10" ry="6.5" fill="#fff8f0" />
