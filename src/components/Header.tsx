@@ -50,6 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const cargo = CARGOS_POLITICOS[estado.politica.cargoAtual];
   const eleicaoInfo = isAnoEleitoral(estado.mesesTotais);
+  const temMandatoEletivo = !['cidadao', 'lider_comunitario'].includes(estado.politica.cargoAtual);
   const empresasDoJogador = estado.empresas || (estado.empresa ? [estado.empresa] : []);
   const resumoPatrimonio = calcularPatrimonioLiquido(estado.vida, empresasDoJogador);
   const patrimonioPessoal = resumoPatrimonio.patrimonioLiquido;
@@ -115,9 +116,9 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {/* Election alert indicator */}
+          {/* Cidadãos veem o calendário eleitoral como oportunidade de carreira, sem abrir a área de governo. */}
           <button
-            onClick={() => onSelectTab('politica')}
+            onClick={() => onSelectTab(temMandatoEletivo ? 'politica' : 'vida')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition border ${
               eleicaoInfo.mesesAteEleicao === 0
                 ? 'bg-amber-500 text-slate-950 border-amber-400 animate-pulse font-bold'
@@ -125,7 +126,7 @@ export const Header: React.FC<HeaderProps> = ({
                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                 : 'bg-slate-800 text-slate-400 border-slate-700'
             }`}
-            title="Clique para ir à aba de Política"
+            title={temMandatoEletivo ? "Calendário do mandato e das eleições" : "Veja oportunidades de carreira pública em Vida & Carreira"}
           >
             <Vote className="w-3.5 h-3.5" />
             {eleicaoInfo.mesesAteEleicao === 0
@@ -170,26 +171,20 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Office Badge */}
-          <div
-            onClick={() => onSelectTab('politica')}
-            className={`cursor-pointer flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition shrink-0 ${
-              cargo.id === 'cidadao'
-                ? 'bg-slate-800/60 border-slate-700/60 hover:border-slate-500'
-                : 'bg-indigo-950/60 border-indigo-600/50 hover:border-indigo-400'
-            }`}
-            title="Ver detalhes de carreira política e poder"
-          >
-            <Landmark className={`w-4 h-4 ${cargo.id === 'cidadao' ? 'text-slate-400' : 'text-indigo-400'}`} />
-            <div>
-              <div className={`text-[9px] font-semibold uppercase ${cargo.id === 'cidadao' ? 'text-slate-300' : 'text-indigo-300'}`}>
-                {cargo.nome}
-              </div>
-              <div className="text-[11px] text-slate-300 font-medium">
-                {cargo.id === 'cidadao' ? 'Cidadão Eleitor' : `Aprov: ${Math.round(estado.politica.aprovacaoPopular)}%`}
+          {/* Identificação do mandato só aparece para quem ocupa cargo eletivo. */}
+          {temMandatoEletivo && (
+            <div
+              onClick={() => onSelectTab('politica')}
+              className="cursor-pointer flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-indigo-600/50 bg-indigo-950/60 hover:border-indigo-400 transition shrink-0"
+              title="Ver detalhes do mandato e do governo"
+            >
+              <Landmark className="w-4 h-4 text-indigo-400" />
+              <div>
+                <div className="text-[9px] font-semibold uppercase text-indigo-300">{cargo.nome}</div>
+                <div className="text-[11px] text-slate-300 font-medium">Aprov: {Math.round(estado.politica.aprovacaoPopular)}%</div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Macro Rates */}
           <div
