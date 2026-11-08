@@ -283,7 +283,8 @@ export default function App() {
   // Comparecer a um compromisso inicia a atividade e retoma o relógio automaticamente.
   const handleEscolherOpcaoEventoComRetomada = useCallback((opcao: OpcaoEvento) => {
     handleEscolherOpcaoEvento(opcao);
-    if (opcao.consequencias.atividade) setIsPlaying(true);
+    // A escolha encerra a pausa do evento; o jogador ainda pode pausar manualmente.
+    setIsPlaying(true);
   }, [handleEscolherOpcaoEvento]);
 
   // Election victory trigger
