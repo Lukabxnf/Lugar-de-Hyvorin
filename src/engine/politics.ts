@@ -9,40 +9,49 @@ import {
 
 export function isAnoEleitoral(mesesTotais: number): {
   ehAnoEleitoral: boolean;
-  tipoEleicao?: 'municipal' | 'geral';
+  tipoEleicao: 'municipal' | 'geral';
   mesesAteEleicao: number;
+  anoEleicao: number;
+  mesEleicao: number;
 } {
-  // Ciclo brasileiro: 48 meses (4 anos)
-  // Mês 24, 72, 120... = Eleições Gerais (Outubro do ano 2 e 6)
-  // Mês 48, 96, 144... = Eleições Municipais (Outubro do ano 4 e 8)
-  const ciclo48 = mesesTotais % 48;
-  
-  // Eleição Geral ocorre a cada 48 meses no marco 24 (ex: 24, 72, 120...)
-  // Eleição Municipal ocorre a cada 48 meses no marco 0 / 48 (ex: 48, 96, 144...)
-  let mesesAteEleicao = 0;
-  let tipoEleicao: 'municipal' | 'geral';
+  // O jogo começa em janeiro de 2026. Eleições gerais em outubro de 2026,
+  // 2030, 2034...; municipais em outubro de 2028, 2032...
+  const meses = Math.max(0, Math.floor(mesesTotais));
+  const anoAtual = 2026 + Math.floor(meses / 12);
+  const mesAtual = (meses % 12) + 1;
 
-  if (ciclo48 === 0 && mesesTotais > 0) {
-    mesesAteEleicao = 0;
-    tipoEleicao = 'municipal';
-  } else if (ciclo48 === 24) {
-    mesesAteEleicao = 0;
-    tipoEleicao = 'geral';
-  } else if (ciclo48 < 24) {
-    mesesAteEleicao = 24 - ciclo48;
-    tipoEleicao = 'geral';
-  } else {
-    mesesAteEleicao = 48 - ciclo48;
-    tipoEleicao = 'municipal';
+  let anoEleicao = Math.max(2026, anoAtual);
+  while (anoEleicao % 2 !== 0 || (anoEleicao === anoAtual && mesAtual > 10)) {
+    anoEleicao += 1;
   }
 
-  const ehAnoEleitoral = mesesAteEleicao <= 10; // Últimos 10 meses são considerados período pré-eleitoral
+  const mesesAteEleicao = (anoEleicao - anoAtual) * 12 + (10 - mesAtual);
+  const tipoEleicao = (anoEleicao - 2026) % 4 === 0 ? 'geral' : 'municipal';
 
   return {
-    ehAnoEleitoral,
+    ehAnoEleitoral: mesesAteEleicao <= 10,
     tipoEleicao,
     mesesAteEleicao,
+    anoEleicao,
+    mesEleicao: 10,
   };
+}
+
+export function cargoCompativelComEleicao(
+  tipoEleicao: 'municipal' | 'geral',
+  cargo: CargoPoliticoId
+): boolean {
+  const cargosMunicipais: CargoPoliticoId[] = ['vereador', 'prefeito'];
+  const cargosGerais: CargoPoliticoId[] = [
+    'deputado_estadual',
+    'deputado_federal',
+    'senador',
+    'governador',
+    'presidente',
+  ];
+  return tipoEleicao === 'municipal'
+    ? cargosMunicipais.includes(cargo)
+    : cargosGerais.includes(cargo);
 }
 
 export function simularEleicao(
@@ -164,9 +173,26 @@ export function simularMesPolitica(
   let novoApoio = Math.max(25, Math.min(85, politica.apoioParlamento + (novaAprovacao > 60 ? 0.3 : -0.4)));
   novoApoio = Number(novoApoio.toFixed(1));
 
-  // Notificações de meio de mandato ou fim de mandato
-  if (novosMesesNoCargo % 48 === 0) {
-    logs.push(`Fim do mandato de 4 anos como ${cargoInfo.nome}! Hora de disputar a reeleição ou buscar novos horizontes.`);
+  // Mandatos eletivos duram quatro anos. O encerramento ocorre depois da
+  // janela eleitoral para permitir a disputa do pleito de outubro.
+  const cargosEletivos: CargoPoliticoId[] = [
+    'vereador', 'prefeito', 'deputado_estadual',
+    'deputado_federal', 'senador', 'governador', 'presidente',
+  ];
+  if (cargosEletivos.includes(politica.cargoAtual) && novosMesesNoCargo > 48) {
+    logs.push(`Mandato encerrado: você deixou o cargo de ${cargoInfo.nome} após quatro anos.`);
+    return {
+      novaPolitica: {
+        ...politica,
+        cargoAtual: 'cidadao',
+        mesesNoCargo: 0,
+        emCampanha: false,
+        cargoDisputado: undefined,
+        campanhaInicioMesTotal: undefined,
+        reeleicoesConsecutivas: 0,
+      },
+      logs,
+    };
   }
 
   return {
