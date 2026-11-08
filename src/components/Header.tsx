@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { EstadoJogo } from '../engine/types';
 import { CARGOS_POLITICOS } from '../engine/data';
+import { calcularPatrimonioLiquido, formatarMoedaCompacta } from '../engine/finance';
 import { isAnoEleitoral } from '../engine/politics';
 
 interface HeaderProps {
@@ -57,7 +58,17 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const cargo = CARGOS_POLITICOS[estado.politica.cargoAtual];
   const eleicaoInfo = isAnoEleitoral(estado.mesesTotais);
-  const patrimonioPessoal = estado.vida.saldoBancario - estado.vida.dividaPessoal;
+  const empresasDoJogador = estado.empresas || (estado.empresa ? [estado.empresa] : []);
+  const resumoPatrimonio = calcularPatrimonioLiquido(estado.vida, empresasDoJogador);
+  const patrimonioPessoal = resumoPatrimonio.patrimonioLiquido;
+  const descricaoPatrimonio = [
+    `Ativos: ${formatarMoedaCompacta(resumoPatrimonio.ativosTotais)}`,
+    `Caixa pessoal: ${formatarMoedaCompacta(resumoPatrimonio.caixaPessoal)}`,
+    `Imóveis: ${formatarMoedaCompacta(resumoPatrimonio.imoveis)}`,
+    `Veículos: ${formatarMoedaCompacta(resumoPatrimonio.veiculos)}`,
+    `Participações empresariais: ${formatarMoedaCompacta(resumoPatrimonio.participacoesEmpresariais)}`,
+    `Passivos: ${formatarMoedaCompacta(resumoPatrimonio.passivosTotais)}`,
+  ].join(' | ');
 
   const horaFormatada = `${String(estado.horaAtual ?? 8).padStart(2, '0')}:${String(estado.minutoAtual ?? 0).padStart(2, '0')}`;
   const diaSemana = estado.diaSemanaAtual || 'Segunda-feira';
@@ -163,8 +174,11 @@ export const Header: React.FC<HeaderProps> = ({
             <Wallet className="w-4 h-4 text-emerald-400" />
             <div>
               <div className="text-[9px] text-slate-400 uppercase font-semibold">Patrimônio Líquido</div>
-              <div className={`font-mono font-bold text-xs ${patrimonioPessoal >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                R$ {patrimonioPessoal.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+              <div
+                className={`font-mono font-bold text-xs ${patrimonioPessoal >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
+                title={descricaoPatrimonio}
+              >
+                {formatarMoedaCompacta(patrimonioPessoal)}
               </div>
             </div>
           </div>
