@@ -65,7 +65,7 @@ export const MacroView: React.FC<MacroViewProps> = ({
   };
 
   const selicRange = getMinMax((p) => Math.max(p.selic, p.inflacao));
-  const cambioRange = { min: 4.0, max: 7.5 };
+  const cambioRange = getMinMax((p) => p.cambioDolar ?? macro.cambioDolar);
 
   // Ações exclusivas do Presidente da República
   const handleAjustarMetaInflacao = (novaMeta: number) => {
@@ -342,27 +342,31 @@ export const MacroView: React.FC<MacroViewProps> = ({
           </div>
         </div>
 
-        {/* Resultado Primário */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-400 uppercase font-semibold">Resultado Primário (Mês)</span>
-            <div
-              className={`text-xl font-mono font-bold mt-0.5 ${
-                macro.resultadoPrimarioMes >= 0 ? 'text-emerald-400' : 'text-rose-400'
-              }`}
-            >
-              {macro.resultadoPrimarioMes >= 0 ? '+R$ ' : '-R$ '}
-              {Math.abs(macro.resultadoPrimarioMes).toFixed(1)} Bilhões
+        {ehPresidente && (
+          <>
+          {/* Resultado Primário */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+            <div>
+              <span className="text-xs text-slate-400 uppercase font-semibold">Resultado Primário (Mês)</span>
+              <div
+                className={`text-xl font-mono font-bold mt-0.5 ${
+                  macro.resultadoPrimarioMes >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                }`}
+              >
+                {macro.resultadoPrimarioMes >= 0 ? '+R$ ' : '-R$ '}
+                {Math.abs(macro.resultadoPrimarioMes).toFixed(1)} Bilhões
+              </div>
+              <div className="text-[11px] text-slate-400">
+                Receita: R$ {macro.arrecadacaoTributariaMes.toFixed(1)}B | Despesa: R${' '}
+                {macro.despesaPublicaMes.toFixed(1)}B
+              </div>
             </div>
-            <div className="text-[11px] text-slate-400">
-              Receita: R$ {macro.arrecadacaoTributariaMes.toFixed(1)}B | Despesa: R${' '}
-              {macro.despesaPublicaMes.toFixed(1)}B
+            <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-slate-300">
+              <Landmark className="w-5 h-5" />
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-slate-300">
-            <Landmark className="w-5 h-5" />
-          </div>
-        </div>
+          </>
+        )}
       </div>
 
       {/* Interactive Historical SVG Chart */}
@@ -472,7 +476,7 @@ export const MacroView: React.FC<MacroViewProps> = ({
                 stroke="#22c55e"
                 strokeWidth="2.5"
                 strokeLinecap="round"
-                points={buildPath((p) => p.desemprego, cambioRange.min, cambioRange.max)}
+                points={buildPath((p) => p.cambioDolar ?? macro.cambioDolar, cambioRange.min, cambioRange.max)}
               />
             )}
 
