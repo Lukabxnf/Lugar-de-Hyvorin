@@ -531,7 +531,7 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
 
             <div className="flex justify-between py-1.5 border-b border-slate-800/80">
               <span className="text-slate-300 flex items-center gap-1.5">
-                <Warehouse className="w-3.5 h-3.5 text-amber-400" /> (-) Armazenagem de Estoque:
+                <Package className="w-3.5 h-3.5 text-amber-400" /> (-) Armazenagem de Estoque:
               </span>
               <span className="font-mono text-rose-400">
                 -R$ {(ultimoDRE.custoArmazenagem || 0).toLocaleString('pt-BR')}
