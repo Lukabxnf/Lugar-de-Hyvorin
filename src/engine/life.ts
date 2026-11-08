@@ -109,7 +109,7 @@ export function simularHoraVida(
       novaVida.energia = Math.max(0, Number((novaVida.energia - 1.5).toFixed(1)));
       novaVida.intelecto = Math.min(100, Number((novaVida.intelecto + 0.015).toFixed(3)));
 
-      if (novaVida.cursoMatriculado && !novaVida.cursoMatriculado.concluido) {
+      if (novaVida.aulaFormal && novaVida.cursoMatriculado && !novaVida.cursoMatriculado.concluido) {
         novaVida.cursoMatriculado = {
           ...novaVida.cursoMatriculado,
           aulasAssistidas: novaVida.cursoMatriculado.aulasAssistidas + 1,
@@ -146,6 +146,7 @@ export function simularHoraVida(
     novaVida.horasRestantesAtividade = restantes;
     if (restantes === 0) {
       novaVida.atividadeAtual = 'livre';
+      novaVida.aulaFormal = false;
       avisos.push('A atividade terminou. Você está com o tempo livre novamente.');
     }
   }
