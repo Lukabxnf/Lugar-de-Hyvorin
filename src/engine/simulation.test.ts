@@ -8,7 +8,7 @@ import { cargoCompativelComEleicao, isAnoEleitoral } from './politics';
 import { aplicarImpactoAfinidadeFamiliar, sortearEventoDecisao } from './events';
 import { criarEstadoInicial } from './presets';
 import { avancarHorasSimulacao, avancarMinutosSimulacao, avancarMesSimulacao, avancarMultiplosMeses, diasNoMes } from './simulation';
-import { Macroeconomia, VidaPessoal, Empresa, DataCalendario, Relacionamento } from './types';
+import { Macroeconomia, VidaPessoal, Empresa, DataCalendario, Relacionamento, PropostaFechamentoIA } from './types';
 
 /** Cenário de emprego e curso já iniciados, distinto da nova partida aos 18 anos. */
 function criarEstudanteComVinculos() {
@@ -94,6 +94,64 @@ test('Education: a valid enrolled course attends classes and takes exams through
   }
   assert.equal(vida.cursoMatriculado?.concluido, true);
   assert.ok(vida.titulosConquistados.includes('Diploma: Curso Técnico em Desenvolvimento de Sistemas'));
+});
+
+test('IA mensal: impacto econômico passa pelo motor, memória fica no save e evento novo permite decisões', () => {
+  const original = Math.random;
+  Math.random = () => 0.99; // Elimina choques aleatórios e eventos do catálogo.
+  try {
+    const estado = criarEstadoInicial('estudante');
+    const proposta: PropostaFechamentoIA = {
+      justificativa: 'Maior demanda pressiona preços e a atividade econômica.',
+      choqueInflacao: 0.22,
+      choquePib: 0.31,
+      choqueDolar: 0.04,
+      impactoApoioParlamento: 0,
+      acontecimento: {
+        categoria: 'pessoal', urgencia: 'media',
+        titulo: 'Decisão sobre qualificação profissional',
+        descricao: 'Uma oportunidade de formação exige dedicação.',
+        opcoes: [
+          { texto: 'Investir tempo no estudo', descricaoImpacto: 'Menos energia, mais conhecimento.',
+            mensagemResultado: 'Você iniciou os estudos.', deltaEnergia: -5, deltaIntelecto: 2 },
+          { texto: 'Adiar', descricaoImpacto: 'Preserva disposição.', mensagemResultado: 'Você preferiu esperar.', deltaEnergia: 1 },
+        ],
+      },
+    };
+    const simples = avancarMesSimulacao(estado);
+    const comIA = avancarMesSimulacao(estado, proposta);
+
+    assert.ok(comIA.macro.inflacaoIpca12m > simples.macro.inflacaoIpca12m);
+    assert.ok(comIA.macro.crescimentoAnualPib > simples.macro.crescimentoAnualPib);
+    assert.equal(comIA.mesesTotais, 1);
+    assert.equal(comIA.memoriaIA?.[0]?.sintese, proposta.justificativa);
+    assert.equal(comIA.eventosPendentes[0]?.titulo, proposta.acontecimento?.titulo);
+    assert.equal(comIA.eventosPendentes[0]?.opcoes[0]?.consequencias.deltaIntelecto, 2);
+    assert.equal(comIA.eventosPendentes[0]?.opcoes[0]?.consequencias.ganhoFinanceiro, undefined);
+    assert.equal(avancarMesSimulacao(comIA), comIA, 'Evento pendente bloqueia avanço');
+    assert.equal(estado.memoriaIA, undefined, 'Estado anterior não é alterado');
+  } finally {
+    Math.random = original;
+  }
+});
+
+test('IA mensal: motor ignora deltas fora dos limites mesmo se chamado sem validador da API', () => {
+  const original = Math.random;
+  Math.random = () => 0.99;
+  try {
+    const base = criarEstadoInicial('estudante');
+    const proposta: PropostaFechamentoIA = {
+      justificativa: 'Proposta adversarial tem efeitos fora dos limites.',
+      choqueInflacao: 800, choquePib: Infinity, choqueDolar: -20, impactoApoioParlamento: 500,
+    };
+    const simples = avancarMesSimulacao(base);
+    const comIA = avancarMesSimulacao(base, proposta);
+    assert.equal(comIA.macro.inflacaoIpca12m, simples.macro.inflacaoIpca12m);
+    assert.equal(comIA.macro.crescimentoAnualPib, simples.macro.crescimentoAnualPib);
+    assert.equal(comIA.macro.cambioDolar, simples.macro.cambioDolar);
+  } finally {
+    Math.random = original;
+  }
 });
 
 test('Macro: Taylor Rule responds by raising Selic when inflation is above target', () => {
