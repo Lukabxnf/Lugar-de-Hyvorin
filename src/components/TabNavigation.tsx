@@ -7,6 +7,7 @@ interface TabNavigationProps {
   temEmpresa: boolean;
   noticiasNaoLidas?: number;
   emCampanha?: boolean;
+  temCargoPolitico?: boolean;
 }
 
 export const TabNavigation: React.FC<TabNavigationProps> = ({
@@ -15,6 +16,7 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({
   temEmpresa,
   noticiasNaoLidas = 0,
   emCampanha = false,
+  temCargoPolitico = false,
 }) => {
   const tabs = [
     {
@@ -39,14 +41,14 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({
       color: 'cyan',
       sub: 'IPCA, Selic, PIB & Dívida',
     },
-    {
+    ...(temCargoPolitico ? [{
       id: 'politica',
-      label: 'Política & Poder',
+      label: 'Política & Governo',
       icon: Landmark,
       color: 'amber',
       badge: emCampanha ? 'Campanha' : undefined,
-      sub: 'Eleições, Leis & Orçamento',
-    },
+      sub: 'Mandato, Leis & Orçamento',
+    }] : []),
     {
       id: 'gazeta',
       label: 'Gazeta do Brasil',
