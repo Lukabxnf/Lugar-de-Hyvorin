@@ -1,5 +1,6 @@
 import { Empresa, EstadoJogo, PerfilInicial, VidaPessoal } from './types';
 import { PROPOSTAS_POLITICAS_INICIAIS } from './data';
+import { migrarImoveisLegados } from './imoveis';
 
 export const PERFIS_INICIAIS: PerfilInicial[] = [
   {
@@ -663,7 +664,8 @@ export function criarEstadoInicial(perfilId = 'estudante'): EstadoJogo {
     anoAtual: 2026,
     mesesTotais: 0,
     horasTotais: 0,
-    vida: vidaCompleta,
+    indicePrecosAcumulado: 1,
+    vida: migrarImoveisLegados(vidaCompleta),
     empresas: empresasIniciais,
     empresaSelecionadaId: empresasIniciais[0]?.id,
     empresa: empresasIniciais[0],
