@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 
 interface NumericFieldProps {
   value: number;
-  onCommit: (value: number) => void;
+  onCommit: (value: number) => void | boolean;
   ariaLabel: string;
   step?: number;
   min?: number;
@@ -31,8 +31,8 @@ export const NumericField: React.FC<NumericFieldProps> = ({
       setDraft(String(value));
       return;
     }
-    setDraft(String(n));
-    onCommit(n);
+    const aceito = onCommit(n);
+    setDraft(aceito === false ? String(value) : String(n));
   };
 
   useEffect(() => {
@@ -47,8 +47,8 @@ export const NumericField: React.FC<NumericFieldProps> = ({
         Math.round((base + (event.deltaY < 0 ? opts.step : -opts.step)) * 100) / 100
       ));
       const resultado = opts.integer ? Math.round(next) : next;
-      setDraft(String(resultado));
-      opts.onCommit(resultado);
+      const aceito = opts.onCommit(resultado);
+      setDraft(aceito === false ? String(opts.value) : String(resultado));
     };
     node.addEventListener('wheel', wheel, { passive: false });
     return () => node.removeEventListener('wheel', wheel);
@@ -75,8 +75,8 @@ export const NumericField: React.FC<NumericFieldProps> = ({
             Math.round((base + (event.key === 'ArrowUp' ? step : -step)) * 100) / 100
           ));
           const resultado = integer ? Math.round(next) : next;
-          setDraft(String(resultado));
-          onCommit(resultado);
+          const aceito = onCommit(resultado);
+          setDraft(aceito === false ? String(value) : String(resultado));
         }
       }}
       title="Digite qualquer valor válido ou use o scroll do mouse para ajustar"
