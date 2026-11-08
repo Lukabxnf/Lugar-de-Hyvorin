@@ -41,6 +41,7 @@ import {
 import { CARREIRAS, CARGOS_POLITICOS, CURSOS, MORADIAS, VEICULOS_CATALOGO } from '../engine/data';
 import { calcularIdadeExata } from '../engine/life';
 import { CharacterPortrait } from './CharacterPortrait';
+import { NPCPortrait } from './NPCPortrait';
 import { NumericField } from './NumericField';
 import { alugarResidencia, anunciarImovel, comprarImovel, definirAluguelProprio, encerrarAnuncioOuLocacao, ocuparImovel, precoImovelAtual, responderOfertaImovel } from '../engine/imoveis';
 import { analisarCreditoPessoal, formatarMoedaCompacta, registrarTransacaoFinanceira } from '../engine/finance';
@@ -1274,7 +1275,9 @@ export const LifeView: React.FC<LifeViewProps> = ({
               </div>
             ) : (
               <div className="p-4 rounded-xl bg-slate-800/60 border border-slate-700 flex flex-col md:flex-row items-center justify-between gap-4">
-                <div>
+                <div className="flex items-center gap-3">
+                  <NPCPortrait pessoa={vida.familia.conjuge} className="h-20 w-16" />
+                  <div>
                   <div className="flex items-center gap-2">
                     <Heart className="w-4 h-4 text-rose-400 fill-rose-400" />
                     <span className="font-bold text-slate-100 text-sm">{vida.familia.conjuge.nome}</span>
@@ -1283,6 +1286,7 @@ export const LifeView: React.FC<LifeViewProps> = ({
                   <div className="text-xs text-slate-300 mt-1 flex items-center gap-3">
                     <span>Status: <strong className="text-emerald-400 uppercase">{vida.familia.estadoCivil}</strong></span>
                     <span>Afinidade: <strong className="text-rose-400">{vida.familia.conjuge.nivelAfinidade}%</strong></span>
+                  </div>
                   </div>
                 </div>
 
@@ -1346,8 +1350,9 @@ export const LifeView: React.FC<LifeViewProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {vida.familia.filhos.map(filho => (
                   <div key={filho.id} className="p-3.5 rounded-xl bg-slate-800/50 border border-slate-700 text-xs space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-200">{filho.nome}</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2"><NPCPortrait pessoa={filho} className="h-16 w-12" />
+                        <span className="font-bold text-slate-200">{filho.nome}</span></div>
                       <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 text-[10px] font-bold uppercase">
                         {filho.filhoDetalhes?.fase || 'Criança'} ({filho.idade} anos)
                       </span>
@@ -1369,6 +1374,23 @@ export const LifeView: React.FC<LifeViewProps> = ({
             )}
           </div>
 
+          {/* Família própria também tem rosto, ocupação e afinidade. */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5">
+            <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-emerald-400">Familiares</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(vida.familia.parentes || []).map(parente => (
+                <div key={parente.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-800/40 p-3">
+                  <NPCPortrait pessoa={parente} className="h-16 w-12" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-slate-100">{parente.nome}</p>
+                    <p className="text-xs text-slate-400">{parente.ocupacao || parente.tipo} · {parente.idade} anos</p>
+                    <p className="mt-1 text-xs text-emerald-300">Afinidade: {parente.nivelAfinidade}%</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Lista de Conhecidos e Amigos */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
             <h4 className="font-bold text-slate-100 mb-3 text-xs uppercase tracking-wider text-emerald-400">
@@ -1377,9 +1399,12 @@ export const LifeView: React.FC<LifeViewProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {[...(vida.familia?.amigos || []), ...(vida.familia?.conhecidos || [])].map(rel => (
                 <div key={rel.id} className="p-3 rounded-xl bg-slate-800/40 border border-slate-700/60 flex items-center justify-between gap-3 text-xs">
-                  <div>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <NPCPortrait pessoa={rel} className="h-14 w-11" />
+                    <div className="min-w-0">
                     <span className="font-bold text-slate-200 block">{rel.nome}</span>
                     <span className="text-[11px] text-slate-400">{rel.ocupacao || 'Contato'} • {rel.tipo.replace('_', ' ')} • Afinidade: {rel.nivelAfinidade}%</span>
+                    </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
