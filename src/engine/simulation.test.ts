@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { simularMesMacroeconomia } from './macro';
 import { calcularIdadeExata, calcularTaxaMensalEfetiva, evoluirRelacionamentoMensal, simularHoraVida, simularMesVida } from './life';
 import { simularMesEmpresa } from './business';
+import { calcularPatrimonioLiquido, formatarMoedaCompacta } from './finance';
 import { cargoCompativelComEleicao, isAnoEleitoral } from './politics';
 import { aplicarImpactoAfinidadeFamiliar, sortearEventoDecisao } from './events';
 import { criarEstadoInicial } from './presets';
@@ -236,6 +237,53 @@ test('Business: large legacy inventory is preserved and production pauses until 
   assert.equal(result.ultimoMes.unidadesProduzidas, 0);
   assert.equal(result.capacidadeArmazenamento, legacyStock);
   assert.ok(result.ultimoMes.custoArmazenagem! > 0);
+});
+
+test('Finance: net worth includes property, vehicles and company equity without double-counting cash', () => {
+  const estado = criarEstadoInicial('estudante');
+  const vida = {
+    ...estado.vida,
+    saldoBancario: 10000,
+    dividaPessoal: 500,
+    moradia: 'aluguel_simples' as const,
+    casaPropria: true,
+    veiculos: [{
+      id: 'carro_teste',
+      modeloId: 'moto_160',
+      nome: 'Veículo de teste',
+      anoCompra: 2025,
+      valorMercadoAtual: 20000,
+    }],
+    emprestimosContratados: [{
+      id: 'loan_test',
+      tipo: 'pessoal' as const,
+      banco: 'Banco Teste',
+      descricao: 'Empréstimo teste',
+      valorOriginal: 1000,
+      saldoDevedor: 1000,
+      valorParcela: 100,
+      parcelasTotais: 10,
+      parcelasPagas: 0,
+      taxaJurosMensal: 1,
+      diaVencimentoParcela: 10,
+      status: 'em_dia' as const,
+    }],
+  };
+  const empresa = {
+    ...estado.empresas[0],
+    caixaPJ: 50000,
+    patrimonioMaquinas: 60000,
+    dividaPJ: 10000,
+  };
+  const resumo = calcularPatrimonioLiquido(vida, [empresa]);
+
+  assert.equal(resumo.caixaPessoal, 10000);
+  assert.equal(resumo.imoveis, 180000);
+  assert.equal(resumo.veiculos, 20000);
+  assert.equal(resumo.participacoesEmpresariais, 100000);
+  assert.equal(resumo.passivosTotais, 1500);
+  assert.equal(resumo.patrimonioLiquido, 308500);
+  assert.match(formatarMoedaCompacta(4.64554654647544e29), /octilhões/);
 });
 
 test('Family events: choices update the targeted relationship affinity only', () => {
