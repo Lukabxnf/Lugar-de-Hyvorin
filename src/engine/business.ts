@@ -52,7 +52,8 @@ export function avaliarContratacaoEmpresa(
 
 export function simularMesEmpresa(
   empresa: Empresa,
-  macro: Macroeconomia
+  macro: Macroeconomia,
+  indicePrecos = 1
 ): { novaEmpresa: Empresa; logs: string[] } {
   if (!empresa.ativa) {
     return { novaEmpresa: empresa, logs: ['Empresa inativa/falida.'] };
@@ -60,11 +61,13 @@ export function simularMesEmpresa(
 
   const setor = SETORES_EMPRESA[empresa.setorId] || SETORES_EMPRESA.varejo;
   const logs: string[] = [];
+  const indice = Number.isFinite(indicePrecos) && indicePrecos > 0 ? indicePrecos : 1;
+  const precoMercadoAtual = setor.precoVendaBase * indice;
 
   // 1. Inflação de insumos afetada pelo IPCA e Câmbio (Dólar)
   const inflacaoMensal = (macro.inflacaoIpca12m / 100) / 12;
   const fatorDolar = (macro.cambioDolar / 5.2) * (setor.sensibilidadeDolar * 0.4);
-  const custoInsumoEfetivo = setor.custoInsumoBase * (1 + inflacaoMensal + (fatorDolar > 0 ? (fatorDolar - 0.4) * 0.1 : 0));
+  const custoInsumoEfetivo = setor.custoInsumoBase * indice * (1 + inflacaoMensal + (fatorDolar > 0 ? (fatorDolar - 0.4) * 0.1 : 0));
 
   // 2. Capacidade produtiva: a fábrica só produz o que consegue vender
   // ou armazenar, respeitando trabalhadores, máquinas e estoque existente.
@@ -74,7 +77,7 @@ export function simularMesEmpresa(
   // 3. Demanda: preço muito acima do mercado derruba a procura sem piso artificial.
   const porteMultiplier = empresa.porte === 'MEI' ? 1 : empresa.porte === 'LTDA' ? 5 : 25;
   const demandaBase = 1200 * porteMultiplier;
-  const razaoPreco = Math.max(0.01, empresa.precoVenda / setor.precoVendaBase);
+  const razaoPreco = Math.max(0.01, empresa.precoVenda / Math.max(0.01, precoMercadoAtual));
   const efeitoPreco = Math.pow(razaoPreco, -setor.elasticidadePreco)
     * Math.exp(-Math.max(0, razaoPreco - 1) * 0.12);
 
