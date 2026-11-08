@@ -1789,7 +1789,7 @@ export const LifeView: React.FC<LifeViewProps> = ({
             <section className="space-y-3"><h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400">Características físicas</h4><p className="text-xs text-slate-500">Esses atributos fazem parte da ficha do personagem. Não alteram o desenho do avatar.</p>
               <div className="grid grid-cols-2 gap-3">
                 <label className="text-xs text-slate-400">Tipo físico<select value={avatarTemp.tipoFisico || 'medio'} onChange={e=>setAvatarTemp({...avatarTemp,tipoFisico:e.target.value as AvatarConfig['tipoFisico']})} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-100"><option value="magro">Magro</option><option value="medio">Médio</option><option value="forte">Forte</option><option value="robusto">Robusto</option></select></label>
-                <label className="text-xs text-slate-400">Altura: {avatarTemp.alturaCm || 170} cm<input type="range" min="140" max="210" step="1" value={avatarTemp.alturaCm || 170} onChange={e=>setAvatarTemp({...avatarTemp,alturaCm:Number(e.target.value)})} className="mt-3 w-full accent-emerald-500" /></label>
+                <label className="text-xs text-slate-400">Altura (cm)<NumericField ariaLabel="Altura do personagem em centímetros" min={100} max={250} integer step={1} value={avatarTemp.alturaCm || 170} onCommit={valor=>setAvatarTemp({...avatarTemp,alturaCm:valor})} /></label>
               </div>
             </section>
             <div className="flex justify-end gap-2 border-t border-slate-800 pt-4"><button onClick={()=>setModalAvatarAberto(false)} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white">Cancelar</button><button onClick={handleSalvarAvatar} className="px-5 py-2 rounded-lg text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white">Salvar alterações</button></div>
@@ -1808,26 +1808,12 @@ export const LifeView: React.FC<LifeViewProps> = ({
 
             <div>
               <label className="text-xs text-slate-400 block mb-1">Valor Solicitado (R$)</label>
-              <input
-                type="number"
-                value={valorEmprestimoNovo}
-                onChange={(e) => setValorEmprestimoNovo(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono"
-              />
+              <NumericField ariaLabel="Valor de empréstimo solicitado" min={1} step={100} value={Number(valorEmprestimoNovo) || 0} onCommit={n => setValorEmprestimoNovo(String(n))} />
             </div>
 
             <div>
               <label className="text-xs text-slate-400 block mb-1">Prazo de Pagamento</label>
-              <select
-                value={prazoEmprestimoNovo}
-                onChange={(e) => setPrazoEmprestimoNovo(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
-              >
-                <option value="12">12 meses</option>
-                <option value="24">24 meses</option>
-                <option value="36">36 meses</option>
-                <option value="48">48 meses</option>
-              </select>
+              <NumericField ariaLabel="Prazo do empréstimo em meses" min={6} max={120} integer step={1} value={Number(prazoEmprestimoNovo) || 24} onCommit={n => setPrazoEmprestimoNovo(String(n))} />
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
