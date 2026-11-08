@@ -60,6 +60,7 @@ export interface ImovelProprio {
   mesCompra: number;
   anoCompra: number;
   alugadoParaTerceiros: boolean;
+  aluguelAnunciado?: boolean;
   aluguelMensal: number;
   anuncio?: {
     precoPedido: number;
