@@ -39,6 +39,7 @@ import {
 } from '../engine/types';
 import { CARREIRAS, CARGOS_POLITICOS, CURSOS, MORADIAS, VEICULOS_CATALOGO } from '../engine/data';
 import { calcularIdadeExata } from '../engine/life';
+import { CharacterPortrait } from './CharacterPortrait';
 import { analisarCreditoPessoal, formatarMoedaCompacta, registrarTransacaoFinanceira } from '../engine/finance';
 
 interface LifeViewProps {
@@ -879,20 +880,38 @@ export const LifeView: React.FC<LifeViewProps> = ({
         <div className="space-y-6">
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl">
             <div className="flex flex-col md:flex-row items-center gap-6">
-              {/* Avatar Box */}
-              <div className="relative group shrink-0">
-                <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-950 border-2 border-emerald-500/50 flex flex-col items-center justify-center shadow-lg shadow-emerald-950/40 p-2">
-                  <div className={`relative w-14 h-14 rounded-full border-2 border-slate-700 overflow-hidden ${avatarTemp.sexo === 'feminino' ? 'ring-1 ring-pink-400/40' : ''} ${vida.avatar?.pele === 'clara' ? 'bg-amber-100' : vida.avatar?.pele === 'negra' ? 'bg-amber-900' : vida.avatar?.pele === 'oriental' ? 'bg-amber-200' : 'bg-amber-700'}`}>
-                    <div className={`absolute top-0 left-0 w-full bg-amber-950 ${vida.avatar?.cabeloCor === 'preto' ? '!bg-slate-950' : vida.avatar?.cabeloCor === 'loiro' ? '!bg-yellow-400' : vida.avatar?.cabeloCor === 'ruivo' ? '!bg-orange-700' : vida.avatar?.cabeloCor === 'grisalho' ? '!bg-slate-400' : ''} ${vida.avatar?.cabeloEstilo === 'careca' ? 'hidden' : vida.avatar?.cabeloEstilo === 'longo' ? 'h-8 rounded-b-xl' : vida.avatar?.cabeloEstilo === 'crespo' ? 'h-5 rounded-b-2xl' : 'h-4 rounded-b-lg'}`} />
-                    <div className="absolute left-3 top-6 w-1 h-1 rounded-full bg-slate-900" />
-                    <div className="absolute right-3 top-6 w-1 h-1 rounded-full bg-slate-900" />
-                    <div className="absolute left-5 top-9 w-4 h-1 rounded-full bg-rose-900/70" />
-                    {(vida.avatar?.barba && vida.avatar.barba !== 'nenhuma') && <div className={`absolute bottom-0 left-2 right-2 bg-amber-950/90 ${vida.avatar.barba === 'cheia' ? 'h-4 rounded-b-xl' : 'h-2 rounded-b-lg'}`} />}
-                    {vida.avatar?.bigode && <div className="absolute left-4 top-9 w-6 h-1 rounded-full bg-amber-950" />}
+              {/* Retrato principal do personagem */}
+              <div className="relative group shrink-0 w-36 sm:w-44">
+                <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 shadow-xl shadow-black/30">
+                  <div className="aspect-[6/7] w-full">
+                    <CharacterPortrait config={vida.avatar} />
                   </div>
-                  <span className="text-[10px] font-semibold text-emerald-400 mt-1 uppercase">{vida.avatar?.roupa || 'Casual'}</span>
+                  <div className="px-3 py-2 border-t border-slate-800">
+                    <div className="text-[10px] uppercase tracking-wider text-slate-500">Seu personagem</div>
+                    <div className="text-xs font-semibold text-slate-200">{vida.avatar?.sexo === 'feminino' ? 'Feminino' : 'Masculino'} • {vida.avatar?.roupa || 'Casual'}</div>
+                  </div>
                 </div>
-                <button onClick={() => { setAvatarTemp({ sexo: vida.avatar?.sexo || 'masculino', pele: vida.avatar?.pele || 'morena', cabeloCor: vida.avatar?.cabeloCor || 'castanho', cabeloEstilo: vida.avatar?.cabeloEstilo || 'curto', barba: vida.avatar?.barba || 'nenhuma', bigode: vida.avatar?.bigode || false, roupa: vida.avatar?.roupa || 'casual', acessorio: vida.avatar?.acessorio || 'relogio', tipoFisico: vida.avatar?.tipoFisico || 'medio', alturaCm: vida.avatar?.alturaCm || 170 }); setNomeTemp(vida.nomeCompleto || vida.nome); setModalAvatarAberto(true); }} className="mt-2 w-full text-center text-xs font-semibold py-1 px-2 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 transition">Editar personagem</button>
+                <button
+                  onClick={() => {
+                    setAvatarTemp({
+                      sexo: vida.avatar?.sexo || 'masculino',
+                      pele: vida.avatar?.pele || 'morena',
+                      cabeloCor: vida.avatar?.cabeloCor || 'castanho',
+                      cabeloEstilo: vida.avatar?.cabeloEstilo || 'curto',
+                      barba: vida.avatar?.barba || 'nenhuma',
+                      bigode: vida.avatar?.bigode || false,
+                      roupa: vida.avatar?.roupa || 'casual',
+                      acessorio: vida.avatar?.acessorio || 'relogio',
+                      tipoFisico: vida.avatar?.tipoFisico || 'medio',
+                      alturaCm: vida.avatar?.alturaCm || 170,
+                    });
+                    setNomeTemp(vida.nomeCompleto || vida.nome);
+                    setModalAvatarAberto(true);
+                  }}
+                  className="mt-3 w-full text-center text-xs font-semibold py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition"
+                >
+                  Personalizar aparência
+                </button>
               </div>
 
               {/* Informações Civis e Pessoais */}
@@ -1567,6 +1586,15 @@ export const LifeView: React.FC<LifeViewProps> = ({
               <button onClick={() => setModalAvatarAberto(false)} className="text-slate-400 hover:text-white px-2 py-1">✕</button>
             </div>
             <div><label className="text-xs text-slate-400 block mb-1">Nome completo</label><input type="text" value={nomeTemp} onChange={e => setNomeTemp(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100" /></div>
+            <div className="grid grid-cols-1 sm:grid-cols-[190px_1fr] gap-4 items-center rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+              <div className="w-full max-w-[190px] mx-auto overflow-hidden rounded-lg border border-slate-700 shadow-lg">
+                <div className="aspect-[6/7]"><CharacterPortrait config={avatarTemp} /></div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-sm font-bold text-slate-100">Prévia em tempo real</div>
+                <p className="text-xs text-slate-400">O rosto-base permanece fixo. As escolhas de sexo, pele, cabelo, barba, roupa e acessórios atualizam o retrato imediatamente.</p>
+              </div>
+            </div>
             <section className="space-y-2"><h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400">Identidade</h4>
               <div className="grid grid-cols-2 gap-2">
                 {(['masculino','feminino'] as const).map(sexo => <button key={sexo} type="button" onClick={() => setAvatarTemp({...avatarTemp,sexo, barba: sexo === 'feminino' ? 'nenhuma' : avatarTemp.barba})} className={`rounded-lg border px-3 py-3 text-sm font-semibold capitalize ${avatarTemp.sexo === sexo ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300' : 'border-slate-700 bg-slate-800 text-slate-300'}`}>{sexo === 'masculino' ? '♂ Masculino' : '♀ Feminino'}</button>)}
