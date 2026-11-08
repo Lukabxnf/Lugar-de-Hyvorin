@@ -21,6 +21,38 @@ export function calcularTaxaMensalEfetiva(taxaAnualPercentual: number): number {
 }
 
 /**
+ * Atualiza o vínculo ao fechar um mês simulado.
+ * Contatos sem convivência perdem afinidade lentamente; namoro e casamento
+ * acumulam duração própria, sem exigir que a tela da família seja aberta.
+ */
+export function evoluirRelacionamentoMensal(
+  rel: Relacionamento,
+  estadoCivil?: VidaPessoal['familia']['estadoCivil']
+): Relacionamento {
+  const mesesConvivencia = (rel.mesesConvivencia ?? 0) + 1;
+  const mesesSemContato = (rel.mesesSemContato ?? 0) + 1;
+  const relacionamentoAmoroso = ['namorado', 'noivo', 'conjuge'].includes(rel.tipo);
+  const limiteSemContato = relacionamentoAmoroso ? 3 : 2;
+  const perdaAfinidade = mesesSemContato > limiteSemContato
+    ? (relacionamentoAmoroso ? 1 : 2)
+    : 0;
+  const afinidade = Math.max(0, Math.min(100, rel.nivelAfinidade - perdaAfinidade));
+
+  return {
+    ...rel,
+    mesesConvivencia,
+    mesesSemContato,
+    nivelAfinidade: afinidade,
+    mesesNoRelacionamento: relacionamentoAmoroso
+      ? (rel.mesesNoRelacionamento ?? 0) + 1
+      : rel.mesesNoRelacionamento,
+    mesesCasado: rel.tipo === 'conjuge' && estadoCivil === 'casado'
+      ? (rel.mesesCasado ?? 0) + 1
+      : rel.mesesCasado,
+  };
+}
+
+/**
  * Calcula a idade exata com base na data de nascimento e na data atual do jogo.
  */
 export function calcularIdadeExata(nascimento: DataCalendario, dataAtual: DataCalendario): number {
@@ -477,6 +509,18 @@ export function simularMesVida(
       }
     }
   }
+
+  // Evolução mensal automática dos vínculos sociais e amorosos.
+  // Isso acontece mesmo que o jogador não abra a tela da família.
+  const familiaAnterior = novaVida.familia;
+  novaVida.familia = {
+    ...familiaAnterior,
+    conhecidos: (familiaAnterior.conhecidos || []).map(rel => evoluirRelacionamentoMensal(rel, familiaAnterior.estadoCivil)),
+    amigos: (familiaAnterior.amigos || []).map(rel => evoluirRelacionamentoMensal(rel, familiaAnterior.estadoCivil)),
+    conjuge: familiaAnterior.conjuge
+      ? evoluirRelacionamentoMensal(familiaAnterior.conjuge, familiaAnterior.estadoCivil)
+      : undefined,
+  };
 
   // 10. Evolução Familiar & Gestação / Adoção
   if (novaVida.gestacaoAdocao && novaVida.gestacaoAdocao.emAndamento) {
