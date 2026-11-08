@@ -186,22 +186,6 @@ export default function App() {
     }
   }, [estado.noticias, groqKey]);
 
-  const handleSaveGroqKey = useCallback((key: string) => {
-    try {
-      localStorage.setItem(GROQ_STORAGE_KEY, key.trim());
-      setGroqKey(key.trim());
-      showToast('Chave da Groq salva neste navegador.');
-    } catch {
-      showToast('Não foi possível salvar a chave neste navegador.');
-    }
-  }, [showToast]);
-
-  const handleDeleteGroqKey = useCallback(() => {
-    try { localStorage.removeItem(GROQ_STORAGE_KEY); } catch { /* armazenamento indisponível */ }
-    setGroqKey('');
-    showToast('Chave da Groq apagada deste navegador.');
-  }, [showToast]);
-
   // Mostra o fechamento mais recente quando o relógio atravessa um mês.
   useEffect(() => {
     if (estado.mesesTotais > mesesObservadosRef.current) {
@@ -221,6 +205,23 @@ export default function App() {
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
   }, []);
+
+  const handleSaveGroqKey = useCallback((key: string) => {
+    try {
+      localStorage.setItem(GROQ_STORAGE_KEY, key.trim());
+      setGroqKey(key.trim());
+      showToast('Chave da Groq salva neste navegador.');
+    } catch {
+      showToast('Não foi possível salvar a chave neste navegador.');
+    }
+  }, [showToast]);
+
+  const handleDeleteGroqKey = useCallback(() => {
+    try { localStorage.removeItem(GROQ_STORAGE_KEY); } catch { /* armazenamento indisponível */ }
+    setGroqKey('');
+    showToast('Chave da Groq apagada deste navegador.');
+  }, [showToast]);
+
 
   useEffect(() => {
     if (!toastMessage) return;
