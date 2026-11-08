@@ -74,6 +74,7 @@ export const LifeView: React.FC<LifeViewProps> = ({
   const [modalAvatarAberto, setModalAvatarAberto] = useState(false);
   const [avatarTemp, setAvatarTemp] = useState<AvatarConfig>({
     sexo: vida.avatar?.sexo || 'masculino',
+    formatoRosto: vida.avatar?.formatoRosto || 'oval',
     pele: vida.avatar?.pele || 'morena',
     cabeloCor: vida.avatar?.cabeloCor || 'castanho',
     cabeloEstilo: vida.avatar?.cabeloEstilo || 'curto',
@@ -1767,12 +1768,21 @@ export const LifeView: React.FC<LifeViewProps> = ({
               </div>
               <div className="space-y-1">
                 <div className="text-sm font-bold text-slate-100">Prévia em tempo real</div>
-                <p className="text-xs text-slate-400">O rosto-base permanece fixo. As escolhas de sexo, pele, cabelo, barba, roupa e acessórios atualizam o retrato imediatamente.</p>
+                <p className="text-xs text-slate-400">Escolha contorno facial, pele, cabelo, barba, roupas e acessórios. Cada alteração aparece no retrato em tempo real.</p>
               </div>
             </div>
             <section className="space-y-2"><h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400">Identidade</h4>
               <div className="grid grid-cols-2 gap-2">
                 {(['masculino','feminino'] as const).map(sexo => <button key={sexo} type="button" onClick={() => setAvatarTemp({...avatarTemp,sexo, barba: sexo === 'feminino' ? 'nenhuma' : avatarTemp.barba})} className={`rounded-lg border px-3 py-3 text-sm font-semibold capitalize ${avatarTemp.sexo === sexo ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300' : 'border-slate-700 bg-slate-800 text-slate-300'}`}>{sexo === 'masculino' ? '♂ Masculino' : '♀ Feminino'}</button>)}
+              </div>
+              <label className="text-xs text-slate-400 block">Formato do rosto</label>
+              <div className="grid grid-cols-4 gap-2">
+                {(['oval','fino','largo','redondo'] as const).map(formato => (
+                  <button key={formato} type="button" onClick={() => setAvatarTemp({...avatarTemp,formatoRosto:formato})}
+                    className={`rounded-lg border px-2 py-2 text-xs capitalize ${(avatarTemp.formatoRosto || 'oval') === formato ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300' : 'border-slate-700 bg-slate-800 text-slate-300'}`}>
+                    {formato}
+                  </button>
+                ))}
               </div>
               <label className="text-xs text-slate-400 block">Tom de pele</label><div className="grid grid-cols-4 gap-2">{(['clara','morena','negra','oriental'] as const).map(pele => <button key={pele} onClick={() => setAvatarTemp({...avatarTemp,pele})} className={`rounded-lg border px-2 py-2 text-xs capitalize ${avatarTemp.pele===pele?'border-emerald-400 bg-emerald-500/15 text-emerald-300':'border-slate-700 bg-slate-800 text-slate-300'}`}>{pele}</button>)}</div>
             </section>
