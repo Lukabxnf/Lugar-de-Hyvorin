@@ -88,7 +88,7 @@ test('Business: hiring is limited by machines and verified payroll runway', () =
 
 test('Education: a valid enrolled course attends classes and takes exams through monthly simulation', () => {
   const estado = criarEstudanteComVinculos();
-  let vida = { ...estado.vida, empregoAtual: undefined };
+  let vida: VidaPessoal = { ...estado.vida, empregoAtual: undefined };
   for (let mes = 0; mes < 10; mes++) {
     vida = simularMesVida(vida, estado.macro, 0, { dia: 1, mes: 2 + (mes % 11), ano: 2026 }).novaVida;
   }
