@@ -114,6 +114,18 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [toastMessage]);
 
+  // Salvamento automático: protege o progresso sem exigir que o jogador lembre de salvar.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
+      } catch {
+        // O salvamento manual continua disponível se o armazenamento estiver cheio.
+      }
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [estado]);
+
   // Save / Load handlers
   const handleSaveGame = useCallback(() => {
     try {
@@ -151,6 +163,10 @@ export default function App() {
   const handleAdvanceHours = useCallback((qtdHoras = 1) => {
     setEstado((prev) => {
       const proximo = avancarHorasSimulacao(prev, qtdHoras);
+      if (proximo.mesesTotais > prev.mesesTotais) {
+        setShowSummaryModal(true);
+        setIsPlaying(false);
+      }
       // Se um evento interativo surgiu, pausa o relógio para que o jogador tome a decisão
       if (proximo.eventosPendentes && proximo.eventosPendentes.length > 0) {
         setIsPlaying(false);
@@ -163,6 +179,7 @@ export default function App() {
   const handleAdvanceMonth = useCallback(() => {
     setEstado((prev) => {
       const proximo = avancarMesSimulacao(prev);
+      setShowSummaryModal(true);
       return proximo;
     });
   }, []);
@@ -171,6 +188,7 @@ export default function App() {
   const handleAdvanceSixMonths = useCallback(() => {
     setEstado((prev) => {
       const proximo = avancarMultiplosMeses(prev, 6);
+      setShowSummaryModal(true);
       showToast('O tempo avançou 6 meses completos!');
       return proximo;
     });
@@ -180,6 +198,7 @@ export default function App() {
   const handleAdvanceYear = useCallback(() => {
     setEstado((prev) => {
       const proximo = avancarMultiplosMeses(prev, 12);
+      setShowSummaryModal(true);
       showToast(`Um ano se passou! Bem-vindo a ${proximo.anoAtual}.`);
       return proximo;
     });
