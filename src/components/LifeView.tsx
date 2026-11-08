@@ -41,6 +41,8 @@ import {
 import { CARREIRAS, CARGOS_POLITICOS, CURSOS, MORADIAS, VEICULOS_CATALOGO } from '../engine/data';
 import { calcularIdadeExata } from '../engine/life';
 import { CharacterPortrait } from './CharacterPortrait';
+import { NumericField } from './NumericField';
+import { alugarResidencia, anunciarImovel, comprarImovel, definirAluguelProprio, encerrarAnuncioOuLocacao, ocuparImovel, precoImovelAtual, responderOfertaImovel } from '../engine/imoveis';
 import { analisarCreditoPessoal, formatarMoedaCompacta, registrarTransacaoFinanceira } from '../engine/finance';
 
 interface LifeViewProps {
@@ -76,6 +78,8 @@ export const LifeView: React.FC<LifeViewProps> = ({
     alturaCm: vida.avatar?.alturaCm || 170,
   });
   const [nomeTemp, setNomeTemp] = useState(vida.nomeCompleto || vida.nome);
+  const [precosVendaImovel, setPrecosVendaImovel] = useState<Record<string, number>>({});
+  const [precosAluguelImovel, setPrecosAluguelImovel] = useState<Record<string, number>>({});
 
   // Estados locais para contratação de empréstimos e ações
   const [valorEmprestimoNovo, setValorEmprestimoNovo] = useState('5000');
@@ -813,67 +817,28 @@ export const LifeView: React.FC<LifeViewProps> = ({
     onShowMessage(`${modelo.nome} comprado. A manutenção mensal estimada é de R$ ${modelo.custoMensalManutencao.toLocaleString('pt-BR')}.`);
   };
 
-  const handleComprarMoradia = (moradiaId: TipoMoradia) => {
-    const novaMoradia = MORADIAS[moradiaId];
-    const custoCompra = novaMoradia?.custoCompra;
-    if (!novaMoradia || !custoCompra) return;
-    if (vida.casaPropria && vida.moradia === moradiaId) {
-      onShowMessage('Você já possui este imóvel.');
-      return;
-    }
-
-    // Na troca de imóvel, o imóvel anterior é vendido antes da nova compra.
-    const moradiaAtual = MORADIAS[vida.moradia];
-    const valorVendaAnterior = vida.casaPropria
-      ? Math.round((moradiaAtual?.custoCompra || 0) * 0.9)
-      : 0;
-    const custoLiquido = custoCompra - valorVendaAnterior;
-    if (vida.saldoBancario < Math.max(0, custoLiquido)) {
-      onShowMessage(`Saldo insuficiente. Após a venda do imóvel atual, faltariam R$ ${(custoLiquido - vida.saldoBancario).toLocaleString('pt-BR')}.`);
-      return;
-    }
-
-    let vidaAtualizada: typeof vida = { ...vida, saldoBancario: vida.saldoBancario + valorVendaAnterior };
-    if (valorVendaAnterior > 0) {
-      vidaAtualizada = registrarTransacaoFinanceira(
-        vidaAtualizada,
-        { dia: diaAtual, mes: mesAtual, ano: anoAtual },
-        'transferencia',
-        `Venda do imóvel anterior: ${moradiaAtual?.nome || 'imóvel'}`,
-        valorVendaAnterior
-      );
-    }
-    vidaAtualizada = {
-      ...vidaAtualizada,
-      saldoBancario: vidaAtualizada.saldoBancario - custoCompra,
-      moradia: moradiaId,
-      casaPropria: true,
-    };
-    vidaAtualizada = registrarTransacaoFinanceira(
-      vidaAtualizada,
-      { dia: diaAtual, mes: mesAtual, ano: anoAtual },
-      'despesa_paga',
-      `Compra de imóvel: ${novaMoradia.nome}`,
-      -custoCompra
-    );
-
-    onUpdateEstado({ ...estado, vida: vidaAtualizada });
-    onShowMessage(`Imóvel adquirido: ${novaMoradia.nome}. A despesa mensal estimada agora é de R$ ${Math.round(novaMoradia.custoMensal * 0.3).toLocaleString('pt-BR')} em condomínio e IPTU.`);
+  const aplicarOperacaoImobiliaria = (resultado: { vida: typeof vida; sucesso: boolean; mensagem: string }) => {
+    if (resultado.sucesso) onUpdateEstado({ ...estado, vida: resultado.vida });
+    onShowMessage(resultado.mensagem);
   };
 
-  const handleAlugarMoradia = (moradiaId: TipoMoradia) => {
-    const novaMoradia = MORADIAS[moradiaId];
-    if (!novaMoradia || moradiaId === 'pais') return;
-    if (vida.casaPropria) {
-      onShowMessage('Venda seu imóvel atual antes de mudar para um aluguel.');
-      return;
-    }
-    onUpdateEstado({
-      ...estado,
-      vida: { ...vida, moradia: moradiaId, casaPropria: false },
-    });
-    onShowMessage(`Você mudou para ${novaMoradia.nome}. Aluguel mensal: R$ ${novaMoradia.custoMensal.toLocaleString('pt-BR')}.`);
-  };
+  const dataImovel = { dia: diaAtual, mes: mesAtual, ano: anoAtual };
+  const indiceImovel = estado.indicePrecosAcumulado || 1;
+
+  const handleComprarMoradia = (tipo: TipoMoradia) =>
+    aplicarOperacaoImobiliaria(comprarImovel(vida, tipo, indiceImovel, dataImovel));
+  const handleAlugarMoradia = (tipo: TipoMoradia) =>
+    aplicarOperacaoImobiliaria(alugarResidencia(vida, tipo, indiceImovel));
+  const handleOcuparImovel = (id: string) =>
+    aplicarOperacaoImobiliaria(ocuparImovel(vida, id));
+  const handleAnunciarImovel = (id: string, preco: number) =>
+    aplicarOperacaoImobiliaria(anunciarImovel(vida, id, preco));
+  const handleOfertarAluguel = (id: string, valor: number) =>
+    aplicarOperacaoImobiliaria(definirAluguelProprio(vida, id, valor));
+  const handleResponderOferta = (id: string, escolha: 'aceitar' | 'recusar' | 'contraproposta', valor?: number) =>
+    aplicarOperacaoImobiliaria(responderOfertaImovel(vida, id, escolha, dataImovel, valor));
+  const handleEncerrarAnuncio = (id: string) =>
+    aplicarOperacaoImobiliaria(encerrarAnuncioOuLocacao(vida, id));
 
   // Auxiliares visuais
   const getCorScore = (score: number) => {
@@ -1670,33 +1635,88 @@ export const LifeView: React.FC<LifeViewProps> = ({
         </div>
       )}
 
-      {/* 8. MORADIA: imóvel atual, compra e aluguel */}
+      {/* Patrimônio imobiliário individual: comprar não vende o bem anterior. */}
       {activeSubSection === 'moradia' && (
-        <div className="space-y-6">
-          <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-3">
-            <div className="flex items-center gap-2"><Home className="w-5 h-5 text-amber-400" /><h3 className="font-bold text-slate-100">Minha moradia</h3></div>
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div><div className="text-lg font-bold text-slate-100">{MORADIAS[vida.moradia]?.nome || 'Moradia não definida'}</div><div className="text-xs text-slate-400 mt-1">{vida.casaPropria ? 'Imóvel próprio' : 'Imóvel alugado ou cedido'}</div></div>
-              <div className="text-right"><div className="text-[10px] uppercase text-slate-500">Custo mensal</div><div className="text-lg font-mono font-bold text-amber-300">R$ {Math.round(vida.casaPropria ? (MORADIAS[vida.moradia]?.custoMensal || 0) * 0.3 : (MORADIAS[vida.moradia]?.custoMensal || 0)).toLocaleString('pt-BR')}</div></div>
-            </div>
-            {vida.casaPropria && <p className="text-xs text-slate-500">O valor do imóvel entra no patrimônio líquido. Na troca, o imóvel atual é vendido por 90% do valor de referência do catálogo.</p>}
+        <div className="space-y-5">
+          <section className="rounded-2xl border border-slate-700 bg-slate-900 p-5">
+            <div className="flex items-center gap-2"><Home className="w-5 h-5 text-emerald-400" /><h3 className="text-base font-bold text-slate-100">Minha residência</h3></div>
+            <p className="mt-2 text-lg font-semibold text-slate-100">{MORADIAS[vida.moradia]?.nome || 'Moradia não definida'}</p>
+            <p className="text-xs text-slate-400">{vida.casaPropria ? 'Você mora em um imóvel próprio.' : 'Moradia alugada ou cedida. Outros imóveis próprios continuam no patrimônio.'}</p>
           </section>
-          <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
-            <div><h3 className="font-bold text-slate-100">Imóveis disponíveis</h3><p className="text-xs text-slate-400 mt-1">Você pode comprar um imóvel ou mudar para uma opção de aluguel. A compra exige saldo disponível.</p></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {Object.values(MORADIAS).filter(m => m.id !== 'pais').map(imovel => {
-                const jaMora = vida.moradia === imovel.id;
-                const podeComprar = !!imovel.custoCompra && vida.saldoBancario >= Math.max(0, imovel.custoCompra - (vida.casaPropria ? Math.round((MORADIAS[vida.moradia]?.custoCompra || 0) * 0.9) : 0));
+
+          <section className="rounded-2xl border border-slate-700 bg-slate-900 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-slate-100">Meus imóveis</h3>
+              <span className="text-xs text-emerald-400">{(vida.imoveis || []).length} propriedade(s)</span>
+            </div>
+            {(vida.imoveis || []).length === 0 && <p className="text-sm text-slate-400">Você ainda não possui imóveis. Compre um abaixo para começar o portfólio.</p>}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {(vida.imoveis || []).map(imovel => {
+                const reside = vida.imovelResidenciaId === imovel.id;
+                const precoAnuncio = precosVendaImovel[imovel.id] ?? imovel.anuncio?.precoPedido ?? Math.round(imovel.valorMercadoAtual);
+                const precoAluguel = precosAluguelImovel[imovel.id] ?? Math.round(MORADIAS[imovel.tipo].custoMensal * indiceImovel);
                 return (
-                  <div key={imovel.id} className="rounded-xl border border-slate-700 bg-slate-950/60 p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-2"><span className="font-semibold text-sm text-slate-100">{imovel.nome}</span>{jaMora && <span className="text-[10px] rounded-full bg-emerald-500/15 px-2 py-1 text-emerald-300">Atual</span>}</div>
-                    <div className="grid grid-cols-2 gap-2 text-xs"><div><div className="text-slate-500">Compra</div><div className="font-mono font-bold text-amber-300">{imovel.custoCompra ? formatarMoedaCompacta(imovel.custoCompra) : 'Não disponível'}</div></div><div><div className="text-slate-500">Aluguel mensal</div><div className="font-mono text-slate-200">{formatarMoedaCompacta(imovel.custoMensal)}</div></div></div>
-                    <div className="text-xs text-slate-500">Conforto {imovel.conforto}/100 • Benefício de saúde +{imovel.bonusSaude}</div>
+                  <div key={imovel.id} className="rounded-xl border border-slate-700 bg-slate-950 p-4 space-y-3">
+                    <div className="flex justify-between gap-3">
+                      <div><h4 className="font-semibold text-slate-100">{imovel.nome}</h4><p className="text-xs text-slate-500">Comprado em {imovel.mesCompra}/{imovel.anoCompra}</p></div>
+                      {reside && <span className="text-xs text-emerald-300">Residência atual</span>}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-slate-500">Compra</span><p className="font-mono text-slate-200">{formatarMoedaCompacta(imovel.valorCompra)}</p></div>
+                      <div><span className="text-slate-500">Valor estimado</span><p className="font-mono text-emerald-300">{formatarMoedaCompacta(imovel.valorMercadoAtual)}</p></div>
+                    </div>
+                    <p className="text-xs text-slate-400">{imovel.alugadoParaTerceiros ? 'Alugado para terceiros' : imovel.aluguelAnunciado ? 'Procurando inquilino' : imovel.anuncio ? `À venda há ${imovel.anuncio.mesesAnunciado} mês(es)` : 'Disponível para gestão'}</p>
+                    {!reside && !imovel.alugadoParaTerceiros && (
+                      <button type="button" onClick={() => handleOcuparImovel(imovel.id)} className="text-xs rounded-lg px-3 py-2 border border-emerald-700 text-emerald-300 hover:bg-emerald-950/40">Morar neste imóvel</button>
+                    )}
+                    {imovel.anuncio?.ofertaPendente && (
+                      <div className="rounded-lg border border-amber-600 bg-amber-950/25 p-3 space-y-2">
+                        <p className="text-sm font-bold text-amber-300">Oferta recebida: {formatarMoedaCompacta(imovel.anuncio.ofertaPendente.valor)}</p>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" onClick={() => handleResponderOferta(imovel.id, 'aceitar')} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">Aceitar</button>
+                          <button type="button" onClick={() => handleResponderOferta(imovel.id, 'recusar')} className="rounded-lg border border-slate-600 px-3 py-2 text-xs text-slate-200">Recusar</button>
+                          <button type="button" onClick={() => handleResponderOferta(imovel.id, 'contraproposta', precoAnuncio)} className="rounded-lg bg-amber-700 px-3 py-2 text-xs text-white">Enviar contraproposta</button>
+                        </div>
+                      </div>
+                    )}
+                    {!imovel.alugadoParaTerceiros && !imovel.aluguelAnunciado && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-slate-400">Preço de venda desejado (R$)</label>
+                        <NumericField ariaLabel={`Preço de venda de ${imovel.nome}`} value={precoAnuncio} min={1} step={1000} onCommit={n => setPrecosVendaImovel(p => ({ ...p, [imovel.id]: n }))} />
+                        <button type="button" onClick={() => handleAnunciarImovel(imovel.id, precoAnuncio)} className="w-full rounded-lg border border-amber-700/70 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-950/40">Anunciar venda / atualizar preço</button>
+                      </div>
+                    )}
+                    {!reside && !imovel.anuncio && !imovel.alugadoParaTerceiros && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-slate-400">Aluguel desejado (R$/mês)</label>
+                        <NumericField ariaLabel={`Aluguel de ${imovel.nome}`} value={precoAluguel} min={1} step={100} onCommit={n => setPrecosAluguelImovel(p => ({ ...p, [imovel.id]: n }))} />
+                        <button type="button" onClick={() => handleOfertarAluguel(imovel.id, precoAluguel)} className="w-full rounded-lg border border-cyan-700/70 py-2 text-xs font-semibold text-cyan-300 hover:bg-cyan-950/40">{imovel.aluguelAnunciado ? 'Atualizar aluguel' : 'Procurar inquilino'}</button>
+                      </div>
+                    )}
+                    {(imovel.anuncio || imovel.aluguelAnunciado || imovel.alugadoParaTerceiros) && (
+                      <button type="button" onClick={() => handleEncerrarAnuncio(imovel.id)} className="text-xs text-rose-300 hover:text-rose-200 underline">Retirar anúncio / encerrar contrato</button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-700 bg-slate-900 p-5 space-y-4">
+            <div><h3 className="text-base font-bold text-slate-100">Mercado imobiliário</h3><p className="text-xs text-slate-400">Comprar aumenta seu patrimônio sem vender nada automaticamente. Os preços nominais se ajustam à inflação do mundo simulado.</p></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {Object.values(MORADIAS).filter(m => m.id !== 'pais').map(modelo => {
+                const preco = precoImovelAtual(modelo.id, indiceImovel);
+                return (
+                  <div key={modelo.id} className="rounded-xl bg-slate-950 border border-slate-800 p-4 space-y-3">
+                    <h4 className="text-sm font-bold text-slate-100">{modelo.nome}</h4>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-slate-500">Comprar</span><p className="font-mono font-bold text-emerald-300">{formatarMoedaCompacta(preco)}</p></div>
+                      <div><span className="text-slate-500">Alugar/mês</span><p className="font-mono font-bold text-slate-200">{formatarMoedaCompacta(modelo.custoMensal * indiceImovel)}</p></div>
+                    </div>
                     <div className="flex gap-2">
-                      <button type="button" disabled={!imovel.custoCompra || (jaMora && vida.casaPropria) || !podeComprar} onClick={() => handleComprarMoradia(imovel.id)} className="flex-1 rounded-lg py-2 text-xs font-bold bg-amber-600 hover:bg-amber-500 disabled:bg-slate-800 disabled:text-slate-500 text-white transition">
-                        {jaMora && vida.casaPropria ? 'Imóvel próprio atual' : !podeComprar ? 'Saldo insuficiente' : 'Comprar'}
-                      </button>
-                      <button type="button" disabled={vida.casaPropria || jaMora} onClick={() => handleAlugarMoradia(imovel.id)} className="flex-1 rounded-lg py-2 text-xs font-semibold border border-slate-700 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 transition">Alugar</button>
+                      <button type="button" disabled={vida.saldoBancario < preco} onClick={() => handleComprarMoradia(modelo.id)} className="flex-1 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">Comprar</button>
+                      <button type="button" onClick={() => handleAlugarMoradia(modelo.id)} className="flex-1 rounded-lg border border-slate-600 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800">Morar de aluguel</button>
                     </div>
                   </div>
                 );
