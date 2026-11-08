@@ -246,6 +246,8 @@ export function avancarHorasSimulacao(estado: EstadoJogo, qtdHoras = 1): EstadoJ
  * - Notícias da Gazeta do Brasil.
  */
 export function avancarMesSimulacao(estado: EstadoJogo): EstadoJogo {
+  // Decisões importantes precisam ser resolvidas antes do próximo fechamento.
+  if (estado.eventosPendentes.length > 0) return estado;
   const novoMesesTotais = estado.mesesTotais + 1;
   let novoMes = estado.mesAtual + 1;
   let novoAno = estado.anoAtual;
@@ -392,7 +394,7 @@ export function avancarMesSimulacao(estado: EstadoJogo): EstadoJogo {
     salarioPolitico + (novaVida.empregoAtual ? (novaVida.empregoAtual.salarioAcordado || 4000) : 0);
   const despesasPessoais = Math.max(0, saldoAnterior - novaVida.saldoBancario + receitasPessoais);
 
-  return {
+  const atualizado: EstadoJogo = {
     ...estado,
     diaAtual: 1,
     mesAtual: novoMes,
@@ -414,11 +416,23 @@ export function avancarMesSimulacao(estado: EstadoJogo): EstadoJogo {
       destaques: destaques.slice(0, 5),
     },
   };
+
+  // Eventos contextuais são apresentados após o fechamento. A IA poderá
+  // enriquecer a análise; o save preserva os resultados que realmente ocorreram.
+  if (Math.random() < 0.3) {
+    const eventoDoMes = sortearEventoDecisao(atualizado);
+    if (eventoDoMes) {
+      return { ...atualizado, eventosPendentes: [eventoDoMes] };
+    }
+  }
+  return atualizado;
 }
 
 export function avancarMultiplosMeses(estado: EstadoJogo, qtdMeses: number): EstadoJogo {
   let est = estado;
-  for (let i = 0; i < qtdMeses; i++) {
+  const meses = Number.isSafeInteger(qtdMeses) ? Math.max(0, Math.min(120, qtdMeses)) : 0;
+  for (let i = 0; i < meses; i++) {
+    if (est.eventosPendentes.length > 0) break;
     est = avancarMesSimulacao(est);
   }
   return est;

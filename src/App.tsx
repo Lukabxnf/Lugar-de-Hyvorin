@@ -20,7 +20,8 @@ import { EstadoJogo, OpcaoEvento } from './engine/types';
 import { aplicarImpactoAfinidadeFamiliar } from './engine/events';
 import { registrarTransacaoFinanceira } from './engine/finance';
 import { criarEstadoInicial } from './engine/presets';
-import { avancarHorasSimulacao } from './engine/simulation';
+import { avancarMultiplosMeses } from './engine/simulation';
+import { simularHoraVida } from './engine/life';
 import { GROQ_STORAGE_KEY, montarLeituraIA, narrarFato, narrarGazeta } from './services/groq';
 
 const STORAGE_KEY = 'cidadao_sim_save_v1';
@@ -100,8 +101,6 @@ export default function App() {
 
   // UI state
   const [activeTab, setActiveTab] = useState<string>('vida');
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [playSpeed, setPlaySpeed] = useState<number>(1);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [groqKey, setGroqKey] = useState<string>(() => {
     try { return localStorage.getItem(GROQ_STORAGE_KEY) || ''; } catch { return ''; }
@@ -194,13 +193,6 @@ export default function App() {
     mesesObservadosRef.current = estado.mesesTotais;
   }, [estado.mesesTotais]);
 
-  // Eventos importantes interrompem a reprodução para não serem ignorados.
-  useEffect(() => {
-    if (estado.eventosPendentes.length > 0) {
-      setIsPlaying(false);
-    }
-  }, [estado.eventosPendentes.length]);
-
   // Toast auto-clear
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -270,26 +262,29 @@ export default function App() {
     const novo = criarEstadoInicial(perfilId);
     setEstado(novo);
     setShowNewGameModal(false);
-    setIsPlaying(false);
     showToast(`Nova jornada iniciada com sucesso!`);
   }, [showToast]);
 
-  // O relógio opera em horas inteiras; X1 = uma hora simulada por segundo real.
-  const handleAdvanceHours = useCallback((qtdHoras = 1) => {
-    setEstado((prev) => avancarHorasSimulacao(prev, qtdHoras));
+  // Avanço deliberado: nunca salta meses, nem ignora decisões pendentes.
+  const handleAdvanceMonths = useCallback((quantidade: number) => {
+    if (![1, 6, 12].includes(quantidade)) return;
+    setEstado((anterior) => avancarMultiplosMeses(anterior, quantidade));
   }, []);
 
-  // X1 = uma hora simulada por segundo real; X2, X3 e X5 aceleram o mesmo relógio.
-  // O intervalo único evita acumular timers diferentes ao trocar a velocidade.
-  useEffect(() => {
-    if (!isPlaying) return;
-
-    const interval = window.setInterval(() => {
-      handleAdvanceHours(playSpeed);
-    }, 1000);
-
-    return () => window.clearInterval(interval);
-  }, [isPlaying, playSpeed, handleAdvanceHours]);
+  // Ações opcionais de rotina são resolvidas de imediato, sem criar um relógio
+  // de cliques obrigatório para trabalhar ou estudar em um jogo mensal.
+  const handleConcluirAtividade = useCallback(() => {
+    setEstado((anterior) => {
+      let vidaAtual = anterior.vida;
+      const horas = Math.min(24, Math.max(0, Math.floor(vidaAtual.horasRestantesAtividade || 0)));
+      for (let i = 0; i < horas; i++) {
+        vidaAtual = simularHoraVida(
+          vidaAtual, anterior.macro, anterior.horaAtual, anterior.diaSemanaAtual
+        ).novaVida;
+      }
+      return { ...anterior, vida: vidaAtual };
+    });
+  }, []);
 
   // Resolução de Evento de Decisão Interativo
   const handleEscolherOpcaoEvento = useCallback((opcao: OpcaoEvento) => {
@@ -370,16 +365,8 @@ export default function App() {
     });
   }, [showToast]);
 
-  // Comparecer a um compromisso inicia a atividade e retoma o relógio automaticamente.
-  const handleEscolherOpcaoEventoComRetomada = useCallback((opcao: OpcaoEvento) => {
-    handleEscolherOpcaoEvento(opcao);
-    // A escolha encerra a pausa do evento; o jogador ainda pode pausar manualmente.
-    setIsPlaying(true);
-  }, [handleEscolherOpcaoEvento]);
-
   // Election victory trigger
   const handleElectionVictory = useCallback((cargoNome: string, votos: number) => {
-    setIsPlaying(false);
     setElectionVictoryData({ cargoNome, votos });
   }, []);
 
@@ -390,13 +377,10 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
-      {/* Header com Relógio Simulado e Controles X1, X2, X3, X5 */}
+      {/* Calendário mensal com avanço de 1, 6 ou 12 meses. */}
       <Header
         estado={estado}
-        isPlaying={isPlaying}
-        playSpeed={playSpeed}
-        onTogglePlay={() => setIsPlaying(!isPlaying)}
-        onChangeSpeed={setPlaySpeed}
+        onAdvanceMonths={handleAdvanceMonths}
         onOpenNewGame={() => setShowNewGameModal(true)}
         onSaveGame={handleSaveGame}
         onLoadGame={handleLoadGame}
@@ -422,7 +406,7 @@ export default function App() {
             estado={estado}
             onUpdateEstado={setEstado}
             onShowMessage={showToast}
-            onStartTime={() => setIsPlaying(true)}
+            onStartTime={handleConcluirAtividade}
           />
         )}
 
@@ -462,7 +446,7 @@ export default function App() {
           <span>
             🇧🇷 <strong>CIDADÃO:</strong> Simulador de Vida, Negócios, Macroeconomia & Política Brasileira
           </span>
-          <span>Relógio horário simulado • Regra de Taylor & Curva de Phillips • CTPS & Score de Crédito</span>
+          <span>Evolução mensal • Regra de Taylor & Curva de Phillips • CTPS & Score de Crédito</span>
         </div>
       </footer>
 
@@ -501,7 +485,7 @@ export default function App() {
       {/* Modal de Crises & Decisões Interativas */}
       <EventDecisionModal
         evento={eventoPendenteAtual}
-        onEscolherOpcao={handleEscolherOpcaoEventoComRetomada}
+        onEscolherOpcao={handleEscolherOpcaoEvento}
       />
     </div>
   );

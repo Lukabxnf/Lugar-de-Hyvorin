@@ -1,6 +1,55 @@
 import { SETORES_EMPRESA } from './data';
 import { Empresa, Macroeconomia } from './types';
 
+/**
+ * Contratações exigem capacidade física e capital de giro verificável.
+ * A folha ampliada precisa caber em três meses de operação, além do custo
+ * de recrutamento e da folha corrente já comprometida.
+ * Não há um teto arbitrário de pessoas: o limite depende da empresa.
+ */
+export function avaliarContratacaoEmpresa(
+  empresa: Empresa,
+  quantidade: number
+): { aprovada: boolean; maximoContratavel: number; custoAdmissao: number; motivo: string } {
+  if (!empresa.ativa || !Number.isSafeInteger(quantidade) || quantidade <= 0) {
+    return { aprovada: false, maximoContratavel: 0, custoAdmissao: 0, motivo: 'Quantidade inválida ou empresa inativa.' };
+  }
+
+  const setor = SETORES_EMPRESA[empresa.setorId] || SETORES_EMPRESA.varejo;
+  const produtividade = Math.max(1, setor.produtividadeFuncionario);
+  const salario = Math.max(0, empresa.salarioMedio);
+  const custoMensalPorPessoa = salario * 1.35;
+  if (!Number.isFinite(custoMensalPorPessoa) || custoMensalPorPessoa <= 0) {
+    return { aprovada: false, maximoContratavel: 0, custoAdmissao: 0, motivo: 'Salário empresarial inválido.' };
+  }
+
+  const vagasOperacionais = Math.max(0,
+    Math.floor(Math.max(0, empresa.capacidadeMaquinas) / produtividade) - Math.max(0, empresa.funcionarios)
+  );
+  const caixaLivre = Math.max(0,
+    empresa.caixaPJ - Math.max(0, empresa.funcionarios * custoMensalPorPessoa)
+  );
+  // Uma admissão requer meio salário de recrutamento e reserva de três folhas.
+  const custoAdmissaoPorPessoa = salario * 0.5;
+  const maximoPeloCaixa = Math.max(0,
+    Math.floor(caixaLivre / (3 * custoMensalPorPessoa + custoAdmissaoPorPessoa))
+  );
+  const maximoContratavel = Math.max(0, Math.min(vagasOperacionais, maximoPeloCaixa));
+  const aprovada = quantidade <= maximoContratavel;
+  const motivo = aprovada
+    ? 'Contratação compatível com o parque produtivo e o capital de giro.'
+    : vagasOperacionais === 0
+      ? 'Amplie a capacidade de máquinas antes de contratar mais funcionários.'
+      : `A empresa comporta no máximo ${maximoContratavel} novas contratações agora, considerando máquinas e três meses de folha.`;
+
+  return {
+    aprovada,
+    maximoContratavel,
+    custoAdmissao: aprovada ? Math.round(custoAdmissaoPorPessoa * quantidade * 100) / 100 : 0,
+    motivo,
+  };
+}
+
 export function simularMesEmpresa(
   empresa: Empresa,
   macro: Macroeconomia

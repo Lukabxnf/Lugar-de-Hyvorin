@@ -467,14 +467,31 @@ export function simularMesVida(
     novaVida.limiteCreditoPreAprovado = Math.round(rendaMensalMedia * 3 * fatorScore + (novaVida.saldoBancario * 0.2));
   }
 
-  // 9. Evolução Acadêmica: o tempo delimita o semestre, mas não aprova nem diploma sozinho.
+  // 9. Evolução acadêmica mensal: matrícula gera aulas e avaliações automaticamente.
   if (novaVida.cursoMatriculado && !novaVida.cursoMatriculado.concluido) {
-    const cm = novaVida.cursoMatriculado;
+    // Nunca altere objetos de um save/estado anterior por referência.
+    const cm = { ...novaVida.cursoMatriculado };
+    novaVida.cursoMatriculado = cm;
     cm.mesesDecorridos += 1;
 
     const duracaoSemestre = Math.max(1, Math.ceil(cm.mesesTotais / Math.max(1, cm.totalSemestres)));
     const mesesNoSemestre = (cm.mesesNoSemestre ?? (cm.mesesDecorridos - 1) % duracaoSemestre) + 1;
     cm.mesesNoSemestre = mesesNoSemestre;
+
+    // A frequência regular acontece durante o mês sem exigir clique em cada aula.
+    // Avaliações são executadas no fechamento do semestre, com desempenho contextual.
+    const cursoValido = CURSOS.some(curso => curso.id === cm.cursoId);
+    if (cursoValido) {
+      const aulasMensais = Math.ceil(Math.max(0, cm.aulasRequeridas) / duracaoSemestre);
+      cm.aulasAssistidas = Math.min(cm.aulasRequeridas, cm.aulasAssistidas + aulasMensais);
+      const preparo = Math.max(0, Math.min(10,
+        5.2 + novaVida.intelecto * 0.035 + (novaVida.saude - 50) * 0.01
+      ));
+      cm.notaMedia = Number((cm.notaMedia * 0.7 + preparo * 0.3).toFixed(1));
+      if (mesesNoSemestre >= duracaoSemestre) {
+        cm.provasRealizadas = Math.max(cm.provasRealizadas, cm.provasRequeridas);
+      }
+    }
 
     if (mesesNoSemestre >= duracaoSemestre) {
       const frequencia = cm.aulasRequeridas > 0
@@ -496,7 +513,7 @@ export function simularMesVida(
           cm.concluido = true;
           const diploma = `Diploma: ${cm.nome}`;
           if (!novaVida.titulosConquistados.includes(diploma)) {
-            novaVida.titulosConquistados.push(diploma);
+            novaVida.titulosConquistados = [...novaVida.titulosConquistados, diploma];
           }
           if (cm.concedeNivel) {
             novaVida.educacao = cm.concedeNivel;

@@ -2,13 +2,99 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simularMesMacroeconomia } from './macro';
 import { calcularIdadeExata, calcularTaxaMensalEfetiva, evoluirRelacionamentoMensal, simularHoraVida, simularMesVida } from './life';
-import { simularMesEmpresa } from './business';
+import { avaliarContratacaoEmpresa, simularMesEmpresa } from './business';
 import { analisarCreditoPessoal, calcularPatrimonioLiquido, formatarMoedaCompacta } from './finance';
 import { cargoCompativelComEleicao, isAnoEleitoral } from './politics';
 import { aplicarImpactoAfinidadeFamiliar, sortearEventoDecisao } from './events';
 import { criarEstadoInicial } from './presets';
-import { avancarHorasSimulacao, avancarMinutosSimulacao, avancarMesSimulacao, diasNoMes } from './simulation';
+import { avancarHorasSimulacao, avancarMinutosSimulacao, avancarMesSimulacao, avancarMultiplosMeses, diasNoMes } from './simulation';
 import { Macroeconomia, VidaPessoal, Empresa, DataCalendario, Relacionamento } from './types';
+
+/** Cenário de emprego e curso já iniciados, distinto da nova partida aos 18 anos. */
+function criarEstudanteComVinculos() {
+  const base = criarEstadoInicial('estudante');
+  return {
+    ...base,
+    vida: {
+      ...base.vida,
+      empregoAtual: { carreiraId: 'estagiario', mesesNoCargo: 4, salarioAcordado: 1_600 },
+      cursoMatriculado: {
+        cursoId: 'tecnico_ti',
+        nome: 'Curso Técnico em Desenvolvimento de Sistemas',
+        tipo: 'tecnico' as const,
+        semestreAtual: 1,
+        totalSemestres: 2,
+        aulasAssistidas: 15,
+        aulasRequeridas: 120,
+        provasRealizadas: 0,
+        provasRequeridas: 2,
+        notaMedia: 8.0,
+        aprovado: true,
+        concluido: false,
+        mesesDecorridos: 1,
+        mesesTotais: 10,
+        concedeNivel: 'tecnico' as const,
+      },
+    },
+  };
+}
+
+test('New game: standard citizen begins at 18 with R$ 5,000, no job or active course', () => {
+  const estado = criarEstadoInicial('estudante');
+  assert.equal(estado.vida.idade, 18);
+  assert.equal(estado.vida.saldoBancario, 5000);
+  assert.equal(estado.vida.empregoAtual, undefined);
+  assert.equal(estado.vida.cursoMatriculado, undefined);
+  assert.equal(estado.vida.veiculos.length, 0);
+});
+
+test('Calendar: advancing a year processes all 12 months and stops for pending decisions', () => {
+  const original = Math.random;
+  try {
+    Math.random = () => 0.99; // Sem eventos novos durante este cenário controlado
+    const estado = criarEstadoInicial('estudante');
+    const depois = avancarMultiplosMeses(estado, 12);
+    assert.equal(depois.mesesTotais, 12);
+    assert.equal(depois.mesAtual, 1);
+    assert.equal(depois.anoAtual, 2027);
+    assert.equal(depois.historico.at(-1)?.ano, 2027);
+
+    const pendente = sortearEventoDecisao(estado)!;
+    const bloqueado = avancarMultiplosMeses({ ...estado, eventosPendentes: [pendente] }, 12);
+    assert.equal(bloqueado.mesesTotais, 0);
+    assert.equal(bloqueado.eventosPendentes.length, 1);
+
+    Math.random = () => 0.1; // Evento no fechamento do primeiro mês
+    const interrompido = avancarMultiplosMeses(estado, 12);
+    assert.equal(interrompido.mesesTotais, 1);
+    assert.equal(interrompido.eventosPendentes.length, 1);
+  } finally {
+    Math.random = original;
+  }
+});
+
+test('Business: hiring is limited by machines and verified payroll runway', () => {
+  const empresa = criarEstadoInicial('agro_herdeiro').empresas[0];
+  const semDinheiro = avaliarContratacaoEmpresa({ ...empresa, caixaPJ: 0 }, 1);
+  assert.equal(semDinheiro.aprovada, false);
+  const semMaquinas = avaliarContratacaoEmpresa({ ...empresa, capacidadeMaquinas: 0 }, 1);
+  assert.equal(semMaquinas.aprovada, false);
+  const comCapacidade = avaliarContratacaoEmpresa({ ...empresa, caixaPJ: 2_000_000, capacidadeMaquinas: 500_000 }, 1);
+  assert.equal(comCapacidade.aprovada, true);
+  assert.ok(comCapacidade.custoAdmissao > 0);
+  const exagerada = avaliarContratacaoEmpresa({ ...empresa, caixaPJ: 2_000_000, capacidadeMaquinas: 500_000 }, 100000);
+  assert.equal(exagerada.aprovada, false);
+});
+
+test('Education: a valid enrolled course attends classes and takes exams through monthly simulation', () => {
+  const estado = criarEstudanteComVinculos();
+  let vida: VidaPessoal = { ...estado.vida, empregoAtual: undefined };
+  for (let mes = 0; mes < 10; mes++) {
+    vida = simularMesVida(vida, estado.macro, 0, { dia: 1, mes: 2 + (mes % 11), ano: 2026 }).novaVida;
+  }
+  assert.equal(vida.cursoMatriculado?.concluido, true);
+  assert.ok(vida.titulosConquistados.includes('Diploma: Curso Técnico em Desenvolvimento de Sistemas'));
+});
 
 test('Macro: Taylor Rule responds by raising Selic when inflation is above target', () => {
   const macroAltaInflacao: Macroeconomia = {
@@ -104,8 +190,8 @@ test('Calendar: daily rollover uses actual month lengths, including leap years',
   assert.equal(novoMes.minutoAtual, 0);
 });
 
-test('Agenda: work and course commitments appear at their scheduled hour and pause the clock', () => {
-  const inicial = criarEstadoInicial('estudante');
+test('Agenda: legacy work/course events require real enrollment and employment', () => {
+  const inicial = criarEstudanteComVinculos();
   const expediente = avancarHorasSimulacao(inicial, 1);
   assert.equal(expediente.horaAtual, 8);
   assert.equal(expediente.eventosPendentes[0]?.categoria, 'trabalho');
@@ -206,7 +292,7 @@ test('Life: the clock never forces sleep or work; only chosen activities affect 
 });
 
 test('Education: independent study does not count as scheduled class attendance', () => {
-  const estado = criarEstadoInicial('estudante');
+  const estado = criarEstudanteComVinculos();
   const curso = estado.vida.cursoMatriculado!;
   const vidaEstudando: VidaPessoal = {
     ...estado.vida,
@@ -227,7 +313,7 @@ test('Education: independent study does not count as scheduled class attendance'
 });
 
 test('Employment: work absences reduce the monthly paycheck and reset after closing', () => {
-  const estado = criarEstadoInicial('estudante');
+  const estado = criarEstudanteComVinculos();
   const vidaComFaltas: VidaPessoal = {
     ...estado.vida,
     empregoAtual: { ...estado.vida.empregoAtual!, faltasNoMes: 2 },
@@ -255,7 +341,7 @@ test('Life: dynamic age calculation from birth date is strictly accurate', () =>
 });
 
 test('Finance: monthly salary and CDI movements enter the transaction ledger exactly once', () => {
-  const estado = criarEstadoInicial('estudante');
+  const estado = criarEstudanteComVinculos();
   const { novaVida } = simularMesVida(
     estado.vida,
     estado.macro,
