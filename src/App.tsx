@@ -21,6 +21,7 @@ import { aplicarImpactoAfinidadeFamiliar } from './engine/events';
 import { registrarTransacaoFinanceira } from './engine/finance';
 import { criarEstadoInicial } from './engine/presets';
 import { avancarHorasSimulacao } from './engine/simulation';
+import { GROQ_STORAGE_KEY, montarLeituraIA, narrarFato, narrarGazeta } from './services/groq';
 
 const STORAGE_KEY = 'cidadao_sim_save_v1';
 
@@ -102,6 +103,9 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [playSpeed, setPlaySpeed] = useState<number>(1);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [groqKey, setGroqKey] = useState<string>(() => {
+    try { return localStorage.getItem(GROQ_STORAGE_KEY) || ''; } catch { return ''; }
+  });
 
   // Modals
   const [showNewGameModal, setShowNewGameModal] = useState<boolean>(false);
@@ -112,6 +116,91 @@ export default function App() {
   } | null>(null);
 
   const mesesObservadosRef = useRef(estado.mesesTotais);
+  const estadoRef = useRef(estado);
+  estadoRef.current = estado;
+  const eventosIAProcessadosRef = useRef(new Set<string>());
+  const noticiasIAProcessadasRef = useRef(new Set(estado.noticias.map((noticia) => noticia.id)));
+
+  // A Groq só reescreve os campos narrativos. O motor continua dono dos efeitos.
+  useEffect(() => {
+    const evento = estado.eventosPendentes[0];
+    if (!evento || !groqKey || eventosIAProcessadosRef.current.has(evento.id)) return;
+    eventosIAProcessadosRef.current.add(evento.id);
+    const leitura = montarLeituraIA(estadoRef.current);
+
+    void narrarFato(groqKey, leitura, evento).then((narrado) => {
+      if (!narrado) return;
+      setEstado((atual) => {
+        const pendente = atual.eventosPendentes[0];
+        if (!pendente || pendente.id !== evento.id) return atual;
+        const opcoesNarradas = new Map(narrado.opcoes.map((opcao) => [opcao.id, opcao]));
+        return {
+          ...atual,
+          eventosPendentes: [{
+            ...pendente,
+            titulo: narrado.titulo,
+            descricao: narrado.descricao,
+            opcoes: pendente.opcoes.map((opcao) => {
+              const texto = opcoesNarradas.get(opcao.id);
+              return texto ? {
+                ...opcao,
+                texto: texto.texto,
+                descricaoImpacto: texto.descricaoImpacto,
+                consequencias: {
+                  ...opcao.consequencias,
+                  mensagemResultado: texto.consequencias.mensagemResultado,
+                },
+              } : opcao;
+            }),
+          }, ...atual.eventosPendentes.slice(1)],
+        };
+      });
+    }).catch(() => {
+      // A narração é opcional: o texto original permanece em caso de falha.
+    });
+  }, [estado.eventosPendentes[0]?.id, groqKey]);
+
+  useEffect(() => {
+    if (!groqKey) return;
+    const novas = estado.noticias.filter((noticia) =>
+      noticia.id.startsWith('noticia_') && !noticiasIAProcessadasRef.current.has(noticia.id)
+    );
+    for (const noticia of novas) {
+      noticiasIAProcessadasRef.current.add(noticia.id);
+      const leitura = montarLeituraIA(estadoRef.current);
+      void narrarGazeta(groqKey, leitura, noticia).then((narrada) => {
+        if (!narrada) return;
+        setEstado((atual) => ({
+          ...atual,
+          noticias: atual.noticias.map((item) => item.id === noticia.id ? {
+            ...item,
+            titulo: narrada.titulo,
+            corpoTexto: narrada.corpoTexto,
+            impactoDescricao: narrada.impactoDescricao,
+            repercussaoPratica: narrada.repercussaoPratica,
+          } : item),
+        }));
+      }).catch(() => {
+        // Mantém integralmente a notícia original se a API estiver indisponível.
+      });
+    }
+  }, [estado.noticias, groqKey]);
+
+  const handleSaveGroqKey = useCallback((key: string) => {
+    try {
+      localStorage.setItem(GROQ_STORAGE_KEY, key.trim());
+      setGroqKey(key.trim());
+      showToast('Chave da Groq salva neste navegador.');
+    } catch {
+      showToast('Não foi possível salvar a chave neste navegador.');
+    }
+  }, [showToast]);
+
+  const handleDeleteGroqKey = useCallback(() => {
+    try { localStorage.removeItem(GROQ_STORAGE_KEY); } catch { /* armazenamento indisponível */ }
+    setGroqKey('');
+    showToast('Chave da Groq apagada deste navegador.');
+  }, [showToast]);
 
   // Mostra o fechamento mais recente quando o relógio atravessa um mês.
   useEffect(() => {
@@ -311,6 +400,9 @@ export default function App() {
         onSaveGame={handleSaveGame}
         onLoadGame={handleLoadGame}
         onSelectTab={setActiveTab}
+        groqKey={groqKey}
+        onSaveGroqKey={handleSaveGroqKey}
+        onDeleteGroqKey={handleDeleteGroqKey}
       />
 
       {/* Navegação entre Abas */}
