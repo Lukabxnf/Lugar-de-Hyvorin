@@ -151,16 +151,17 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
     const valorValido = Math.max(1, novoPreco);
     const atualizada = { ...currentEmpresa, precoVenda: valorValido };
     const lista = empresasList.map((e) => (e.id === currentEmpresa.id ? atualizada : e));
+    setRascunhosPreco((atual) => { const proximo = { ...atual }; delete proximo[currentEmpresa.id]; return proximo; });
     saveUpdatedEmpresas(lista, currentEmpresa.id);
   };
 
   const handleAtalhoRetirada = (fracao: number) => {
     if (!currentEmpresa) return;
-    setQuantiaRetirada(String(Math.floor(currentEmpresa.caixaPJ * fracao)));
+    setQuantiaRetirada(String(Math.max(0, Math.floor(currentEmpresa.caixaPJ * fracao))));
   };
 
   const handleAtalhoAporte = (fracao: number) => {
-    setQuantiaAporte(String(Math.floor(vida.saldoBancario * fracao)));
+    setQuantiaAporte(String(Math.max(0, Math.floor(vida.saldoBancario * fracao))));
   };
 
   // 4. Modificar salário médio (suporte a input direto e delta)
@@ -169,6 +170,7 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
     const valorValido = Math.max(1518, novoSalario); // salário mínimo nacional
     const atualizada = { ...currentEmpresa, salarioMedio: valorValido };
     const lista = empresasList.map((e) => (e.id === currentEmpresa.id ? atualizada : e));
+    setRascunhosSalario((atual) => { const proximo = { ...atual }; delete proximo[currentEmpresa.id]; return proximo; });
     saveUpdatedEmpresas(lista, currentEmpresa.id);
   };
 
