@@ -56,7 +56,7 @@ export const LifeView: React.FC<LifeViewProps> = ({
 }) => {
   const { vida, macro, politica, diaAtual, mesAtual, anoAtual, horaAtual, diaSemanaAtual } = estado;
   const [activeSubSection, setActiveSubSection] = useState<
-    'perfil' | 'geral' | 'rotina' | 'carreira' | 'familia' | 'educacao' | 'bens' | 'moradia'
+    'perfil' | 'geral' | 'historico' | 'rotina' | 'carreira' | 'familia' | 'educacao' | 'bens' | 'moradia'
   >('perfil');
 
   // Estado local para personalização do Avatar
