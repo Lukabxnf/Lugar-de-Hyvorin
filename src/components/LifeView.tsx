@@ -39,6 +39,7 @@ import {
 } from '../engine/types';
 import { CARREIRAS, CURSOS, MORADIAS, VEICULOS_CATALOGO } from '../engine/data';
 import { calcularIdadeExata } from '../engine/life';
+import { registrarTransacaoFinanceira } from '../engine/finance';
 
 interface LifeViewProps {
   estado: EstadoJogo;
@@ -109,6 +110,13 @@ export const LifeView: React.FC<LifeViewProps> = ({
       vida: {
         ...vida,
         saldoBancario: novoSaldo,
+        historicoFinanceiro: registrarTransacaoFinanceira(
+          { ...vida, saldoBancario: novoSaldo },
+          { dia: estado.diaAtual, mes: estado.mesAtual, ano: estado.anoAtual },
+          'despesa_paga',
+          `Quitação: ${conta.descricao}`,
+          -totalDevido
+        ).historicoFinanceiro,
         contasVencidas: novasContas,
         dividaPessoal: Math.round(totalDivida),
         scoreCredito: Math.min(1000, vida.scoreCredito + 15),
@@ -130,6 +138,13 @@ export const LifeView: React.FC<LifeViewProps> = ({
       vida: {
         ...vida,
         saldoBancario: vida.saldoBancario - totalGeral,
+        historicoFinanceiro: registrarTransacaoFinanceira(
+          { ...vida, saldoBancario: vida.saldoBancario - totalGeral },
+          { dia: estado.diaAtual, mes: estado.mesAtual, ano: estado.anoAtual },
+          'despesa_paga',
+          'Quitação de todas as contas vencidas',
+          -totalGeral
+        ).historicoFinanceiro,
         contasVencidas: [],
         dividaPessoal: 0,
         scoreCredito: Math.min(1000, vida.scoreCredito + 50),
@@ -184,6 +199,14 @@ export const LifeView: React.FC<LifeViewProps> = ({
       vida: {
         ...vida,
         saldoBancario: vida.saldoBancario + valor,
+        historicoFinanceiro: registrarTransacaoFinanceira(
+          { ...vida, saldoBancario: vida.saldoBancario + valor },
+          { dia: estado.diaAtual, mes: estado.mesAtual, ano: estado.anoAtual },
+          'emprestimo',
+          `Crédito contratado: ${novoEmprestimo.descricao}`,
+          valor,
+          novoEmprestimo.saldoDevedor
+        ).historicoFinanceiro,
         emprestimosContratados: [...vida.emprestimosContratados, novoEmprestimo],
       },
     });
