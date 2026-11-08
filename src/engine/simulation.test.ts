@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simularMesMacroeconomia } from './macro';
-import { calcularIdadeExata, simularHoraVida, simularMesVida } from './life';
+import { calcularIdadeExata, calcularTaxaMensalEfetiva, simularHoraVida, simularMesVida } from './life';
 import { simularMesEmpresa } from './business';
 import { isAnoEleitoral } from './politics';
 import { criarEstadoInicial } from './presets';
@@ -176,6 +176,19 @@ test('Life: dynamic age calculation from birth date is strictly accurate', () =>
   assert.equal(calcularIdadeExata(nascimento, dataDepois), 26);
 });
 
+test('Finance: effective 5.47% CDI compounds correctly over 91 months', () => {
+  const monthlyRate = calcularTaxaMensalEfetiva(5.47);
+  const initialBalance = 1_000_000;
+  let finalBalance = initialBalance;
+  for (let month = 0; month < 91; month++) {
+    finalBalance *= 1 + monthlyRate;
+  }
+
+  const expected = initialBalance * Math.pow(1.0547, 91 / 12);
+  assert.ok(Math.abs(finalBalance - expected) < 0.01);
+  assert.ok(finalBalance > initialBalance * 1.48 && finalBalance < initialBalance * 1.52);
+});
+
 test('Finance: expenses exceeding cash become overdue bills without automatic loans', () => {
   const estado = criarEstadoInicial('estudante');
   const macro = estado.macro;
@@ -195,6 +208,33 @@ test('Finance: expenses exceeding cash become overdue bills without automatic lo
   assert.ok(novaVida.contasVencidas.length > 0, 'Unpaid expenses must become overdue bills (contasVencidas)');
   assert.ok(novaVida.scoreCredito < 750, 'Credit score must drop due to overdue bills');
   assert.ok(logs.some(l => l.includes('Contas em Atraso')), 'Logs should notify about overdue bills');
+});
+
+test('Business: extreme prices reduce demand and production respects storage and demand', () => {
+  const base = criarEstadoInicial('agro_herdeiro').empresas[0];
+  const macro = criarEstadoInicial('agro_herdeiro').macro;
+  const normal = simularMesEmpresa({ ...base, precoVenda: 250, estoque: 0, capacidadeArmazenamento: 5000 }, macro).novaEmpresa;
+  const inflatedPrice = simularMesEmpresa({
+    ...base,
+    precoVenda: 10100,
+    estoque: 0,
+    capacidadeArmazenamento: 5000,
+  }, macro).novaEmpresa;
+
+  assert.ok(inflatedPrice.ultimoMes.unidadesVendidas < normal.ultimoMes.unidadesVendidas / 10);
+  assert.ok(inflatedPrice.ultimoMes.unidadesProduzidas <= inflatedPrice.capacidadeMaquinas);
+  assert.ok(inflatedPrice.estoque <= inflatedPrice.capacidadeArmazenamento!);
+});
+
+test('Business: large legacy inventory is preserved and production pauses until it is needed', () => {
+  const base = criarEstadoInicial('agro_herdeiro').empresas[0];
+  const legacyStock = 9_256_808;
+  const result = simularMesEmpresa({ ...base, estoque: legacyStock }, criarEstadoInicial('agro_herdeiro').macro).novaEmpresa;
+
+  assert.equal(result.estoque, legacyStock - result.ultimoMes.unidadesVendidas);
+  assert.equal(result.ultimoMes.unidadesProduzidas, 0);
+  assert.equal(result.capacidadeArmazenamento, legacyStock);
+  assert.ok(result.ultimoMes.custoArmazenagem! > 0);
 });
 
 test('Business: multiple companies simulate and accumulate profits independently', () => {
