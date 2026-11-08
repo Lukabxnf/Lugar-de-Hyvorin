@@ -241,6 +241,7 @@ export function avancarMesSimulacao(estado: EstadoJogo): EstadoJogo {
     inflacao: novaMacro.inflacaoIpca12m,
     selic: novaMacro.taxaSelic,
     desemprego: novaMacro.taxaDesemprego,
+    cambioDolar: novaMacro.cambioDolar,
     saldoPessoal: Math.round(novaVida.saldoBancario),
     aprovacaoPolitica: novaPolitica.aprovacaoPopular,
   };
