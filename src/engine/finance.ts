@@ -26,7 +26,7 @@ export function calcularPatrimonioLiquido(
 ): ResumoPatrimonio {
   const caixaPessoal = Math.max(0, vida.saldoBancario);
   const saldoBancarioNegativo = Math.max(0, -vida.saldoBancario);
-  const imoveis = Array.isArray(vida.imoveis)
+  const imoveis = Array.isArray(vida.imoveis) && vida.imoveis.length > 0
     ? vida.imoveis.reduce((total, imovel) => total + Math.max(0, imovel.valorMercadoAtual || 0), 0)
     : vida.casaPropria ? Math.max(0, MORADIAS[vida.moradia]?.custoCompra ?? 0) : 0;
   const veiculos = (vida.veiculos || []).reduce(
