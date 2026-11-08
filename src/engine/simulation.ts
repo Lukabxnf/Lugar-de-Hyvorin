@@ -33,41 +33,55 @@ function aplicarAgendaDoHorario(estado: EstadoJogo): EstadoJogo {
   const disparados = atualizado.agendaEventosDisparados || [];
   const data = `${atualizado.diaAtual}/${atualizado.mesAtual}/${atualizado.anoAtual}`;
   const emprego = atualizado.vida.empregoAtual;
-  const carreira = emprego
+  const carreira = emprego && !emprego.cargoPoliticoId
     ? CARREIRAS.find(item => item.id === emprego.carreiraId)
     : undefined;
+  const cargoPolitico = emprego?.cargoPoliticoId
+    ? CARGOS_POLITICOS[emprego.cargoPoliticoId]
+    : undefined;
+  const inicioExpediente = carreira?.horarioInicio ?? (cargoPolitico ? 9 : undefined);
+  const fimExpediente = carreira?.horarioFim ?? (cargoPolitico ? 17 : undefined);
+  const nomeVinculo = carreira?.titulo || cargoPolitico?.nome;
 
-  if (carreira && atualizado.horaAtual === carreira.horarioInicio) {
-    const id = `agenda_trabalho_${chaveDia}_${carreira.id}`;
+  if (emprego && inicioExpediente !== undefined && fimExpediente !== undefined
+      && nomeVinculo && atualizado.horaAtual === inicioExpediente) {
+    const id = `agenda_trabalho_${chaveDia}_${emprego.cargoPoliticoId || emprego.carreiraId}`;
     if (!disparados.includes(id)) {
-      const duracao = Math.max(1, carreira.horarioFim - carreira.horarioInicio);
+      const duracao = Math.max(1, fimExpediente - inicioExpediente);
+      const ehMandato = !!cargoPolitico;
       const evento: EventoDecisao = {
         id,
         categoria: 'trabalho',
-        urgencia: 'media',
-        titulo: `Início do expediente: ${carreira.titulo}`,
-        descricao: `Seu expediente começa agora, às ${carreira.horarioInicio}:00, e está previsto para terminar às ${carreira.horarioFim}:00. Você decide como lidar com o compromisso.`,
+        urgencia: ehMandato ? 'alta' : 'media',
+        titulo: ehMandato ? `Agenda pública: ${nomeVinculo}` : `Início do expediente: ${nomeVinculo}`,
+        descricao: `Seu compromisso profissional começa agora, às ${inicioExpediente}:00, e está previsto para terminar às ${fimExpediente}:00. Você decide como lidar com a jornada.`,
         dataOcorrencia: `${data} • ${String(atualizado.horaAtual).padStart(2, '0')}:00`,
         opcoes: [
           {
             id: 'comparecer_trabalho',
-            texto: 'Ir trabalhar',
-            descricaoImpacto: `Cumpre a jornada de ${duracao} horas. O trabalho consome energia, mas mantém sua presença profissional.`,
+            texto: ehMandato ? 'Cumprir a agenda pública' : 'Ir trabalhar',
+            descricaoImpacto: `Cumpre a jornada de ${duracao} horas. O compromisso consome energia e mantém sua presença profissional.`,
             consequencias: {
               atividade: 'trabalhando',
               duracaoAtividadeHoras: duracao,
-              mensagemResultado: `Você compareceu ao trabalho como ${carreira.titulo}. A jornada começou.`,
+              mensagemResultado: ehMandato
+                ? `Você iniciou sua agenda como ${nomeVinculo}.`
+                : `Você compareceu ao trabalho como ${nomeVinculo}. A jornada começou.`,
             },
           },
           {
             id: 'faltar_trabalho',
-            texto: 'Faltar ao trabalho',
-            descricaoImpacto: 'Você ganha tempo livre agora, mas a falta será descontada no próximo pagamento e pode prejudicar sua reputação profissional.',
+            texto: ehMandato ? 'Faltar à agenda pública' : 'Faltar ao trabalho',
+            descricaoImpacto: ehMandato
+              ? 'A ausência será registrada e reduzirá a remuneração do mês.'
+              : 'Você ganha tempo livre agora, mas a falta será descontada no próximo pagamento e pode prejudicar sua reputação profissional.',
             consequencias: {
               deltaFaltasTrabalho: 1,
               deltaReputacao: -2,
               deltaFelicidade: 1,
-              mensagemResultado: 'Você faltou ao expediente. A ausência foi registrada e reduzirá seu próximo salário.',
+              mensagemResultado: ehMandato
+                ? 'Você faltou à agenda pública. A ausência será descontada da remuneração mensal.'
+                : 'Você faltou ao expediente. A ausência foi registrada e reduzirá seu próximo salário.',
             },
           },
         ],
