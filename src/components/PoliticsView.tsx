@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { CargoPoliticoId, EstadoJogo, PropostaPolitica } from '../engine/types';
 import { CARGOS_POLITICOS } from '../engine/data';
-import { isAnoEleitoral, simularEleicao, votarProposta } from '../engine/politics';
+import { cargoCompativelComEleicao, isAnoEleitoral, simularEleicao, votarProposta } from '../engine/politics';
 
 interface PoliticsViewProps {
   estado: EstadoJogo;
@@ -35,6 +35,7 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
   const { politica, vida, macro } = estado;
   const cargoAtualInfo = CARGOS_POLITICOS[politica.cargoAtual];
   const eleicaoInfo = isAnoEleitoral(estado.mesesTotais);
+  const ultimoPleitoJaDisputado = politica.ultimaEleicaoMesTotal === estado.mesesTotais;
 
   const [cargoDisputa, setCargoDisputa] = useState<CargoPoliticoId>(
     politica.cargoDisputado || (eleicaoInfo.tipoEleicao === 'municipal' ? 'vereador' : 'deputado_federal')
@@ -54,8 +55,60 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
     'presidente',
   ];
 
+  // A campanha só pode ser aberta dentro da janela eleitoral do pleito correspondente.
+  const handleIniciarCampanha = () => {
+    if (!eleicaoInfo.ehAnoEleitoral || eleicaoInfo.mesesAteEleicao < 0) {
+      onShowMessage('A campanha ainda não está aberta. Aguarde a janela dos dez meses anteriores à eleição de outubro.');
+      return;
+    }
+    if (ultimoPleitoJaDisputado) {
+      onShowMessage('Você já disputou a eleição deste pleito. O resultado está registrado.');
+      return;
+    }
+    if (!cargoCompativelComEleicao(eleicaoInfo.tipoEleicao, cargoDisputa)) {
+      onShowMessage(`O cargo escolhido não é disputado nas eleições ${eleicaoInfo.tipoEleicao === 'municipal' ? 'municipais' : 'gerais'}.`);
+      return;
+    }
+    const cargoAlvo = CARGOS_POLITICOS[cargoDisputa];
+    if (vida.reputacao < cargoAlvo.requisitoReputacao || vida.intelecto < cargoAlvo.requisitoIntelecto) {
+      onShowMessage('Você ainda não cumpre os requisitos mínimos de reputação e intelecto para essa candidatura.');
+      return;
+    }
+    if (
+      politica.cargoAtual !== 'cidadao' &&
+      politica.cargoAtual !== 'lider_comunitario' &&
+      politica.cargoAtual !== cargoDisputa &&
+      politica.mesesNoCargo <= 48
+    ) {
+      onShowMessage('Você não pode concorrer a outro cargo enquanto ainda exerce um mandato incompatível.');
+      return;
+    }
+    if (
+      politica.cargoAtual === cargoDisputa &&
+      (politica.reeleicoesConsecutivas ?? 0) >= 1
+    ) {
+      onShowMessage('O limite de uma reeleição consecutiva para esse cargo já foi atingido.');
+      return;
+    }
+
+    onUpdateEstado({
+      ...estado,
+      politica: {
+        ...politica,
+        emCampanha: true,
+        cargoDisputado: cargoDisputa,
+        campanhaInicioMesTotal: estado.mesesTotais,
+      },
+    });
+    onShowMessage(`Campanha oficial aberta para ${cargoAlvo.nome}. A votação ocorrerá em outubro de ${eleicaoInfo.anoEleicao}.`);
+  };
+
   // 1. Alocar fundos pessoais na campanha
   const handleDoarCampanha = () => {
+    if (!politica.emCampanha) {
+      onShowMessage('Inicie a campanha dentro do calendário eleitoral antes de receber doações.');
+      return;
+    }
     const valor = Number(quantiaFundoCampanha);
     if (!valor || valor <= 0 || valor > vida.saldoBancario) {
       onShowMessage('Saldo pessoal insuficiente para essa doação eleitoral.');
@@ -78,6 +131,10 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
 
   // 2. Ações de campanha
   const handleAcaoCampanha = (tipo: 'comicio' | 'redes' | 'debate') => {
+    if (!politica.emCampanha) {
+      onShowMessage('As ações de mobilização só ficam disponíveis durante uma campanha aberta.');
+      return;
+    }
     if (tipo === 'comicio') {
       const custo = 5_000;
       if (politica.fundoEleitoralPessoal < custo) {
@@ -137,8 +194,28 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
 
   // 3. Disputar Eleição nas Urnas
   const handleDisputarEleicao = () => {
+    if (!politica.emCampanha) {
+      onShowMessage('Você precisa abrir uma campanha válida antes de disputar as urnas.');
+      return;
+    }
+    if (eleicaoInfo.mesesAteEleicao !== 0) {
+      onShowMessage(`A votação acontece em outubro de ${eleicaoInfo.anoEleicao}. Faltam ${eleicaoInfo.mesesAteEleicao} meses.`);
+      return;
+    }
+    if (ultimoPleitoJaDisputado) {
+      onShowMessage('Esta eleição já foi disputada e não pode ser repetida.');
+      return;
+    }
+    if (politica.cargoDisputado !== cargoDisputa || !cargoCompativelComEleicao(eleicaoInfo.tipoEleicao, cargoDisputa)) {
+      onShowMessage('A candidatura registrada não corresponde ao cargo permitido para este pleito.');
+      return;
+    }
+
     const { eleito, porcentagemVotos, mensagem } = simularEleicao(politica, vida, macro, cargoDisputa);
     const cargoAlvoInfo = CARGOS_POLITICOS[cargoDisputa];
+    const reeleicoesConsecutivas = eleito
+      ? (politica.cargoAtual === cargoDisputa ? (politica.reeleicoesConsecutivas ?? 0) + 1 : 0)
+      : (politica.reeleicoesConsecutivas ?? 0);
 
     if (eleito) {
       onElectionVictory(cargoAlvoInfo.nome, porcentagemVotos);
@@ -149,6 +226,12 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
           cargoAtual: cargoDisputa,
           mesesNoCargo: 0,
           emCampanha: false,
+          cargoDisputado: undefined,
+          campanhaInicioMesTotal: undefined,
+          ultimaEleicaoMesTotal: estado.mesesTotais,
+          ultimaEleicaoCargo: cargoDisputa,
+          inicioMandatoMesTotal: estado.mesesTotais,
+          reeleicoesConsecutivas,
           aprovacaoPopular: Math.max(65, porcentagemVotos),
           apoioParlamento: 55,
         },
@@ -165,7 +248,12 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
         politica: {
           ...politica,
           emCampanha: false,
+          cargoDisputado: undefined,
+          campanhaInicioMesTotal: undefined,
+          ultimaEleicaoMesTotal: estado.mesesTotais,
+          ultimaEleicaoCargo: cargoDisputa,
           aprovacaoPopular: Math.max(20, politica.aprovacaoPopular - 10),
+          reeleicoesConsecutivas,
         },
         vida: {
           ...vida,
@@ -422,8 +510,29 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
               </div>
             </div>
 
+            <div className="rounded-xl border border-amber-700/40 bg-amber-950/20 p-3 space-y-2">
+              {politica.emCampanha ? (
+                <p className="text-xs text-amber-200">
+                  Campanha aberta para {CARGOS_POLITICOS[politica.cargoDisputado || cargoDisputa].nome}. Votação em outubro de {eleicaoInfo.anoEleicao}.
+                </p>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-300">
+                    A campanha só pode ser registrada nos dez meses anteriores ao pleito oficial de outubro.
+                  </p>
+                  <button
+                    onClick={handleIniciarCampanha}
+                    disabled={!eleicaoInfo.ehAnoEleitoral || ultimoPleitoJaDisputado}
+                    className="w-full rounded-lg bg-amber-500 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-40"
+                  >
+                    Iniciar campanha oficial
+                  </button>
+                </>
+              )}
+            </div>
+
             {/* Campaign Actions */}
-            <div className="space-y-2 pt-2">
+            <div className={`space-y-2 pt-2 ${!politica.emCampanha ? 'opacity-40 pointer-events-none' : ''}`}>
               <label className="text-xs font-semibold text-slate-300 block">
                 Ações de Mobilização Eleitoral
               </label>
@@ -499,20 +608,25 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
             <div className="pt-4 border-t border-slate-800">
               <button
                 onClick={handleDisputarEleicao}
+                disabled={!politica.emCampanha || eleicaoInfo.mesesAteEleicao !== 0 || ultimoPleitoJaDisputado}
                 className={`w-full py-3.5 rounded-xl font-black text-sm shadow-xl transition flex items-center justify-center gap-2 ${
-                  eleicaoInfo.mesesAteEleicao === 0
+                  eleicaoInfo.mesesAteEleicao === 0 && politica.emCampanha
                     ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 animate-bounce'
                     : 'bg-indigo-600 hover:bg-indigo-500 text-white'
                 }`}
               >
                 <Vote className="w-5 h-5" />
-                {eleicaoInfo.mesesAteEleicao === 0
-                  ? 'Urnas Abertas! Disputar Eleição Agora'
-                  : 'Antecipar / Disputar Prévia Eleitoral'}
+                {ultimoPleitoJaDisputado
+                  ? 'Pleito já disputado'
+                  : !politica.emCampanha
+                  ? 'Abra uma campanha para concorrer'
+                  : eleicaoInfo.mesesAteEleicao === 0
+                  ? 'Urnas abertas: disputar eleição'
+                  : `Votação em outubro: faltam ${eleicaoInfo.mesesAteEleicao} meses`}
               </button>
               {eleicaoInfo.mesesAteEleicao > 0 && (
                 <p className="text-[11px] text-slate-400 text-center mt-2">
-                  Dica: Você também pode aguardar o mês da eleição oficial avançando o tempo no topo da tela.
+                  A apuração só fica disponível no mês oficial da eleição.
                 </p>
               )}
             </div>
