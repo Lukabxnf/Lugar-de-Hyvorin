@@ -505,6 +505,42 @@ export interface EventoHistoricoResolvido {
   resultado: string;
 }
 
+/** Proposta contextual da IA. Efeitos são limites, jamais saldos ou salários finais. */
+export interface PropostaFechamentoIA {
+  justificativa: string;
+  choqueInflacao: number; // pontos percentuais, -0.6 a +0.6
+  choquePib: number; // pontos percentuais, -0.8 a +0.8
+  choqueDolar: number; // R$/US$, -0.15 a +0.15
+  impactoApoioParlamento: number; // pontos, -3 a +3
+  acontecimento?: {
+    categoria: EventoDecisao['categoria'];
+    urgencia: EventoDecisao['urgencia'];
+    titulo: string;
+    descricao: string;
+    opcoes: Array<{
+      texto: string;
+      descricaoImpacto: string;
+      mensagemResultado: string;
+      deltaSaude?: number;
+      deltaFelicidade?: number;
+      deltaEnergia?: number;
+      deltaIntelecto?: number;
+      deltaReputacao?: number;
+    }>;
+  };
+}
+
+export interface MemoriaMesIA {
+  mes: number;
+  ano: number;
+  sintese: string;
+  saldoPessoal: number;
+  inflacao: number;
+  desemprego: number;
+  dolar: number;
+  decisoesRecentes: string[];
+}
+
 export interface EstadoJogo {
   // Tempo & Relógio Simulado
   horaAtual: number; // 0 a 23
@@ -531,6 +567,7 @@ export interface EstadoJogo {
 
   eventosPendentes: EventoDecisao[];
   eventosResolvidos: EventoHistoricoResolvido[];
+  memoriaIA?: MemoriaMesIA[]; // Histórico compacto, separado das notícias e das decisões pendentes
   // Evita disparar o mesmo compromisso mais de uma vez no mesmo dia.
   agendaDisparadaDia?: string;
   agendaEventosDisparados?: string[];
