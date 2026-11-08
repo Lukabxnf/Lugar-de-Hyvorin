@@ -215,13 +215,13 @@ export function avancarMesSimulacao(estado: EstadoJogo): EstadoJogo {
   destaques.push(...logsPolitica);
 
   // Calendário Eleitoral check
-  const { tipoEleicao, mesesAteEleicao } = isAnoEleitoral(novoMesesTotais);
+  const { tipoEleicao, mesesAteEleicao, anoEleicao } = isAnoEleitoral(novoMesesTotais);
   if (mesesAteEleicao === 6) {
     const noticiaEleicao: NoticiaGazeta = {
       id: `eleicao_aviso_${novoMesesTotais}`,
       mes: novoMes,
       ano: novoAno,
-      titulo: `TRIBUNAL SUPERIOR ELEITORAL: Faltam 6 meses para as Eleições ${tipoEleicao === 'geral' ? 'Gerais' : 'Municipais'}!`,
+      titulo: `TRIBUNAL SUPERIOR ELEITORAL: Faltam 6 meses para as Eleições ${tipoEleicao === 'geral' ? 'Gerais' : 'Municipais'} de ${anoEleicao}!`,
       corpoTexto:
         'O TSE abriu oficialmente o período preparatório para o pleito deste ano. Os partidos políticos convocam suas convenções estaduais e municipais para referendar candidaturas a cargos executivos e legislativos.',
       categoria: 'politica',
