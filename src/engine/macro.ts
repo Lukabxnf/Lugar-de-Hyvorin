@@ -49,10 +49,6 @@ export function simularMesMacroeconomia(
     + choquePibExterno;
   novoCrescimento = Math.max(-6.0, Math.min(8.5, Number(novoCrescimento.toFixed(2))));
 
-  // Atualiza PIB Nominal (crescimento mensal equivalente)
-  const taxaMensalPib = (novoCrescimento / 12) / 100;
-  const novoPib = Number((macroAnterior.pib * (1 + taxaMensalPib)).toFixed(2));
-
   // 6. Curva de Phillips & Inflação (IPCA)
   // Inflação sobe se crescimento é alto e desemprego baixo, ou se o dólar sobe (pass-through)
   const desempregoNatural = 7.5;
@@ -66,48 +62,101 @@ export function simularMesMacroeconomia(
     + choqueInflacaoExterno;
   novaInflacao = Math.max(1.5, Math.min(18.0, Number(novaInflacao.toFixed(2))));
 
+  // PIB nominal: combina crescimento real com inflação do período.
+  const taxaMensalPibReal = Math.pow(1 + novoCrescimento / 100, 1 / 12) - 1;
+  const taxaMensalInflacao = Math.pow(1 + novaInflacao / 100, 1 / 12) - 1;
+  const novoPib = Number((macroAnterior.pib * (1 + taxaMensalPibReal) * (1 + taxaMensalInflacao)).toFixed(2));
+
   // 7. Desemprego (Lei de Okun)
   // Desemprego cai quando PIB cresce acima do potencial
   let novoDesemprego = macroAnterior.taxaDesemprego - ((novoCrescimento - crescimentoPotencial) * 0.15);
   novoDesemprego = Math.max(4.0, Math.min(16.0, Number(novoDesemprego.toFixed(1))));
 
-  // 8. Câmbio (Dólar Comercial USD/BRL)
-  // Juros altos no Brasil atraem capital estrangeiro (carry trade -> dólar cai)
-  // Risco fiscal alto faz o dólar subir
-  const diferencialJuros = novaSelic - 4.75; // Taxa dos EUA estimada em 4.75%
-  const efeitoJurosDolar = -(diferencialJuros * 0.04);
-  const efeitoRiscoDolar = ((macroAnterior.dividaPublicaPib - 75) * 0.02);
+  // 8. Câmbio: diferencial de juros, inflação externa, risco, confiança,
+  // posição comercial, fluxo de capitais e reservas internacionais.
+  const inflacaoExterna = macroAnterior.inflacaoExterna ?? 2.0;
+  const taxaJurosExterna = macroAnterior.taxaJurosExterna ?? 4.75;
+  const reservasAnteriores = Math.max(25, macroAnterior.reservasInternacionais ?? 350);
+  const saldoComercialAnterior = macroAnterior.saldoComercialMes ?? 8.0;
 
-  let novoDolar = macroAnterior.cambioDolar + efeitoJurosDolar + efeitoRiscoDolar + choqueDolarExterno;
-  novoDolar = Math.max(4.2, Math.min(7.2, Number(novoDolar.toFixed(2))));
+  const saldoComercialMes = Math.max(-30, Math.min(40,
+    saldoComercialAnterior * 0.75
+    + (macroAnterior.cambioDolar - 5.4) * 1.2
+    - (novoCrescimento - crescimentoPotencial) * 0.8
+  ));
 
-  // 9. Contas Públicas & Dívida Pública
-  // Carga tributária média no Brasil ~ 32% do PIB
-  const arrecadacaoMes = Number(((novoPib * 0.32) / 12).toFixed(2));
-  
-  // Despesas públicas base (~ 32.5% do PIB) + despesas de políticas ativas
-  const despesaBaseMes = (novoPib * 0.322) / 12;
+  const fluxoCapitalMes = Math.max(-20, Math.min(20,
+    (novaSelic - taxaJurosExterna) * 0.45
+    - (macroAnterior.riscoPais - 200) * 0.015
+    + (macroAnterior.confiancaEmpresarial - 50) * 0.08
+  ));
+
+  const variacaoReservas = (saldoComercialMes + fluxoCapitalMes) * 0.15;
+  const reservasInternacionais = Math.max(25, reservasAnteriores + variacaoReservas);
+
+  const diferencialJuros = novaSelic - taxaJurosExterna;
+  const efeitoJurosCambio = -diferencialJuros * 0.00025;
+  const efeitoInflacaoCambio = (novaInflacao - inflacaoExterna) * 0.00008;
+  const efeitoRiscoCambio = (macroAnterior.riscoPais - 200) * 0.000015;
+  const efeitoConfiancaCambio = (50 - macroAnterior.confiancaEmpresarial) * 0.00001;
+  const efeitoFiscalCambio = (macroAnterior.dividaPublicaPib - 75) * 0.00002;
+  const efeitoProdutividadeCambio = (novoCrescimento - crescimentoPotencial) * 0.00004;
+  const efeitoFluxosCambio = -((saldoComercialMes + fluxoCapitalMes) / reservasAnteriores) * 0.1;
+
+  const variacaoCambialPercentual = Math.max(-0.03, Math.min(0.03,
+    efeitoJurosCambio
+    + efeitoInflacaoCambio
+    + efeitoRiscoCambio
+    + efeitoConfiancaCambio
+    + efeitoFiscalCambio
+    + efeitoProdutividadeCambio
+    + efeitoFluxosCambio
+  ));
+
+  // Sem teto nominal artificial. Choques externos seguem como variação absoluta em R$/US$.
+  const novoDolar = Number(Math.max(
+    0.5,
+    macroAnterior.cambioDolar * (1 + variacaoCambialPercentual) + choqueDolarExterno
+  ).toFixed(2));
+
+  // 9. Contas públicas: receitas evoluem com PIB nominal e emprego;
+  // despesas acompanham a inflação, compromissos existentes e políticas aprovadas.
+  const fatorCrescimentoNominal = novoPib / Math.max(1, macroAnterior.pib);
+  const fatorEmpregoReceita = Math.max(0.95,
+    1 + (macroAnterior.taxaDesemprego - novoDesemprego) * 0.003
+  );
+  const arrecadacaoMes = Number((
+    macroAnterior.arrecadacaoTributariaMes * fatorCrescimentoNominal * fatorEmpregoReceita
+  ).toFixed(2));
+
+  const despesaBaseMes = macroAnterior.despesaPublicaMes * (1 + taxaMensalInflacao);
   const despesaPoliticaMes = gastosExtrasPoliticaGov / 12;
   const despesaTotalMes = Number((despesaBaseMes + despesaPoliticaMes).toFixed(2));
-  
   const resultadoPrimarioMes = Number((arrecadacaoMes - despesaTotalMes).toFixed(2));
 
-  // Custo da dívida (Selic mensal sobre o estoque da dívida)
-  const estoqueDivida = (macroAnterior.dividaPublicaPib / 100) * novoPib;
-  const jurosDividaMes = estoqueDivida * ((novaSelic / 100) / 12);
-  const necessidadeFinanciamento = -resultadoPrimarioMes + jurosDividaMes;
+  // Dívida bruta = estoque anterior + juros efetivos do mês - resultado primário.
+  // Déficit aumenta a dívida; superávit reduz o estoque.
+  const estoqueDividaAnterior = (macroAnterior.dividaPublicaPib / 100) * macroAnterior.pib;
+  const taxaMensalSelicEfetiva = Math.pow(1 + novaSelic / 100, 1 / 12) - 1;
+  const jurosDividaMes = estoqueDividaAnterior * taxaMensalSelicEfetiva;
+  const novoEstoqueDivida = Math.max(0, estoqueDividaAnterior + jurosDividaMes - resultadoPrimarioMes);
+  const novaDividaPib = Number(((novoEstoqueDivida / Math.max(1, novoPib)) * 100).toFixed(2));
 
-  const novoEstoqueDivida = estoqueDivida + necessidadeFinanciamento;
-  let novaDividaPib = Number(((novoEstoqueDivida / novoPib) * 100).toFixed(1));
-  novaDividaPib = Math.max(50.0, Math.min(120.0, novaDividaPib));
-
-  // Risco-país (CDS / EMBI+) atrelado à dívida e juros
-  const novoRiscoPais = Math.round(150 + (novaDividaPib - 70) * 8 + (novaInflacao - metaInflacao) * 15);
-
-  // Confiança Empresarial
-  const novaConfianca = Math.round(
-    Math.max(20, Math.min(95, 50 + (novoCrescimento * 4) - (novaInflacao * 2) - ((novaDividaPib - 75) * 0.5)))
+  const resultadoPrimarioSobrePIB = resultadoPrimarioMes / Math.max(1, novoPib / 12);
+  const novoRiscoPais = Math.round(
+    140
+    + (novaDividaPib - 70) * 4.5
+    + (novaInflacao - metaInflacao) * 10
+    - resultadoPrimarioSobrePIB * 120
   );
+
+  const novaConfianca = Math.round(Math.max(20, Math.min(95,
+    50
+    + novoCrescimento * 3.5
+    - novaInflacao * 1.5
+    - (novaDividaPib - 75) * 0.3
+    + resultadoPrimarioSobrePIB * 80
+  )));
 
   return {
     novaMacro: {
@@ -123,7 +172,12 @@ export function simularMesMacroeconomia(
       arrecadacaoTributariaMes: arrecadacaoMes,
       despesaPublicaMes: despesaTotalMes,
       confiancaEmpresarial: novaConfianca,
-      riscoPais: Math.max(90, novoRiscoPais),
+      riscoPais: Math.max(50, novoRiscoPais),
+      inflacaoExterna,
+      taxaJurosExterna,
+      saldoComercialMes,
+      fluxoCapitalMes,
+      reservasInternacionais,
     },
     ataCopom,
   };
