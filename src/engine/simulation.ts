@@ -106,6 +106,7 @@ function aplicarAgendaDoHorario(estado: EstadoJogo): EstadoJogo {
             consequencias: {
               atividade: 'estudando',
               duracaoAtividadeHoras: duracao,
+              aulaFormal: true,
               mensagemResultado: `Você compareceu à aula de ${curso.nome}.`,
             },
           },
