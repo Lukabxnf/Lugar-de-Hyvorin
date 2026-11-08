@@ -5,7 +5,7 @@ import { calcularIdadeExata, simularHoraVida, simularMesVida } from './life';
 import { simularMesEmpresa } from './business';
 import { isAnoEleitoral } from './politics';
 import { criarEstadoInicial } from './presets';
-import { avancarHorasSimulacao, avancarMesSimulacao } from './simulation';
+import { avancarHorasSimulacao, avancarMinutosSimulacao, avancarMesSimulacao } from './simulation';
 import { Macroeconomia, VidaPessoal, Empresa, DataCalendario } from './types';
 
 test('Macro: Taylor Rule responds by raising Selic when inflation is above target', () => {
@@ -47,6 +47,53 @@ test('Time & Clock: avancarHorasSimulacao advances hours, days and day of week',
   assert.equal(estado24h.horaAtual, 0);
   assert.equal(estado24h.diaAtual, 2);
   assert.equal(estado24h.diaSemanaAtual, 'Terça-feira');
+});
+
+test('Clock: real-time speed units advance minutes without prematurely advancing an hour', () => {
+  const estado = criarEstadoInicial('estudante');
+  const dezMinutos = avancarMinutosSimulacao(estado, 10);
+
+  assert.equal(dezMinutos.horaAtual, 8);
+  assert.equal(dezMinutos.minutoAtual, 10);
+  assert.equal(dezMinutos.horasTotais, 0);
+  assert.equal(dezMinutos.mesesTotais, 0);
+
+  const horaCompleta = avancarMinutosSimulacao(dezMinutos, 50);
+  assert.equal(horaCompleta.horaAtual, 9);
+  assert.equal(horaCompleta.minutoAtual, 0);
+  assert.equal(horaCompleta.horasTotais, 1);
+});
+
+test('Clock: day and month rollover happen only after crossing midnight', () => {
+  const estado = criarEstadoInicial('estudante');
+  const fimDoDia = {
+    ...estado,
+    horaAtual: 23,
+    minutoAtual: 50,
+    diaAtual: 1,
+    diaSemanaAtual: 'Segunda-feira' as const,
+  };
+  const novoDia = avancarMinutosSimulacao(fimDoDia, 10);
+
+  assert.equal(novoDia.horaAtual, 0);
+  assert.equal(novoDia.minutoAtual, 0);
+  assert.equal(novoDia.diaAtual, 2);
+  assert.equal(novoDia.diaSemanaAtual, 'Terça-feira');
+  assert.equal(novoDia.horasTotais, fimDoDia.horasTotais + 1);
+
+  const fimDoMes = {
+    ...estado,
+    horaAtual: 23,
+    minutoAtual: 50,
+    diaAtual: 30,
+  };
+  const novoMes = avancarMinutosSimulacao(fimDoMes, 10);
+
+  assert.equal(novoMes.diaAtual, 1);
+  assert.equal(novoMes.mesAtual, 2);
+  assert.equal(novoMes.mesesTotais, 1);
+  assert.equal(novoMes.horaAtual, 0);
+  assert.equal(novoMes.minutoAtual, 0);
 });
 
 test('Life Routine: sleeping recovers energy while working expends energy', () => {
