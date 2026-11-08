@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { Empresa, EstadoJogo } from '../engine/types';
 import { SETORES_EMPRESA } from '../engine/data';
-import { registrarTransacaoFinanceira } from '../engine/finance';
+import { formatarMoedaCompacta, registrarTransacaoFinanceira } from '../engine/finance';
 
 interface BusinessViewProps {
   estado: EstadoJogo;
@@ -52,6 +52,10 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
   // Form states for dividend distribution & capital injection
   const [quantiaRetirada, setQuantiaRetirada] = useState('');
   const [quantiaAporte, setQuantiaAporte] = useState('');
+  // Inputs textuais separados do estado financeiro: evita que o piso mínimo
+  // sobrescreva o primeiro dígito enquanto o jogador ainda está digitando.
+  const [rascunhosPreco, setRascunhosPreco] = useState<Record<string, string>>({});
+  const [rascunhosSalario, setRascunhosSalario] = useState<Record<string, string>>({});
 
   // Active selected company
   const currentEmpresa = empresasList.find((e) => e.id === selectedEmpresaId) || empresasList[0];
@@ -147,7 +151,17 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
     const valorValido = Math.max(1, novoPreco);
     const atualizada = { ...currentEmpresa, precoVenda: valorValido };
     const lista = empresasList.map((e) => (e.id === currentEmpresa.id ? atualizada : e));
+    setRascunhosPreco((atual) => { const proximo = { ...atual }; delete proximo[currentEmpresa.id]; return proximo; });
     saveUpdatedEmpresas(lista, currentEmpresa.id);
+  };
+
+  const handleAtalhoRetirada = (fracao: number) => {
+    if (!currentEmpresa) return;
+    setQuantiaRetirada(String(Math.max(0, Math.floor(currentEmpresa.caixaPJ * fracao))));
+  };
+
+  const handleAtalhoAporte = (fracao: number) => {
+    setQuantiaAporte(String(Math.max(0, Math.floor(vida.saldoBancario * fracao))));
   };
 
   // 4. Modificar salário médio (suporte a input direto e delta)
@@ -156,6 +170,7 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
     const valorValido = Math.max(1518, novoSalario); // salário mínimo nacional
     const atualizada = { ...currentEmpresa, salarioMedio: valorValido };
     const lista = empresasList.map((e) => (e.id === currentEmpresa.id ? atualizada : e));
+    setRascunhosSalario((atual) => { const proximo = { ...atual }; delete proximo[currentEmpresa.id]; return proximo; });
     saveUpdatedEmpresas(lista, currentEmpresa.id);
   };
 
@@ -666,12 +681,20 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
                     <Minus className="w-3.5 h-3.5" />
                   </button>
                   <input
-                    type="number"
-                    min="1"
-                    max="10000"
-                    value={currentEmpresa.precoVenda}
-                    onChange={(e) => handleDefinirPreco(Number(e.target.value) || 1)}
-                    className="w-24 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-center font-mono font-bold text-sm text-emerald-400 focus:outline-none focus:border-emerald-500"
+                    type="text"
+                    inputMode="numeric"
+                    aria-label="Preço unitário de venda"
+                    value={rascunhosPreco[currentEmpresa.id] ?? String(currentEmpresa.precoVenda)}
+                    onChange={(e) => setRascunhosPreco((atual) => ({ ...atual, [currentEmpresa.id]: e.target.value.replace(/[^0-9]/g, '') }))}
+                    onBlur={() => {
+                      const texto = rascunhosPreco[currentEmpresa.id];
+                      if (texto === undefined) return;
+                      const valor = Number(texto);
+                      if (texto.trim() && Number.isFinite(valor) && valor >= 1) handleDefinirPreco(valor);
+                      else setRascunhosPreco((atual) => { const proximo = { ...atual }; delete proximo[currentEmpresa.id]; return proximo; });
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                    className="w-28 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-center font-mono font-bold text-sm text-emerald-400 focus:outline-none focus:border-emerald-500"
                   />
                   <button
                     onClick={() => handleDefinirPreco(currentEmpresa.precoVenda + 5)}
@@ -737,11 +760,19 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
                     <Minus className="w-3.5 h-3.5" />
                   </button>
                   <input
-                    type="number"
-                    min="1518"
-                    step="100"
-                    value={currentEmpresa.salarioMedio}
-                    onChange={(e) => handleDefinirSalario(Number(e.target.value) || 1518)}
+                    type="text"
+                    inputMode="numeric"
+                    aria-label="Salário médio oferecido"
+                    value={rascunhosSalario[currentEmpresa.id] ?? String(currentEmpresa.salarioMedio)}
+                    onChange={(e) => setRascunhosSalario((atual) => ({ ...atual, [currentEmpresa.id]: e.target.value.replace(/[^0-9]/g, '') }))}
+                    onBlur={() => {
+                      const texto = rascunhosSalario[currentEmpresa.id];
+                      if (texto === undefined) return;
+                      const valor = Number(texto);
+                      if (texto.trim() && Number.isFinite(valor) && valor >= 1518) handleDefinirSalario(valor);
+                      else setRascunhosSalario((atual) => { const proximo = { ...atual }; delete proximo[currentEmpresa.id]; return proximo; });
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                     className="w-28 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-center font-mono font-bold text-sm text-amber-400 focus:outline-none focus:border-amber-500"
                   />
                   <button
@@ -790,13 +821,20 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
                 <span className="font-semibold text-emerald-400 flex items-center gap-1">
                   <ArrowUpRight className="w-3.5 h-3.5" /> Retirar Dividendos
                 </span>
+                <div className="text-[11px] text-slate-500">Disponível no caixa PJ: {formatarMoedaCompacta(currentEmpresa?.caixaPJ || 0)}</div>
                 <input
-                  type="number"
-                  placeholder="Valor em R$"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Digite o valor em R$"
                   value={quantiaRetirada}
-                  onChange={(e) => setQuantiaRetirada(e.target.value)}
+                  onChange={(e) => setQuantiaRetirada(e.target.value.replace(/[^0-9]/g, ''))}
                   className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-200"
                 />
+                <div className="grid grid-cols-3 gap-1">
+                  <button type="button" onClick={() => handleAtalhoRetirada(0.25)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">25%</button>
+                  <button type="button" onClick={() => handleAtalhoRetirada(0.5)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">50%</button>
+                  <button type="button" onClick={() => handleAtalhoRetirada(1)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">Retirar tudo</button>
+                </div>
                 <button
                   onClick={handleRetirarDividendos}
                   className="w-full py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition"
@@ -810,13 +848,20 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
                 <span className="font-semibold text-blue-400 flex items-center gap-1">
                   <ArrowDownLeft className="w-3.5 h-3.5" /> Aporte de Capital
                 </span>
+                <div className="text-[11px] text-slate-500">Disponível na conta PF: {formatarMoedaCompacta(vida.saldoBancario)}</div>
                 <input
-                  type="number"
-                  placeholder="Valor em R$"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Digite o valor em R$"
                   value={quantiaAporte}
-                  onChange={(e) => setQuantiaAporte(e.target.value)}
+                  onChange={(e) => setQuantiaAporte(e.target.value.replace(/[^0-9]/g, ''))}
                   className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-200"
                 />
+                <div className="grid grid-cols-3 gap-1">
+                  <button type="button" onClick={() => handleAtalhoAporte(0.25)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">25%</button>
+                  <button type="button" onClick={() => handleAtalhoAporte(0.5)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">50%</button>
+                  <button type="button" onClick={() => handleAtalhoAporte(1)} className="rounded bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700">Aportar tudo</button>
+                </div>
                 <button
                   onClick={handleInjetarCapital}
                   className="w-full py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition"

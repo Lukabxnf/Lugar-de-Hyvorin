@@ -772,6 +772,102 @@ export const LifeView: React.FC<LifeViewProps> = ({
     onShowMessage('Você solicitou rescisão do seu contrato de trabalho formal.');
   };
 
+  const handleComprarVeiculo = (modeloId: string) => {
+    const modelo = VEICULOS_CATALOGO[modeloId];
+    if (!modelo) return;
+    if (vida.saldoBancario < modelo.precoCompra) {
+      onShowMessage(`Saldo insuficiente. O veículo custa R$ ${modelo.precoCompra.toLocaleString('pt-BR')}.`);
+      return;
+    }
+
+    const novoSaldo = vida.saldoBancario - modelo.precoCompra;
+    const novoVeiculo: VeiculoProprio = {
+      id: `veiculo_${Date.now()}_${modelo.id}`,
+      modeloId: modelo.id,
+      nome: modelo.nome,
+      anoCompra: anoAtual,
+      valorMercadoAtual: modelo.precoCompra,
+    };
+    const vidaComSaida = registrarTransacaoFinanceira(
+      { ...vida, saldoBancario: novoSaldo },
+      { dia: diaAtual, mes: mesAtual, ano: anoAtual },
+      'despesa_paga',
+      `Compra de veículo: ${modelo.nome}`,
+      -modelo.precoCompra
+    );
+
+    onUpdateEstado({
+      ...estado,
+      vida: {
+        ...vidaComSaida,
+        veiculos: [...(vida.veiculos || []), novoVeiculo],
+      },
+    });
+    onShowMessage(`${modelo.nome} comprado. A manutenção mensal estimada é de R$ ${modelo.custoMensalManutencao.toLocaleString('pt-BR')}.`);
+  };
+
+  const handleComprarMoradia = (moradiaId: TipoMoradia) => {
+    const novaMoradia = MORADIAS[moradiaId];
+    const custoCompra = novaMoradia?.custoCompra;
+    if (!novaMoradia || !custoCompra) return;
+    if (vida.casaPropria && vida.moradia === moradiaId) {
+      onShowMessage('Você já possui este imóvel.');
+      return;
+    }
+
+    // Na troca de imóvel, o imóvel anterior é vendido antes da nova compra.
+    const moradiaAtual = MORADIAS[vida.moradia];
+    const valorVendaAnterior = vida.casaPropria
+      ? Math.round((moradiaAtual?.custoCompra || 0) * 0.9)
+      : 0;
+    const custoLiquido = custoCompra - valorVendaAnterior;
+    if (vida.saldoBancario < Math.max(0, custoLiquido)) {
+      onShowMessage(`Saldo insuficiente. Após a venda do imóvel atual, faltariam R$ ${(custoLiquido - vida.saldoBancario).toLocaleString('pt-BR')}.`);
+      return;
+    }
+
+    let vidaAtualizada: typeof vida = { ...vida, saldoBancario: vida.saldoBancario + valorVendaAnterior };
+    if (valorVendaAnterior > 0) {
+      vidaAtualizada = registrarTransacaoFinanceira(
+        vidaAtualizada,
+        { dia: diaAtual, mes: mesAtual, ano: anoAtual },
+        'transferencia',
+        `Venda do imóvel anterior: ${moradiaAtual?.nome || 'imóvel'}`,
+        valorVendaAnterior
+      );
+    }
+    vidaAtualizada = {
+      ...vidaAtualizada,
+      saldoBancario: vidaAtualizada.saldoBancario - custoCompra,
+      moradia: moradiaId,
+      casaPropria: true,
+    };
+    vidaAtualizada = registrarTransacaoFinanceira(
+      vidaAtualizada,
+      { dia: diaAtual, mes: mesAtual, ano: anoAtual },
+      'despesa_paga',
+      `Compra de imóvel: ${novaMoradia.nome}`,
+      -custoCompra
+    );
+
+    onUpdateEstado({ ...estado, vida: vidaAtualizada });
+    onShowMessage(`Imóvel adquirido: ${novaMoradia.nome}. A despesa mensal estimada agora é de R$ ${Math.round(novaMoradia.custoMensal * 0.3).toLocaleString('pt-BR')} em condomínio e IPTU.`);
+  };
+
+  const handleAlugarMoradia = (moradiaId: TipoMoradia) => {
+    const novaMoradia = MORADIAS[moradiaId];
+    if (!novaMoradia || moradiaId === 'pais') return;
+    if (vida.casaPropria) {
+      onShowMessage('Venda seu imóvel atual antes de mudar para um aluguel.');
+      return;
+    }
+    onUpdateEstado({
+      ...estado,
+      vida: { ...vida, moradia: moradiaId, casaPropria: false },
+    });
+    onShowMessage(`Você mudou para ${novaMoradia.nome}. Aluguel mensal: R$ ${novaMoradia.custoMensal.toLocaleString('pt-BR')}.`);
+  };
+
   // Auxiliares visuais
   const getCorScore = (score: number) => {
     if (score < 350) return { texto: 'Ruim (Alto Risco)', cor: 'text-red-400', bg: 'bg-red-950/60 border-red-800' };
@@ -1535,45 +1631,89 @@ export const LifeView: React.FC<LifeViewProps> = ({
         </div>
       )}
 
-      {/* 7. SEÇÃO VEÍCULOS & BENS */}
+      {/* 7. VEÍCULOS: garagem e concessionária */}
       {activeSubSection === 'bens' && (
         <div className="space-y-6">
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
-            <h3 className="font-bold text-slate-100 flex items-center gap-2 mb-3">
-              <Car className="w-5 h-5 text-cyan-400" />
-              Garagem & Veículos Próprios ({vida.veiculos?.length || 0})
-            </h3>
+          <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-slate-100 flex items-center gap-2"><Car className="w-5 h-5 text-cyan-400" /> Minha garagem</h3>
+                <p className="text-xs text-slate-400 mt-1">Veículos registrados no seu patrimônio.</p>
+              </div>
+              <span className="text-xs text-slate-400">{vida.veiculos?.length || 0} veículo(s)</span>
+            </div>
             {(!vida.veiculos || vida.veiculos.length === 0) ? (
-              <p className="text-xs text-slate-400">Você não possui nenhum veículo registrado em seu nome.</p>
+              <p className="rounded-xl border border-dashed border-slate-700 p-4 text-sm text-slate-400">Sua garagem está vazia. Veja os modelos disponíveis abaixo.</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {vida.veiculos.map(v => (
-                  <div key={v.id} className="p-3.5 rounded-xl bg-slate-800/50 border border-slate-700 text-xs space-y-2">
-                    <span className="font-bold text-slate-200 block text-sm">{v.nome}</span>
-                    <div className="flex justify-between text-slate-400 text-[11px]">
-                      <span>Ano de Compra: {v.anoCompra}</span>
-                      <span className="font-mono text-cyan-400 font-bold">R$ {v.valorMercadoAtual.toLocaleString('pt-BR')}</span>
+                {vida.veiculos.map(v => {
+                  const modelo = VEICULOS_CATALOGO[v.modeloId];
+                  return (
+                    <div key={v.id} className="p-4 rounded-xl bg-slate-800/50 border border-slate-700 space-y-2">
+                      <div className="font-bold text-slate-100">{v.nome}</div>
+                      <div className="flex justify-between text-xs text-slate-400"><span>Ano de compra: {v.anoCompra}</span><span className="font-mono text-cyan-300">{formatarMoedaCompacta(v.valorMercadoAtual)}</span></div>
+                      <div className="text-xs text-slate-500">Manutenção estimada: {formatarMoedaCompacta(modelo?.custoMensalManutencao || 0)}/mês</div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
-          </div>
+          </section>
+          <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div><h3 className="font-bold text-slate-100">Concessionária</h3><p className="text-xs text-slate-400 mt-1">A compra reduz seu saldo imediatamente e cria despesas recorrentes de manutenção.</p></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {Object.values(VEICULOS_CATALOGO).map(modelo => {
+                const jaPossui = (vida.veiculos || []).some(v => v.modeloId === modelo.id);
+                return (
+                  <div key={modelo.id} className="rounded-xl border border-slate-700 bg-slate-950/60 p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2"><span className="font-semibold text-sm text-slate-100">{modelo.nome}</span><span className="text-[10px] uppercase text-slate-500">{modelo.categoria}</span></div>
+                    <div className="text-lg font-bold font-mono text-cyan-300">{formatarMoedaCompacta(modelo.precoCompra)}</div>
+                    <div className="text-xs text-slate-400">Manutenção: {formatarMoedaCompacta(modelo.custoMensalManutencao)}/mês</div>
+                    <div className="text-xs text-slate-500">Conforto {modelo.conforto}/100 • Prestígio {modelo.prestígio}/100</div>
+                    <button type="button" disabled={jaPossui || vida.saldoBancario < modelo.precoCompra} onClick={() => handleComprarVeiculo(modelo.id)} className="w-full rounded-lg py-2 text-xs font-bold bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-500 text-white transition">
+                      {jaPossui ? 'Já está na garagem' : vida.saldoBancario < modelo.precoCompra ? 'Saldo insuficiente' : 'Comprar veículo'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         </div>
       )}
 
-      {/* 8. SEÇÃO MORADIA */}
+      {/* 8. MORADIA: imóvel atual, compra e aluguel */}
       {activeSubSection === 'moradia' && (
         <div className="space-y-6">
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
-            <h3 className="font-bold text-slate-100 flex items-center gap-2 mb-3">
-              <Home className="w-5 h-5 text-amber-400" />
-              Moradia Atual: {MORADIAS[vida.moradia]?.nome}
-            </h3>
-            <p className="text-xs text-slate-400 mb-4">
-              Situação: <strong>{vida.casaPropria ? 'Imóvel Próprio Quitado' : 'Aluguel'}</strong> • Custo Mensal: R$ {Math.round(vida.casaPropria ? MORADIAS[vida.moradia].custoMensal * 0.3 : MORADIAS[vida.moradia].custoMensal)}/mês
-            </p>
-          </div>
+          <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-3">
+            <div className="flex items-center gap-2"><Home className="w-5 h-5 text-amber-400" /><h3 className="font-bold text-slate-100">Minha moradia</h3></div>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div><div className="text-lg font-bold text-slate-100">{MORADIAS[vida.moradia]?.nome || 'Moradia não definida'}</div><div className="text-xs text-slate-400 mt-1">{vida.casaPropria ? 'Imóvel próprio' : 'Imóvel alugado ou cedido'}</div></div>
+              <div className="text-right"><div className="text-[10px] uppercase text-slate-500">Custo mensal</div><div className="text-lg font-mono font-bold text-amber-300">R$ {Math.round(vida.casaPropria ? (MORADIAS[vida.moradia]?.custoMensal || 0) * 0.3 : (MORADIAS[vida.moradia]?.custoMensal || 0)).toLocaleString('pt-BR')}</div></div>
+            </div>
+            {vida.casaPropria && <p className="text-xs text-slate-500">O valor do imóvel entra no patrimônio líquido. Na troca, o imóvel atual é vendido por 90% do valor de referência do catálogo.</p>}
+          </section>
+          <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div><h3 className="font-bold text-slate-100">Imóveis disponíveis</h3><p className="text-xs text-slate-400 mt-1">Você pode comprar um imóvel ou mudar para uma opção de aluguel. A compra exige saldo disponível.</p></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {Object.values(MORADIAS).filter(m => m.id !== 'pais').map(imovel => {
+                const jaMora = vida.moradia === imovel.id;
+                const podeComprar = !!imovel.custoCompra && vida.saldoBancario >= Math.max(0, imovel.custoCompra - (vida.casaPropria ? Math.round((MORADIAS[vida.moradia]?.custoCompra || 0) * 0.9) : 0));
+                return (
+                  <div key={imovel.id} className="rounded-xl border border-slate-700 bg-slate-950/60 p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2"><span className="font-semibold text-sm text-slate-100">{imovel.nome}</span>{jaMora && <span className="text-[10px] rounded-full bg-emerald-500/15 px-2 py-1 text-emerald-300">Atual</span>}</div>
+                    <div className="grid grid-cols-2 gap-2 text-xs"><div><div className="text-slate-500">Compra</div><div className="font-mono font-bold text-amber-300">{imovel.custoCompra ? formatarMoedaCompacta(imovel.custoCompra) : 'Não disponível'}</div></div><div><div className="text-slate-500">Aluguel mensal</div><div className="font-mono text-slate-200">{formatarMoedaCompacta(imovel.custoMensal)}</div></div></div>
+                    <div className="text-xs text-slate-500">Conforto {imovel.conforto}/100 • Benefício de saúde +{imovel.bonusSaude}</div>
+                    <div className="flex gap-2">
+                      <button type="button" disabled={!imovel.custoCompra || (jaMora && vida.casaPropria) || !podeComprar} onClick={() => handleComprarMoradia(imovel.id)} className="flex-1 rounded-lg py-2 text-xs font-bold bg-amber-600 hover:bg-amber-500 disabled:bg-slate-800 disabled:text-slate-500 text-white transition">
+                        {jaMora && vida.casaPropria ? 'Imóvel próprio atual' : !podeComprar ? 'Saldo insuficiente' : 'Comprar'}
+                      </button>
+                      <button type="button" disabled={vida.casaPropria || jaMora} onClick={() => handleAlugarMoradia(imovel.id)} className="flex-1 rounded-lg py-2 text-xs font-semibold border border-slate-700 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 transition">Alugar</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         </div>
       )}
 
