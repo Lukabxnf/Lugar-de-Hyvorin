@@ -59,7 +59,7 @@ export const Header: React.FC<HeaderProps> = ({
   const eleicaoInfo = isAnoEleitoral(estado.mesesTotais);
   const patrimonioPessoal = estado.vida.saldoBancario - estado.vida.dividaPessoal;
 
-  const horaFormatada = `${String(estado.horaAtual ?? 8).padStart(2, '0')}:00`;
+  const horaFormatada = `${String(estado.horaAtual ?? 8).padStart(2, '0')}:${String(estado.minutoAtual ?? 0).padStart(2, '0')}`;
   const diaSemana = estado.diaSemanaAtual || 'Segunda-feira';
   const diaAtual = estado.diaAtual || 1;
   const mesNome = NOMES_MESES[(estado.mesAtual || 1) - 1];
@@ -239,7 +239,7 @@ export const Header: React.FC<HeaderProps> = ({
                     ? 'bg-emerald-600 text-white shadow'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
-                title={`Velocidade ${spd}x (Avanço por horas)`}
+                title={`Velocidade ${spd}x (${spd * 10} minutos simulados por segundo)`}
               >
                 X{spd}
               </button>
