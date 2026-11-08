@@ -21,7 +21,7 @@ export const NPCPortrait: React.FC<{ pessoa: Relacionamento; className?: string 
     roupa: roupas[(seed >> 9) % roupas.length],
     acessorio: (seed % 7 === 0) ? 'oculos' : 'nenhum',
     sexo: feminino ? 'feminino' : 'masculino',
-    barba: !feminino && seed % 5 === 0 ? 'rala' : 'nenhuma',
+    barba: !feminino && seed % 5 === 0 ? 'curta' : 'nenhuma',
   };
   return (
     <div className={`shrink-0 overflow-hidden rounded-lg border border-slate-600 bg-slate-800 ${className}`}
