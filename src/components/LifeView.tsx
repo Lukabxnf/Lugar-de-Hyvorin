@@ -221,6 +221,9 @@ export const LifeView: React.FC<LifeViewProps> = ({
       idade: Math.max(18, vida.idade + Math.floor(Math.random() * 5) - 2),
       ocupacao: profEscolhida,
       personalidade: 'Simpático(a) e sociável',
+      mesesConvivencia: 0,
+      mesesSemContato: 0,
+      interacoesSignificativas: 0,
     };
 
     const conhecidosAtuais = vida.familia?.conhecidos || [];
@@ -240,7 +243,7 @@ export const LifeView: React.FC<LifeViewProps> = ({
     onShowMessage(`Você conheceu ${novoConhecido.nome} (${novoConhecido.ocupacao})! Um novo contato foi adicionado.`);
   };
 
-  // Evoluir relação com conhecido (Conversar, Almoço, Flertar)
+  // Interações graduais: cada contato fortalece o vínculo e pode mudar seu estágio.
   const handleAumentarAfinidade = (rel: Relacionamento, tipoAcao: 'conversar' | 'almoco' | 'encontro') => {
     let custo = 0;
     let ganho = 5;
@@ -253,6 +256,10 @@ export const LifeView: React.FC<LifeViewProps> = ({
       custo = 180;
       ganho = 18;
       gastoEnergia = 6;
+      if (!['amigo_proximo', 'flerte', 'namorado', 'conjuge'].includes(rel.tipo)) {
+        onShowMessage('Um encontro romântico exige que vocês já tenham desenvolvido uma amizade próxima.');
+        return;
+      }
     }
 
     if (vida.saldoBancario < custo) {
@@ -260,17 +267,49 @@ export const LifeView: React.FC<LifeViewProps> = ({
       return;
     }
 
-    const atualizarLista = (lista: Relacionamento[]) =>
-      lista.map(r => (r.id === rel.id ? { ...r, nivelAfinidade: Math.min(100, r.nivelAfinidade + ganho) } : r));
+    const atualizarContato = (contato: Relacionamento): Relacionamento => {
+      if (contato.id !== rel.id) return contato;
+      const afinidade = Math.min(100, contato.nivelAfinidade + ganho);
+      const interacoes = (contato.interacoesSignificativas ?? 0) + 1;
+      let tipo = contato.tipo;
 
-    let novaFamilia = { ...vida.familia };
-    if (novaFamilia.conjuge?.id === rel.id) {
-      novaFamilia.conjuge = { ...novaFamilia.conjuge, nivelAfinidade: Math.min(100, novaFamilia.conjuge.nivelAfinidade + ganho) };
-    }
-    novaFamilia.filhos = atualizarLista(novaFamilia.filhos || []);
-    novaFamilia.parentes = atualizarLista(novaFamilia.parentes || []);
-    novaFamilia.amigos = atualizarLista(novaFamilia.amigos || []);
-    novaFamilia.conhecidos = atualizarLista(novaFamilia.conhecidos || []);
+      if (tipo === 'conhecido' && afinidade >= 55 && interacoes >= 3) {
+        tipo = 'amigo';
+      } else if (tipo === 'amigo' && afinidade >= 72 && interacoes >= 5) {
+        tipo = 'amigo_proximo';
+      } else if (
+        tipo === 'amigo_proximo' &&
+        tipoAcao === 'encontro' &&
+        afinidade >= 82 &&
+        interacoes >= 6
+      ) {
+        tipo = 'flerte';
+      }
+
+      return {
+        ...contato,
+        tipo,
+        nivelAfinidade: afinidade,
+        interacoesSignificativas: interacoes,
+        mesesSemContato: 0,
+      };
+    };
+
+    const contatos = [
+      ...(vida.familia.conhecidos || []),
+      ...(vida.familia.amigos || []),
+    ].map(atualizarContato);
+    const novaFamilia = {
+      ...vida.familia,
+      conhecidos: contatos.filter(contato => contato.tipo === 'conhecido'),
+      amigos: contatos.filter(contato => contato.tipo !== 'conhecido'),
+      filhos: (vida.familia.filhos || []).map(atualizarContato),
+      parentes: (vida.familia.parentes || []).map(atualizarContato),
+      conjuge: vida.familia.conjuge ? atualizarContato(vida.familia.conjuge) : undefined,
+    };
+    const contatoAtualizado = contatos.find(contato => contato.id === rel.id)
+      || novaFamilia.conjuge
+      || rel;
 
     onUpdateEstado({
       ...estado,
@@ -282,7 +321,15 @@ export const LifeView: React.FC<LifeViewProps> = ({
         familia: novaFamilia,
       },
     });
-    onShowMessage(`Você teve um ótimo momento com ${rel.nome}! Afinidade: +${ganho}%.`);
+
+    const etapa = contatoAtualizado.tipo === 'flerte'
+      ? 'Vocês começaram a demonstrar interesse romântico.'
+      : contatoAtualizado.tipo === 'amigo_proximo'
+      ? 'A amizade ficou mais próxima.'
+      : contatoAtualizado.tipo === 'amigo'
+      ? 'A relação evoluiu para amizade.'
+      : 'O contato foi fortalecido.';
+    onShowMessage(`Você passou um tempo com ${rel.nome}. Afinidade: ${contatoAtualizado.nivelAfinidade}%. ${etapa}`);
   };
 
   // Pedir em Namoro (necessita afinidade >= 65 e ser conhecido/amigo/flerte)
@@ -291,15 +338,23 @@ export const LifeView: React.FC<LifeViewProps> = ({
       onShowMessage('Você já tem um relacionamento amoroso compromissado.');
       return;
     }
-    if (rel.nivelAfinidade < 60) {
-      onShowMessage(`${rel.nome} ainda não tem afinidade suficiente para assumir um namoro. Saia e converse mais.`);
+    if (
+      rel.tipo !== 'flerte' ||
+      rel.nivelAfinidade < 85 ||
+      (rel.interacoesSignificativas ?? 0) < 8 ||
+      (rel.mesesConvivencia ?? 0) < 2
+    ) {
+      onShowMessage(`${rel.nome} ainda não está pronto(a) para assumir um namoro. É preciso construir um flerte, manter afinidade alta e conviver por pelo menos dois meses.`);
       return;
     }
 
     const novoPar: Relacionamento = {
       ...rel,
       tipo: 'namorado',
-      nivelAfinidade: Math.min(100, rel.nivelAfinidade + 15),
+      nivelAfinidade: Math.min(100, rel.nivelAfinidade + 5),
+      mesesNoRelacionamento: 0,
+      mesesCasado: 0,
+      mesesSemContato: 0,
     };
 
     const novosConhecidos = (vida.familia.conhecidos || []).filter(c => c.id !== rel.id);
@@ -328,8 +383,11 @@ export const LifeView: React.FC<LifeViewProps> = ({
       onShowMessage('É necessário estar namorando alguém antes de oficializar o matrimônio.');
       return;
     }
-    if (vida.familia.conjuge.nivelAfinidade < 75) {
-      onShowMessage('Seu parceiro(a) ainda acha muito cedo para casamento. Fortaleça a afinidade primeiro.');
+    if (
+      vida.familia.conjuge.nivelAfinidade < 85 ||
+      (vida.familia.conjuge.mesesNoRelacionamento ?? 0) < 6
+    ) {
+      onShowMessage('O casamento exige afinidade de pelo menos 85% e seis meses de namoro.');
       return;
     }
     const custoCartorio = 1_250;
@@ -351,6 +409,8 @@ export const LifeView: React.FC<LifeViewProps> = ({
             ...vida.familia.conjuge,
             tipo: 'conjuge',
             nivelAfinidade: 100,
+            mesesCasado: 0,
+            mesesSemContato: 0,
           },
         },
       },
@@ -364,8 +424,15 @@ export const LifeView: React.FC<LifeViewProps> = ({
       onShowMessage('Já existe um processo familiar em andamento no momento.');
       return;
     }
-    if (vida.familia?.estadoCivil !== 'casado' && vida.familia?.estadoCivil !== 'namorando') {
-      onShowMessage('Para planejamento familiar, é recomendável estar em união estável ou casamento.');
+    if (vida.familia?.estadoCivil !== 'casado' || !vida.familia.conjuge) {
+      onShowMessage('O planejamento de filhos exige casamento registrado no estado atual do jogo.');
+      return;
+    }
+    if (
+      vida.familia.conjuge.nivelAfinidade < 80 ||
+      (vida.familia.conjuge.mesesCasado ?? 0) < 3
+    ) {
+      onShowMessage('É necessário manter o relacionamento estável por pelo menos três meses após o casamento e ter afinidade mínima de 80%.');
       return;
     }
 
@@ -1138,7 +1205,7 @@ export const LifeView: React.FC<LifeViewProps> = ({
                 <div key={rel.id} className="p-3 rounded-xl bg-slate-800/40 border border-slate-700/60 flex items-center justify-between gap-3 text-xs">
                   <div>
                     <span className="font-bold text-slate-200 block">{rel.nome}</span>
-                    <span className="text-[11px] text-slate-400">{rel.ocupacao || 'Contato'} • Afinidade: {rel.nivelAfinidade}%</span>
+                    <span className="text-[11px] text-slate-400">{rel.ocupacao || 'Contato'} • {rel.tipo.replace('_', ' ')} • Afinidade: {rel.nivelAfinidade}%</span>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
@@ -1147,7 +1214,25 @@ export const LifeView: React.FC<LifeViewProps> = ({
                     >
                       Conversar
                     </button>
-                    {rel.nivelAfinidade >= 60 && !vida.familia?.conjuge && (
+                    <button
+                      onClick={() => handleAumentarAfinidade(rel, 'almoco')}
+                      className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 text-[11px] font-semibold"
+                    >
+                      Almoçar
+                    </button>
+                    {['amigo_proximo', 'flerte'].includes(rel.tipo) && !vida.familia?.conjuge && (
+                      <button
+                        onClick={() => handleAumentarAfinidade(rel, 'encontro')}
+                        className="px-2 py-1 rounded bg-indigo-700 hover:bg-indigo-600 text-white text-[11px] font-semibold"
+                      >
+                        Encontro
+                      </button>
+                    )}
+                    {rel.tipo === 'flerte' &&
+                      rel.nivelAfinidade >= 85 &&
+                      (rel.interacoesSignificativas ?? 0) >= 8 &&
+                      (rel.mesesConvivencia ?? 0) >= 2 &&
+                      !vida.familia?.conjuge && (
                       <button
                         onClick={() => handlePedirEmNamoro(rel)}
                         className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold"
