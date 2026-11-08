@@ -1,0 +1,6 @@
+{
+  "name": "CIDADÃO - Simulador de Vida, Negócios, Economia & Política",
+  "description": "Simulador dinâmico e estratégico da realidade brasileira: gerencie vida pessoal, crie e expanda empresas, domine a macroeconomia com inflação e Selic, e dispute eleições até a Presidência.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
