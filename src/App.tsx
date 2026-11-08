@@ -61,6 +61,7 @@ function sanitizarEstado(raw: any): EstadoJogo {
       rotinaHorarios: raw.vida?.rotinaHorarios || base.vida.rotinaHorarios,
       atividadeAtual: (raw.vida?.horasRestantesAtividade || 0) > 0 ? (raw.vida?.atividadeAtual || 'livre') : 'livre',
       horasRestantesAtividade: Math.max(0, Math.floor(raw.vida?.horasRestantesAtividade || 0)),
+      aulaFormal: (raw.vida?.horasRestantesAtividade || 0) > 0 ? !!raw.vida?.aulaFormal : false,
       energia: raw.vida?.energia ?? 85,
       familia: raw.vida?.familia || base.vida.familia,
       veiculos: raw.vida?.veiculos || base.vida.veiculos,
@@ -282,6 +283,7 @@ export default function App() {
           reputacao: Math.max(0, Math.min(100, novaReputacao)),
           familia: novaFamilia,
           atividadeAtual: c.atividade || prev.vida.atividadeAtual,
+          aulaFormal: c.atividade ? !!c.aulaFormal : (prev.vida.aulaFormal || false),
           horasRestantesAtividade: c.atividade
             ? Math.max(1, Math.floor(c.duracaoAtividadeHoras || 1))
             : (prev.vida.horasRestantesAtividade || 0),
