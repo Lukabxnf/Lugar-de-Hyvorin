@@ -269,11 +269,31 @@ test('Finance: net worth includes property, vehicles and company equity without 
       status: 'em_dia' as const,
     }],
   };
-  const empresa = {
-    ...estado.empresas[0],
+  const empresa: Empresa = {
+    id: 'empresa_patrimonio_teste',
+    nome: 'Empresa de Teste',
+    setorId: 'tecnologia',
+    porte: 'LTDA',
+    funcionarios: 2,
+    salarioMedio: 3000,
+    capacidadeMaquinas: 100,
+    precoVenda: 50,
+    estoque: 10,
     caixaPJ: 50000,
-    patrimonioMaquinas: 60000,
     dividaPJ: 10000,
+    patrimonioMaquinas: 60000,
+    historicoLucro: [],
+    ultimoMes: {
+      receita: 0,
+      custoInsumos: 0,
+      custoFolha: 0,
+      jurosDivida: 0,
+      impostos: 0,
+      lucroLiquido: 0,
+      unidadesVendidas: 0,
+      unidadesProduzidas: 0,
+    },
+    ativa: true,
   };
   const resumo = calcularPatrimonioLiquido(vida, [empresa]);
 
