@@ -61,6 +61,41 @@ async function chamarModelo(chave, modelo, leitura, tipo, esqueleto) {
   });
 }
 
+// Verifica se a chave permite acessar o catálogo de modelos, sem consumir
+// uma geração de texto e sem gravar a credencial no servidor.
+app.post('/api/groq/test', async (req, res) => {
+  const chave = typeof req.body?.key === 'string' ? req.body.key.trim() : '';
+  if (!chave || !chave.startsWith('gsk_') || chave.length > 500) {
+    return res.status(400).json({ ok: false, mensagem: 'Informe uma chave Groq válida.' });
+  }
+  try {
+    const resposta = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: { Authorization: `Bearer ${chave}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!resposta.ok) {
+      return res.status(502).json({
+        ok: false,
+        mensagem: resposta.status === 401 || resposta.status === 403
+          ? 'Chave rejeitada pela Groq. Verifique a credencial.'
+          : 'A Groq não confirmou a conexão. Verifique a disponibilidade do serviço.',
+      });
+    }
+    const corpo = await resposta.json().catch(() => ({}));
+    const modelos = Array.isArray(corpo?.data) ? corpo.data : [];
+    const preferidos = ['qwen/qwen3.8-27b', 'openai/gpt-oss-20b'];
+    const disponivel = preferidos.find(nome => modelos.some(item => item?.id === nome));
+    return res.json({
+      ok: true,
+      mensagem: disponivel
+        ? `Conexão válida. Modelo disponível: ${disponivel}.`
+        : 'Chave válida. Os modelos configurados não aparecem no catálogo atual; pode ser necessário atualizar o modelo.',
+    });
+  } catch {
+    return res.status(502).json({ ok: false, mensagem: 'Não foi possível verificar a conexão neste momento.' });
+  }
+});
+
 app.post('/api/groq', async (req, res) => {
   const chave = typeof req.body?.key === 'string' ? req.body.key.trim() : '';
   const tipo = req.body?.kind;
