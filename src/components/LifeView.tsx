@@ -37,9 +37,9 @@ import {
   TipoMoradia,
   VeiculoProprio,
 } from '../engine/types';
-import { CARREIRAS, CURSOS, MORADIAS, VEICULOS_CATALOGO } from '../engine/data';
+import { CARREIRAS, CARGOS_POLITICOS, CURSOS, MORADIAS, VEICULOS_CATALOGO } from '../engine/data';
 import { calcularIdadeExata } from '../engine/life';
-import { formatarMoedaCompacta, registrarTransacaoFinanceira } from '../engine/finance';
+import { analisarCreditoPessoal, formatarMoedaCompacta, registrarTransacaoFinanceira } from '../engine/finance';
 
 interface LifeViewProps {
   estado: EstadoJogo;
@@ -171,13 +171,32 @@ export const LifeView: React.FC<LifeViewProps> = ({
       return;
     }
 
-    // Taxa mensal realista: Selic anual / 12 + spread do banco baseado no score
-    const spreadRisco = (1000 - vida.scoreCredito) / 1000 * 1.5; // +0% a +1.5% ao mês
-    const taxaMensal = Number((((macro.taxaSelic / 12) + 0.8 + spreadRisco) / 100).toFixed(4));
-    
-    // Parcela pela tabela Price simplificada
-    const fatorJuros = Math.pow(1 + taxaMensal, parcelas);
-    const valorParcela = Math.round(valor * ((taxaMensal * fatorJuros) / (fatorJuros - 1)));
+    const cargo = CARGOS_POLITICOS[politica.cargoAtual];
+    const rendaMensalVerificada = Math.max(
+      vida.empregoAtual?.salarioAcordado || 0,
+      cargo?.salarioMensal || 0
+    );
+    const parcelasExistentes = vida.emprestimosContratados
+      .filter(emp => emp.status !== 'quitado' && emp.parcelasPagas < emp.parcelasTotais)
+      .reduce((total, emp) => total + emp.valorParcela, 0);
+
+    const analiseCredito = analisarCreditoPessoal(
+      macro,
+      vida.scoreCredito,
+      rendaMensalVerificada,
+      parcelasExistentes,
+      valor,
+      parcelas
+    );
+    if (!analiseCredito.aprovado) {
+      onShowMessage(
+        `Crédito recusado: ${analiseCredito.motivo} Capacidade disponível: R$ ${analiseCredito.capacidadeParcelaDisponivel.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}.`
+      );
+      return;
+    }
+
+    const taxaMensal = analiseCredito.taxaMensalEfetiva;
+    const valorParcela = Math.round(analiseCredito.valorParcela);
 
     const novoEmprestimo: EmprestimoContratado = {
       id: `emp_${Date.now()}`,
@@ -211,7 +230,7 @@ export const LifeView: React.FC<LifeViewProps> = ({
       },
     });
     setModalNovoEmprestimo(false);
-    onShowMessage(`Empréstimo de R$ ${valor.toLocaleString('pt-BR')} creditado em conta corrente!`);
+    onShowMessage(`Empréstimo de R$ ${valor.toLocaleString('pt-BR')} aprovado a ${(taxaMensal * 100).toFixed(2)}% ao mês, com parcela de R$ ${valorParcela.toLocaleString('pt-BR')}.`);
   };
 
   // 5. Interações Sociais Orgânicas (Conhecer Pessoas, Flertar, Namorar, Casar)
