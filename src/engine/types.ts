@@ -450,6 +450,7 @@ export interface EventoHistoricoResolvido {
 export interface EstadoJogo {
   // Tempo & Relógio Simulado
   horaAtual: number; // 0 a 23
+  minutoAtual?: number; // 0 a 59; opcional para compatibilidade com saves antigos
   diaAtual: number; // 1 a 30
   diaSemanaAtual: DiaSemana;
   mesAtual: number; // 1 a 12
