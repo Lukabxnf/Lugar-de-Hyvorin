@@ -601,6 +601,18 @@ export interface EstadoJogo {
   agendaDisparadaDia?: string;
   agendaEventosDisparados?: string[];
   
+  historicoFechamentos?: Array<{
+    mes: number;
+    ano: number;
+    resumo: {
+      saldoAnterior: number;
+      saldoAtual: number;
+      receitasPessoais: number;
+      despesasPessoais: number;
+      lucroEmpresarialTotal: number;
+      destaques: string[];
+    };
+  }>;
   ultimoResumoMes?: {
     saldoAnterior: number;
     saldoAtual: number;
