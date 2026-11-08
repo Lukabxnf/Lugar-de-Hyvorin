@@ -152,7 +152,7 @@ export const Header: React.FC<HeaderProps> = ({
             <Vote className="w-3.5 h-3.5" />
             {eleicaoInfo.mesesAteEleicao === 0
               ? `Votação ${eleicaoInfo.tipoEleicao === 'geral' ? 'Geral' : 'Municipal'} Agora!`
-              : `Eleição: ${eleicaoInfo.mesesAteEleicao}m`}
+              : `Eleição ${eleicaoInfo.anoEleicao}: ${eleicaoInfo.mesesAteEleicao}m`}
           </button>
         </div>
 
