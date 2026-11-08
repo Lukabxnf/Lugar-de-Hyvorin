@@ -263,6 +263,7 @@ export interface Empresa {
 export interface AvatarConfig {
   // Aparência do avatar. Campos opcionais preservam compatibilidade com partidas antigas.
   sexo?: 'masculino' | 'feminino';
+  formatoRosto?: 'oval' | 'fino' | 'largo' | 'redondo';
   pele: 'clara' | 'morena' | 'negra' | 'oriental';
   cabeloCor: 'castanho' | 'preto' | 'loiro' | 'ruivo' | 'grisalho';
   cabeloEstilo: 'curto' | 'medio' | 'longo' | 'crespo' | 'careca';
