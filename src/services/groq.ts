@@ -75,6 +75,7 @@ async function solicitarGroq<T>(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ key: chave, kind: tipo, reading: leitura, skeleton: esqueleto }),
+    signal: AbortSignal.timeout(28000),
   });
   if (!resposta.ok) return null;
   const dados = await resposta.json();
