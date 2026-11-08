@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   GraduationCap,
   Briefcase,
@@ -50,6 +50,7 @@ interface LifeViewProps {
   onUpdateEstado: (novoEstado: EstadoJogo) => void;
   onShowMessage: (msg: string) => void;
   onStartTime?: () => void;
+  modo?: 'vida' | 'trabalho' | 'patrimonio';
 }
 
 export const LifeView: React.FC<LifeViewProps> = ({
@@ -57,11 +58,16 @@ export const LifeView: React.FC<LifeViewProps> = ({
   onUpdateEstado,
   onShowMessage,
   onStartTime,
+  modo = 'vida',
 }) => {
   const { vida, macro, politica, diaAtual, mesAtual, anoAtual, horaAtual, diaSemanaAtual } = estado;
   const [activeSubSection, setActiveSubSection] = useState<
     'perfil' | 'geral' | 'historico' | 'rotina' | 'carreira' | 'familia' | 'educacao' | 'bens' | 'moradia'
-  >('perfil');
+  >(modo === 'trabalho' ? 'carreira' : modo === 'patrimonio' ? 'moradia' : 'perfil');
+
+  useEffect(() => {
+    setActiveSubSection(modo === 'trabalho' ? 'carreira' : modo === 'patrimonio' ? 'moradia' : 'perfil');
+  }, [modo]);
 
   // Estado local para personalização do Avatar
   const [modalAvatarAberto, setModalAvatarAberto] = useState(false);
@@ -786,25 +792,26 @@ export const LifeView: React.FC<LifeViewProps> = ({
   const handleComprarVeiculo = (modeloId: string) => {
     const modelo = VEICULOS_CATALOGO[modeloId];
     if (!modelo) return;
-    if (vida.saldoBancario < modelo.precoCompra) {
-      onShowMessage(`Saldo insuficiente. O veículo custa R$ ${modelo.precoCompra.toLocaleString('pt-BR')}.`);
+    const precoAtual = Math.round(modelo.precoCompra * (estado.indicePrecosAcumulado || 1));
+    if (vida.saldoBancario < precoAtual) {
+      onShowMessage(`Saldo insuficiente. O veículo custa R$ ${precoAtual.toLocaleString('pt-BR')}.`);
       return;
     }
 
-    const novoSaldo = vida.saldoBancario - modelo.precoCompra;
+    const novoSaldo = vida.saldoBancario - precoAtual;
     const novoVeiculo: VeiculoProprio = {
       id: `veiculo_${Date.now()}_${modelo.id}`,
       modeloId: modelo.id,
       nome: modelo.nome,
       anoCompra: anoAtual,
-      valorMercadoAtual: modelo.precoCompra,
+      valorMercadoAtual: precoAtual,
     };
     const vidaComSaida = registrarTransacaoFinanceira(
       { ...vida, saldoBancario: novoSaldo },
       { dia: diaAtual, mes: mesAtual, ano: anoAtual },
       'despesa_paga',
       `Compra de veículo: ${modelo.nome}`,
-      -modelo.precoCompra
+      -precoAtual
     );
 
     onUpdateEstado({
@@ -853,32 +860,26 @@ export const LifeView: React.FC<LifeViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Sub-nav principal de Vida */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
-        {[
-          { id: 'perfil', label: '👤 Perfil & Avatar' },
-          { id: 'geral', label: '💳 Finanças & Score' },
-          { id: 'historico', label: '📒 Livro-caixa' },
-          { id: 'rotina', label: '🎯 Ações & Tempo' },
-          { id: 'carreira', label: '💼 Trabalho & CTPS' },
-          { id: 'familia', label: '❤️ Família & Relações' },
-          { id: 'educacao', label: '🎓 Educação & Semestres' },
-          { id: 'bens', label: '🚗 Veículos' },
-          { id: 'moradia', label: '🏠 Moradia' },
-        ].map((sec) => (
-          <button
-            key={sec.id}
-            onClick={() => setActiveSubSection(sec.id as any)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${
-              activeSubSection === sec.id
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
-                : 'bg-slate-800/40 text-slate-400 hover:text-slate-200 border-transparent'
-            }`}
-          >
-            {sec.label}
-          </button>
-        ))}
-      </div>
+      {/* Navegação conforme o contexto, sem exibir a carreira política como aba global. */}
+      {modo !== 'trabalho' && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-4">
+          {([
+            { id: 'perfil', label: 'Perfil e aparência', grupo: 'vida' },
+            { id: 'rotina', label: 'Saúde e hábitos', grupo: 'vida' },
+            { id: 'familia', label: 'Relações', grupo: 'vida' },
+            { id: 'educacao', label: 'Estudos', grupo: 'vida' },
+            { id: 'geral', label: 'Finanças', grupo: 'patrimonio' },
+            { id: 'historico', label: 'Extrato', grupo: 'patrimonio' },
+            { id: 'bens', label: 'Veículos', grupo: 'patrimonio' },
+            { id: 'moradia', label: 'Imóveis e moradia', grupo: 'patrimonio' },
+          ] as const).filter(sec => sec.grupo === modo).map(sec => (
+            <button type="button" key={sec.id} onClick={() => setActiveSubSection(sec.id)}
+              className={`rounded-lg px-4 py-2 text-xs font-semibold transition border ${activeSubSection === sec.id ? 'bg-emerald-500/15 text-emerald-300 border-emerald-600' : 'text-slate-400 border-slate-800 bg-slate-900 hover:bg-slate-800'}`}>
+              {sec.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Livro-caixa: histórico rastreável das entradas, saídas e obrigações. */}
       {activeSubSection === 'historico' && (
@@ -1617,15 +1618,15 @@ export const LifeView: React.FC<LifeViewProps> = ({
             <div><h3 className="font-bold text-slate-100">Concessionária</h3><p className="text-xs text-slate-400 mt-1">A compra reduz seu saldo imediatamente e cria despesas recorrentes de manutenção.</p></div>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {Object.values(VEICULOS_CATALOGO).map(modelo => {
-                const jaPossui = (vida.veiculos || []).some(v => v.modeloId === modelo.id);
+                const precoAtual = Math.round(modelo.precoCompra * (estado.indicePrecosAcumulado || 1));
                 return (
                   <div key={modelo.id} className="rounded-xl border border-slate-700 bg-slate-950/60 p-4 space-y-3">
                     <div className="flex items-start justify-between gap-2"><span className="font-semibold text-sm text-slate-100">{modelo.nome}</span><span className="text-[10px] uppercase text-slate-500">{modelo.categoria}</span></div>
-                    <div className="text-lg font-bold font-mono text-cyan-300">{formatarMoedaCompacta(modelo.precoCompra)}</div>
+                    <div className="text-lg font-bold font-mono text-cyan-300">{formatarMoedaCompacta(precoAtual)}</div>
                     <div className="text-xs text-slate-400">Manutenção: {formatarMoedaCompacta(modelo.custoMensalManutencao)}/mês</div>
                     <div className="text-xs text-slate-500">Conforto {modelo.conforto}/100 • Prestígio {modelo.prestígio}/100</div>
-                    <button type="button" disabled={jaPossui || vida.saldoBancario < modelo.precoCompra} onClick={() => handleComprarVeiculo(modelo.id)} className="w-full rounded-lg py-2 text-xs font-bold bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-500 text-white transition">
-                      {jaPossui ? 'Já está na garagem' : vida.saldoBancario < modelo.precoCompra ? 'Saldo insuficiente' : 'Comprar veículo'}
+                    <button type="button" disabled={vida.saldoBancario < precoAtual} onClick={() => handleComprarVeiculo(modelo.id)} className="w-full rounded-lg py-2 text-xs font-bold bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-500 text-white transition">
+                      {vida.saldoBancario < precoAtual ? 'Saldo insuficiente' : 'Comprar veículo'}
                     </button>
                   </div>
                 );
