@@ -20,7 +20,7 @@ import { EstadoJogo, OpcaoEvento } from './engine/types';
 import { aplicarImpactoAfinidadeFamiliar } from './engine/events';
 import { registrarTransacaoFinanceira } from './engine/finance';
 import { criarEstadoInicial } from './engine/presets';
-import { avancarHorasSimulacao, avancarMesSimulacao, avancarMultiplosMeses } from './engine/simulation';
+import { avancarHorasSimulacao } from './engine/simulation';
 
 const STORAGE_KEY = 'cidadao_sim_save_v1';
 
@@ -189,36 +189,7 @@ export default function App() {
     setEstado((prev) => avancarHorasSimulacao(prev, qtdHoras));
   }, []);
 
-  // Avanço manual de 1 mês completo
-  const handleAdvanceMonth = useCallback(() => {
-    setEstado((prev) => {
-      const proximo = avancarMesSimulacao(prev);
-      setShowSummaryModal(true);
-      return proximo;
-    });
-  }, []);
-
-  // Avanço manual de 6 meses
-  const handleAdvanceSixMonths = useCallback(() => {
-    setEstado((prev) => {
-      const proximo = avancarMultiplosMeses(prev, 6);
-      setShowSummaryModal(true);
-      showToast('O tempo avançou 6 meses completos!');
-      return proximo;
-    });
-  }, [showToast]);
-
-  // Avanço manual de 1 ano
-  const handleAdvanceYear = useCallback(() => {
-    setEstado((prev) => {
-      const proximo = avancarMultiplosMeses(prev, 12);
-      setShowSummaryModal(true);
-      showToast(`Um ano se passou! Bem-vindo a ${proximo.anoAtual}.`);
-      return proximo;
-    });
-  }, [showToast]);
-
-  // X1 = 10 minutos simulados/segundo real; X2, X3 e X5 escalam a mesma base.
+  // X1 = uma hora simulada por segundo real; X2, X3 e X5 aceleram o mesmo relógio.
   // O intervalo único evita acumular timers diferentes ao trocar a velocidade.
   useEffect(() => {
     if (!isPlaying) return;
@@ -335,9 +306,6 @@ export default function App() {
         playSpeed={playSpeed}
         onTogglePlay={() => setIsPlaying(!isPlaying)}
         onChangeSpeed={setPlaySpeed}
-        onAdvanceMonth={handleAdvanceMonth}
-        onAdvanceSixMonths={handleAdvanceSixMonths}
-        onAdvanceYear={handleAdvanceYear}
         onOpenNewGame={() => setShowNewGameModal(true)}
         onSaveGame={handleSaveGame}
         onLoadGame={handleLoadGame}
