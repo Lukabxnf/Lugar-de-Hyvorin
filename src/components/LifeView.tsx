@@ -442,7 +442,45 @@ export const LifeView: React.FC<LifeViewProps> = ({
         },
       },
     });
-    onShowMessage(`Estudos intensivos realizados! Média projetada elevada para ${novaNota}.`);
+    onShowMessage(`Preparação concluída. Sua média projetada agora é ${novaNota}. Ainda é necessário realizar as avaliações.`);
+  };
+
+  const handleRealizarProva = () => {
+    const cm = vida.cursoMatriculado;
+    if (!cm || cm.concluido) {
+      onShowMessage('Não existe avaliação pendente neste curso.');
+      return;
+    }
+    if (vida.energia < 15) {
+      onShowMessage('Energia insuficiente para realizar a avaliação.');
+      return;
+    }
+    const frequencia = cm.aulasRequeridas > 0 ? cm.aulasAssistidas / cm.aulasRequeridas : 0;
+    if (frequencia < 0.65) {
+      onShowMessage(`Frequência insuficiente para fazer a prova: ${Math.round(frequencia * 100)}%. São necessários pelo menos 65%.`);
+      return;
+    }
+    if (cm.provasRealizadas >= cm.provasRequeridas) {
+      onShowMessage('Todas as avaliações previstas para este semestre já foram realizadas.');
+      return;
+    }
+
+    const notaProva = Math.max(0, Math.min(10,
+      Number((cm.notaMedia + (vida.intelecto - 50) * 0.01).toFixed(1))
+    ));
+    onUpdateEstado({
+      ...estado,
+      vida: {
+        ...vida,
+        energia: Math.max(0, vida.energia - 15),
+        cursoMatriculado: {
+          ...cm,
+          provasRealizadas: cm.provasRealizadas + 1,
+          notaMedia: Number(((cm.notaMedia * cm.provasRealizadas + notaProva) / (cm.provasRealizadas + 1)).toFixed(1)),
+        },
+      },
+    });
+    onShowMessage(`Avaliação realizada. Nota registrada: ${notaProva}. Provas: ${cm.provasRealizadas + 1}/${cm.provasRequeridas}.`);
   };
 
   const handleMatricularNovoCurso = (cursoId: string) => {
@@ -1140,7 +1178,7 @@ export const LifeView: React.FC<LifeViewProps> = ({
                   <div>
                     <span className="text-base font-extrabold text-purple-200">{vida.cursoMatriculado.nome}</span>
                     <span className="text-xs text-purple-400 block">
-                      Semestre {vida.cursoMatriculado.semestreAtual} de {vida.cursoMatriculado.totalSemestres} • Nota Média: {vida.cursoMatriculado.notaMedia}
+                      Semestre {vida.cursoMatriculado.semestreAtual} de {vida.cursoMatriculado.totalSemestres} • Média: {vida.cursoMatriculado.notaMedia} • Provas: {vida.cursoMatriculado.provasRealizadas}/{vida.cursoMatriculado.provasRequeridas}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1155,6 +1193,13 @@ export const LifeView: React.FC<LifeViewProps> = ({
                       className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-purple-300 border border-purple-700 transition"
                     >
                       Estudar p/ Provas
+                    </button>
+                    <button
+                      onClick={handleRealizarProva}
+                      disabled={!vida.cursoMatriculado || vida.cursoMatriculado.provasRealizadas >= vida.cursoMatriculado.provasRequeridas}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white transition"
+                    >
+                      Fazer Avaliação
                     </button>
                   </div>
                 </div>
