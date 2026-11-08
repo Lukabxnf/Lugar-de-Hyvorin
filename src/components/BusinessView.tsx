@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { Empresa, EstadoJogo } from '../engine/types';
 import { SETORES_EMPRESA } from '../engine/data';
-import { registrarTransacaoFinanceira } from '../engine/finance';
+import { formatarMoedaCompacta, registrarTransacaoFinanceira } from '../engine/finance';
 
 interface BusinessViewProps {
   estado: EstadoJogo;
