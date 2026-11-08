@@ -23,6 +23,7 @@ import { isAnoEleitoral } from '../engine/politics';
 interface HeaderProps {
   estado: EstadoJogo;
   onAdvanceMonths: (months: number) => void;
+  fechandoPeriodo: boolean;
   onOpenNewGame: () => void;
   onSaveGame: () => void;
   onLoadGame: () => void;
@@ -40,6 +41,7 @@ const NOMES_MESES = [
 export const Header: React.FC<HeaderProps> = ({
   estado,
   onAdvanceMonths,
+  fechandoPeriodo,
   onOpenNewGame,
   onSaveGame,
   onLoadGame,
@@ -199,7 +201,7 @@ export const Header: React.FC<HeaderProps> = ({
                 key={months}
                 type="button"
                 onClick={() => onAdvanceMonths(months)}
-                disabled={estado.eventosPendentes.length > 0}
+                disabled={fechandoPeriodo || estado.eventosPendentes.length > 0}
                 className="px-3 py-2 rounded-lg text-xs font-bold border bg-emerald-700/80 hover:bg-emerald-600 text-white border-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed"
                 title={`Processar ${months} ${months === 1 ? 'mês' : 'meses'}, parando em decisões pendentes`}
               >
