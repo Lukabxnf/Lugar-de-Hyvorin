@@ -347,7 +347,7 @@ export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFec
 
   for (const emp of listaEmpresas) {
     if (emp.ativa) {
-      const { novaEmpresa: empAtualizada, logs: logsEmpresa } = simularMesEmpresa(emp, novaMacro);
+      const { novaEmpresa: empAtualizada, logs: logsEmpresa } = simularMesEmpresa(emp, novaMacro, indiceAtual);
       novasEmpresas.push(empAtualizada);
       lucroEmpresarialTotal += empAtualizada.ultimoMes.lucroLiquido;
       destaques.push(...logsEmpresa);
