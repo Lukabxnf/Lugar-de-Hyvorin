@@ -1,4 +1,28 @@
-import { EventoDecisao, NoticiaGazeta, EstadoJogo } from './types';
+import { EventoDecisao, NoticiaGazeta, EstadoJogo, FamiliaRelacionamento } from './types';
+
+/**
+ * Aplica ao familiar/contato indicado a consequência de afinidade de um evento.
+ * É uma função pura para poder testar os efeitos sem depender da interface.
+ */
+export function aplicarImpactoAfinidadeFamiliar(
+  familia: FamiliaRelacionamento,
+  relacionamentoId: string,
+  delta: number
+): FamiliaRelacionamento {
+  const atualizar = (rel: FamiliaRelacionamento['filhos'][number]) =>
+    rel.id === relacionamentoId
+      ? { ...rel, nivelAfinidade: Math.max(0, Math.min(100, rel.nivelAfinidade + delta)) }
+      : rel;
+
+  return {
+    ...familia,
+    conjuge: familia.conjuge ? atualizar(familia.conjuge) : undefined,
+    filhos: (familia.filhos || []).map(atualizar),
+    parentes: (familia.parentes || []).map(atualizar),
+    amigos: (familia.amigos || []).map(atualizar),
+    conhecidos: (familia.conhecidos || []).map(atualizar),
+  };
+}
 
 export interface EventoMundial {
   id: string;
@@ -138,6 +162,74 @@ export function sortearEventoDecisao(estado: EstadoJogo): EventoDecisao | null {
   const { vida, politica, empresas, diaAtual, mesAtual, anoAtual } = estado;
   const dataFormatada = `${diaAtual}/${mesAtual}/${anoAtual}`;
   const r = Math.random();
+
+  // Eventos familiares têm efeitos de convivência, confiança e energia, não apenas dinheiro.
+  const contatosFamiliares = [
+    vida.familia?.conjuge,
+    ...(vida.familia?.filhos || []),
+    ...(vida.familia?.parentes || []),
+    ...(vida.familia?.amigos || []),
+  ].filter((rel): rel is NonNullable<typeof rel> => !!rel);
+  const contatoFamiliar = contatosFamiliares.length > 0
+    ? contatosFamiliares[Math.floor(Math.random() * contatosFamiliares.length)]
+    : undefined;
+
+  if (contatoFamiliar && r < 0.25) {
+    const ehFilho = contatoFamiliar.tipo === 'filho';
+    const titulo = ehFilho
+      ? `${contatoFamiliar.nome} precisa da sua atenção`
+      : `Uma conversa importante com ${contatoFamiliar.nome}`;
+    const descricao = ehFilho
+      ? `${contatoFamiliar.nome} está sentindo falta de tempo de qualidade com você. Como deseja lidar com isso?`
+      : `${contatoFamiliar.nome} percebeu seu afastamento e gostaria de conversar sobre a relação de vocês.`;
+
+    return {
+      id: `ev_fam_${Date.now()}`,
+      categoria: 'familia',
+      urgencia: 'media',
+      titulo,
+      descricao,
+      dataOcorrencia: dataFormatada,
+      opcoes: [
+        {
+          id: 'dedicar_tempo',
+          texto: 'Reservar tempo para estar junto',
+          descricaoImpacto: 'Fortalece o vínculo, mas consome energia e reduz o tempo disponível para outras atividades.',
+          consequencias: {
+            deltaAfinidadeRelId: contatoFamiliar.id,
+            deltaAfinidadeValor: 8,
+            deltaEnergia: -7,
+            deltaFelicidade: 3,
+            mensagemResultado: `Você dedicou tempo a ${contatoFamiliar.nome}. A relação ficou mais próxima.`,
+          },
+        },
+        {
+          id: 'conversa_sincera',
+          texto: 'Conversar com sinceridade e ouvir o outro lado',
+          descricaoImpacto: 'Melhora a confiança sem exigir gasto financeiro, mas requer atenção e disposição.',
+          consequencias: {
+            deltaAfinidadeRelId: contatoFamiliar.id,
+            deltaAfinidadeValor: 5,
+            deltaEnergia: -3,
+            deltaIntelecto: 0.5,
+            mensagemResultado: `A conversa com ${contatoFamiliar.nome} ajudou a resolver parte do desconforto e fortaleceu a confiança.`,
+          },
+        },
+        {
+          id: 'adiar_conversa',
+          texto: 'Adiar a conversa e priorizar outros compromissos',
+          descricaoImpacto: 'Preserva energia no momento, mas a outra pessoa pode sentir que foi deixada de lado.',
+          consequencias: {
+            deltaAfinidadeRelId: contatoFamiliar.id,
+            deltaAfinidadeValor: -6,
+            deltaEnergia: 2,
+            deltaFelicidade: -2,
+            mensagemResultado: `Você adiou a conversa com ${contatoFamiliar.nome}. A pessoa ficou decepcionada com a falta de atenção.`,
+          },
+        },
+      ],
+    };
+  }
 
   // 1. Se tem empresa ativa
   const empresaAtiva = empresas?.find(e => e.ativa);
