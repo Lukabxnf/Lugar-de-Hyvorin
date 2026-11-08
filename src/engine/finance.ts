@@ -1,5 +1,5 @@
 import { MORADIAS } from './data';
-import { Empresa, VidaPessoal } from './types';
+import { DataCalendario, Empresa, TipoTransacaoFinanceira, TransacaoFinanceira, VidaPessoal } from './types';
 
 export interface ResumoPatrimonio {
   caixaPessoal: number;
@@ -85,4 +85,33 @@ export function formatarMoedaCompacta(valor: number): string {
   }
   const quantidade = valor / unidade.limite;
   return `R$ ${quantidade.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ${unidade.nome}`;
+}
+
+
+/**
+ * Acrescenta um lançamento ao livro-caixa da partida. O histórico é limitado
+ * aos 200 movimentos mais recentes para evitar crescimento ilimitado do save.
+ */
+export function registrarTransacaoFinanceira(
+  vida: VidaPessoal,
+  data: DataCalendario,
+  tipo: TipoTransacaoFinanceira,
+  descricao: string,
+  valor: number,
+  valorObrigacao?: number
+): VidaPessoal {
+  const transacao: TransacaoFinanceira = {
+    id: `tx_${data.ano}_${data.mes}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    data: `${String(data.dia).padStart(2, '0')}/${String(data.mes).padStart(2, '0')}/${data.ano}`,
+    tipo,
+    descricao,
+    valor: Number.isFinite(valor) ? valor : 0,
+    saldoApos: Number.isFinite(vida.saldoBancario) ? vida.saldoBancario : 0,
+    ...(valorObrigacao !== undefined ? { valorObrigacao: Math.max(0, valorObrigacao) } : {}),
+  };
+
+  return {
+    ...vida,
+    historicoFinanceiro: [transacao, ...(vida.historicoFinanceiro || [])].slice(0, 200),
+  };
 }
