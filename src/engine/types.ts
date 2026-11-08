@@ -236,11 +236,18 @@ export interface Empresa {
 }
 
 export interface AvatarConfig {
+  // Aparência do avatar. Campos opcionais preservam compatibilidade com partidas antigas.
+  sexo?: 'masculino' | 'feminino';
   pele: 'clara' | 'morena' | 'negra' | 'oriental';
   cabeloCor: 'castanho' | 'preto' | 'loiro' | 'ruivo' | 'grisalho';
   cabeloEstilo: 'curto' | 'medio' | 'longo' | 'crespo' | 'careca';
+  barba?: 'nenhuma' | 'curta' | 'cheia';
+  bigode?: boolean;
   roupa: 'casual' | 'social' | 'trabalho' | 'esporte' | 'elegante';
   acessorio: 'nenhum' | 'oculos' | 'relogio' | 'chapeu';
+  // Características físicas ficam como atributos do simulador, não como modelo corporal visual.
+  tipoFisico?: 'magro' | 'medio' | 'forte' | 'robusto';
+  alturaCm?: number;
 }
 
 export interface ContaPagar {

@@ -49,7 +49,7 @@ function sanitizarEstado(raw: any): EstadoJogo {
       ...raw.vida,
       nomeCompleto: raw.vida?.nomeCompleto || raw.vida?.nome || base.vida.nomeCompleto,
       dataNascimento: dataNascimentoPadrao,
-      avatar: raw.vida?.avatar || base.vida.avatar,
+      avatar: { ...base.vida.avatar, ...(raw.vida?.avatar || {}) },
       scoreCredito: raw.vida?.scoreCredito ?? 750,
       limiteCreditoPreAprovado: raw.vida?.limiteCreditoPreAprovado ?? 4500,
       contasVencidas: raw.vida?.contasVencidas || [],
