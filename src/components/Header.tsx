@@ -4,7 +4,6 @@ import {
   Clock,
   Play,
   Pause,
-  FastForward,
   RotateCcw,
   Save,
   Download,
@@ -15,7 +14,6 @@ import {
   Wallet,
   TrendingUp,
   Zap,
-  Activity,
 } from 'lucide-react';
 import { EstadoJogo } from '../engine/types';
 import { CARGOS_POLITICOS } from '../engine/data';
@@ -28,9 +26,6 @@ interface HeaderProps {
   playSpeed: number;
   onTogglePlay: () => void;
   onChangeSpeed: (speed: number) => void;
-  onAdvanceMonth: () => void;
-  onAdvanceSixMonths: () => void;
-  onAdvanceYear: () => void;
   onOpenNewGame: () => void;
   onSaveGame: () => void;
   onLoadGame: () => void;
@@ -48,9 +43,6 @@ export const Header: React.FC<HeaderProps> = ({
   playSpeed,
   onTogglePlay,
   onChangeSpeed,
-  onAdvanceMonth,
-  onAdvanceSixMonths,
-  onAdvanceYear,
   onOpenNewGame,
   onSaveGame,
   onLoadGame,
@@ -70,29 +62,16 @@ export const Header: React.FC<HeaderProps> = ({
     `Passivos: ${formatarMoedaCompacta(resumoPatrimonio.passivosTotais)}`,
   ].join(' | ');
 
-  const horaFormatada = `${String(estado.horaAtual ?? 8).padStart(2, '0')}:${String(estado.minutoAtual ?? 0).padStart(2, '0')}`;
-  const diaSemana = estado.diaSemanaAtual || 'Segunda-feira';
-  const diaAtual = estado.diaAtual || 1;
+  const horaFormatada = `${String(estado.horaAtual ?? 8).padStart(2, '0')}:00`;
   const mesNome = NOMES_MESES[(estado.mesAtual || 1) - 1];
+  const horasRestantes = Math.max(0, estado.vida.horasRestantesAtividade || 0);
+  const atividadeLabel = estado.vida.atividadeAtual === 'dormindo' ? 'Dormindo por escolha' :
+    estado.vida.atividadeAtual === 'trabalhando' ? 'No trabalho' :
+    estado.vida.atividadeAtual === 'estudando' ? (estado.vida.aulaFormal ? 'Em aula' : 'Estudando') :
+    estado.vida.atividadeAtual === 'exercicio' ? 'Fazendo exercício' :
+    estado.vida.atividadeAtual === 'lazer' ? 'Em momento de lazer' :
+    estado.vida.atividadeAtual === 'cuidando_familia' ? 'Com a família' : '';
 
-  const getRotinaBadge = () => {
-    switch (estado.vida.atividadeAtual) {
-      case 'dormindo':
-        return { label: 'Dormindo', color: 'bg-indigo-950/80 text-indigo-300 border-indigo-700/60' };
-      case 'trabalhando':
-        return { label: 'Trabalhando', color: 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60' };
-      case 'estudando':
-        return { label: 'Estudando', color: 'bg-purple-950/80 text-purple-300 border-purple-700/60' };
-      case 'exercicio':
-        return { label: 'Exercício / Academia', color: 'bg-orange-950/80 text-orange-300 border-orange-700/60' };
-      case 'lazer':
-        return { label: 'Lazer', color: 'bg-amber-950/80 text-amber-300 border-amber-700/60' };
-      default:
-        return { label: 'Tempo Livre', color: 'bg-slate-800 text-slate-300 border-slate-700' };
-    }
-  };
-
-  const badgeAtividade = getRotinaBadge();
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 shadow-xl px-4 py-2.5">
@@ -118,35 +97,23 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Simulated Clock Badge */}
+          {/* Relógio simulado: avança em horas inteiras */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/90 border border-slate-700/80 shadow-inner">
-            <Clock className="w-4 h-4 text-emerald-400 animate-pulse" />
+            <Clock className="w-4 h-4 text-emerald-400" />
             <div className="text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="font-mono font-bold text-emerald-300 text-sm">
-                  {horaFormatada}
-                </span>
-                <span className="text-slate-400 font-medium text-[11px]">
-                  • {diaSemana}
-                </span>
-              </div>
+              <div className="font-mono font-bold text-emerald-300 text-sm">{horaFormatada}</div>
               <div className="text-[11px] text-slate-300 flex items-center gap-1">
                 <Calendar className="w-3 h-3 text-slate-400" />
-                <span>
-                  {diaAtual} de {mesNome} de {estado.anoAtual}
-                </span>
+                <span>{mesNome} de {estado.anoAtual}</span>
               </div>
             </div>
           </div>
 
-          {/* Current Activity Badge */}
-          <div
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border ${badgeAtividade.color}`}
-            title="Atividade do personagem na rotina diária atual"
-          >
-            <Activity className="w-3.5 h-3.5" />
-            <span>{badgeAtividade.label}</span>
-          </div>
+          {horasRestantes > 0 && atividadeLabel && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border bg-emerald-950/70 text-emerald-200 border-emerald-700/50">
+              <span>{atividadeLabel} • {horasRestantes}h</span>
+            </div>
+          )}
 
           {/* Election alert indicator */}
           <button
@@ -273,36 +240,6 @@ export const Header: React.FC<HeaderProps> = ({
           >
             {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-white" />}
             <span className="hidden sm:inline">{isPlaying ? 'Pausar' : 'Play'}</span>
-          </button>
-
-          {/* Manual Jumps */}
-          <button
-            onClick={onAdvanceMonth}
-            disabled={isPlaying}
-            className="flex items-center gap-1 px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 font-semibold text-xs border border-slate-700 transition active:scale-95"
-            title="Avançar o tempo em 1 mês completo"
-          >
-            <span>+1 Mês</span>
-          </button>
-
-          <button
-            onClick={onAdvanceSixMonths}
-            disabled={isPlaying}
-            className="hidden sm:flex items-center gap-1 px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 font-semibold text-xs border border-slate-700 transition"
-            title="Avançar 6 meses completos"
-          >
-            <FastForward className="w-3.5 h-3.5" />
-            <span>+6m</span>
-          </button>
-
-          <button
-            onClick={onAdvanceYear}
-            disabled={isPlaying}
-            className="hidden md:flex items-center gap-1 px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 font-semibold text-xs border border-slate-700 transition"
-            title="Pular 1 ano completo (12 meses)"
-          >
-            <FastForward className="w-3.5 h-3.5 text-amber-400" />
-            <span>+1 Ano</span>
           </button>
 
           {/* Options: Save, Load, New */}
