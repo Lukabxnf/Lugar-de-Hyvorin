@@ -237,6 +237,43 @@ test('Business: large legacy inventory is preserved and production pauses until 
   assert.ok(result.ultimoMes.custoArmazenagem! > 0);
 });
 
+test('Education: elapsed time alone does not complete or award a diploma', () => {
+  const estado = criarEstadoInicial('estudante');
+  const vidaEmCurso: VidaPessoal = {
+    ...estado.vida,
+    cursoMatriculado: {
+      cursoId: 'curso_teste',
+      nome: 'Curso de Teste',
+      tipo: 'tecnico',
+      semestreAtual: 1,
+      totalSemestres: 2,
+      aulasAssistidas: 0,
+      aulasRequeridas: 120,
+      provasRealizadas: 0,
+      provasRequeridas: 2,
+      notaMedia: 9.5,
+      aprovado: true,
+      concluido: false,
+      mesesDecorridos: 4,
+      mesesNoSemestre: 4,
+      mesesTotais: 10,
+      concedeNivel: 'tecnico',
+    },
+  };
+
+  const { novaVida } = simularMesVida(
+    vidaEmCurso,
+    estado.macro,
+    0,
+    { dia: 1, mes: 6, ano: 2026 }
+  );
+
+  assert.equal(novaVida.cursoMatriculado?.semestreAtual, 1);
+  assert.equal(novaVida.cursoMatriculado?.concluido, false);
+  assert.ok(!novaVida.titulosConquistados.includes('Diploma: Curso de Teste'));
+  assert.equal(novaVida.cursoMatriculado?.provasRealizadas, 0);
+});
+
 test('Business: multiple companies simulate and accumulate profits independently', () => {
   const inicial = criarEstadoInicial('empreendedor_tech');
   assert.ok(inicial.empresas.length >= 1, 'Should have at least 1 company');
