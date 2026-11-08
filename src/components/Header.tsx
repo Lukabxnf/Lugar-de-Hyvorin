@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import {
   Calendar,
-  Clock,
-  Play,
-  Pause,
+  Settings,
   RotateCcw,
   Save,
   Download,
@@ -14,7 +12,6 @@ import {
   Wallet,
   TrendingUp,
   Zap,
-  KeyRound,
   Trash2,
   X,
 } from 'lucide-react';
@@ -25,10 +22,7 @@ import { isAnoEleitoral } from '../engine/politics';
 
 interface HeaderProps {
   estado: EstadoJogo;
-  isPlaying: boolean;
-  playSpeed: number;
-  onTogglePlay: () => void;
-  onChangeSpeed: (speed: number) => void;
+  onAdvanceMonths: (months: number) => void;
   onOpenNewGame: () => void;
   onSaveGame: () => void;
   onLoadGame: () => void;
@@ -45,10 +39,7 @@ const NOMES_MESES = [
 
 export const Header: React.FC<HeaderProps> = ({
   estado,
-  isPlaying,
-  playSpeed,
-  onTogglePlay,
-  onChangeSpeed,
+  onAdvanceMonths,
   onOpenNewGame,
   onSaveGame,
   onLoadGame,
@@ -58,6 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
   onDeleteGroqKey,
 }) => {
   const [showGroqSettings, setShowGroqSettings] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<'geral' | 'api'>('geral');
   const [groqKeyDraft, setGroqKeyDraft] = useState('');
   const cargo = CARGOS_POLITICOS[estado.politica.cargoAtual];
   const eleicaoInfo = isAnoEleitoral(estado.mesesTotais);
@@ -73,16 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
     `Passivos: ${formatarMoedaCompacta(resumoPatrimonio.passivosTotais)}`,
   ].join(' | ');
 
-  const horaFormatada = `${String(estado.horaAtual ?? 8).padStart(2, '0')}:00`;
   const mesNome = NOMES_MESES[(estado.mesAtual || 1) - 1];
-  const horasRestantes = Math.max(0, estado.vida.horasRestantesAtividade || 0);
-  const atividadeLabel = estado.vida.atividadeAtual === 'dormindo' ? 'Dormindo por escolha' :
-    estado.vida.atividadeAtual === 'trabalhando' ? 'No trabalho' :
-    estado.vida.atividadeAtual === 'estudando' ? (estado.vida.aulaFormal ? 'Em aula' : 'Estudando') :
-    estado.vida.atividadeAtual === 'exercicio' ? 'Fazendo exercício' :
-    estado.vida.atividadeAtual === 'lazer' ? 'Em momento de lazer' :
-    estado.vida.atividadeAtual === 'cuidando_familia' ? 'Com a família' : '';
-
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 shadow-xl px-4 py-2.5">
@@ -108,23 +91,13 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Relógio simulado: avança em horas inteiras */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/90 border border-slate-700/80 shadow-inner">
-            <Clock className="w-4 h-4 text-emerald-400" />
-            <div className="text-xs">
-              <div className="font-mono font-bold text-emerald-300 text-sm">{horaFormatada}</div>
-              <div className="text-[11px] text-slate-300 flex items-center gap-1">
-                <Calendar className="w-3 h-3 text-slate-400" />
-                <span>{mesNome} de {estado.anoAtual}</span>
-              </div>
-            </div>
+          {/* Calendário por ciclos: a vida e o trabalho são processados no fechamento. */}
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/90 border border-slate-700/80 shadow-inner">
+            <Calendar className="w-4 h-4 text-emerald-400" />
+            <span className="font-mono font-bold text-emerald-300 text-sm">
+              {mesNome} de {estado.anoAtual}
+            </span>
           </div>
-
-          {horasRestantes > 0 && atividadeLabel && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border bg-emerald-950/70 text-emerald-200 border-emerald-700/50">
-              <span>{atividadeLabel} • {horasRestantes}h</span>
-            </div>
-          )}
 
           {/* Election alert indicator */}
           <button
@@ -220,46 +193,28 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Time Step & Controls (Right) */}
         <div className="flex items-center gap-2 w-full xl:w-auto justify-end">
-          {/* Speed switch: X1, X2, X3, X5 */}
-          <div className="flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700">
-            {[1, 2, 3, 5].map((spd) => (
+          <div className="flex items-center gap-1.5" aria-label="Avanço do calendário">
+            {([1, 6, 12] as const).map((months) => (
               <button
-                key={spd}
-                onClick={() => onChangeSpeed(spd)}
-                className={`px-2 py-1 text-xs font-bold rounded transition ${
-                  playSpeed === spd
-                    ? 'bg-emerald-600 text-white shadow'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title={`Velocidade ${spd}x (${spd * 10} minutos simulados por segundo)`}
+                key={months}
+                type="button"
+                onClick={() => onAdvanceMonths(months)}
+                disabled={estado.eventosPendentes.length > 0}
+                className="px-3 py-2 rounded-lg text-xs font-bold border bg-emerald-700/80 hover:bg-emerald-600 text-white border-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                title={`Processar ${months} ${months === 1 ? 'mês' : 'meses'}, parando em decisões pendentes`}
               >
-                X{spd}
+                +{months === 12 ? '1 ano' : months === 1 ? '1 mês' : '6 meses'}
               </button>
             ))}
           </div>
 
-          {/* Play / Pause */}
           <button
-            onClick={onTogglePlay}
-            className={`px-3 py-2 rounded-lg flex items-center gap-1.5 font-bold text-xs transition border ${
-              isPlaying
-                ? 'bg-amber-600 hover:bg-amber-500 text-white border-amber-500 shadow-amber-900/30'
-                : 'bg-emerald-700/80 hover:bg-emerald-600 text-white border-emerald-600'
-            }`}
-            title={isPlaying ? 'Pausar simulação horária' : 'Iniciar passagem contínua das horas'}
-            aria-label={isPlaying ? 'Pausar' : 'Reproduzir'}
-          >
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-white" />}
-            <span className="hidden sm:inline">{isPlaying ? 'Pausar' : 'Play'}</span>
-          </button>
-
-          <button
-            onClick={() => { setGroqKeyDraft(''); setShowGroqSettings(true); }}
+            onClick={() => { setGroqKeyDraft(''); setSettingsSection('geral'); setShowGroqSettings(true); }}
             className={`px-3 py-2 rounded-lg flex items-center gap-1.5 text-xs font-bold border transition ${groqKey ? 'bg-emerald-950/70 text-emerald-300 border-emerald-700/60' : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'}`}
-            title="Configurar narração com IA"
+            title="Configurações gerais"
           >
-            <KeyRound className="w-4 h-4" />
-            <span>IA</span>
+            <Settings className="w-4 h-4" />
+            <span className="hidden sm:inline">Configurações</span>
             <span className={`w-1.5 h-1.5 rounded-full ${groqKey ? 'bg-emerald-400' : 'bg-slate-500'}`} />
           </button>
 
@@ -294,46 +249,52 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {showGroqSettings && (
-        <div className="fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-100">Narração com IA</h3>
-              <button onClick={() => setShowGroqSettings(false)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800" aria-label="Fechar">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="rounded-xl bg-slate-800/70 border border-slate-700 p-3 text-xs text-slate-300">
-              Chave da Groq: <strong className={groqKey ? 'text-emerald-300' : 'text-amber-300'}>{groqKey ? 'Configurada' : 'Não configurada'}</strong>
-              <p className="mt-1 text-slate-400">A chave fica neste navegador, separada do save. Ela nunca é exibida novamente por inteiro.</p>
-            </div>
-            <label className="block space-y-1.5">
-              <span className="text-xs font-semibold text-slate-300">Chave da Groq</span>
-              <input
-                type="password"
-                autoComplete="new-password"
-                value={groqKeyDraft}
-                onChange={(event) => setGroqKeyDraft(event.target.value)}
-                placeholder={groqKey ? 'Cole uma nova chave para substituir' : 'gsk_...'}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-emerald-500"
-              />
-            </label>
-            <div className="flex justify-between gap-2">
-              <button
-                onClick={() => { onDeleteGroqKey(); setGroqKeyDraft(''); }}
-                disabled={!groqKey}
-                className="px-3 py-2 rounded-lg border border-red-900/70 text-red-300 text-xs font-semibold hover:bg-red-950/50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Apagar chave
-              </button>
-              <button
-                onClick={() => { if (groqKeyDraft.trim()) { onSaveGroqKey(groqKeyDraft); setGroqKeyDraft(''); } setShowGroqSettings(false); }}
-                disabled={!groqKeyDraft.trim()}
-                className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Salvar chave
-              </button>
-            </div>
+        <div className="absolute top-full right-3 sm:right-6 z-[60] mt-2 w-[min(92vw,350px)] rounded-xl border border-slate-700 bg-slate-900 p-3 shadow-2xl space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-100">
+              {settingsSection === 'api' ? 'Configurações / API' : 'Configurações gerais'}
+            </h3>
+            <button type="button" onClick={() => setShowGroqSettings(false)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800" aria-label="Fechar configurações">
+              <X className="w-4 h-4" />
+            </button>
           </div>
+          {settingsSection === 'geral' ? (
+            <button
+              type="button"
+              onClick={() => setSettingsSection('api')}
+              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-3 text-left text-sm font-semibold text-slate-200 hover:bg-slate-700"
+            >
+              API e memória da simulação
+              <p className="mt-1 text-xs font-normal text-slate-400">Chave de acesso e integração da IA nos bastidores.</p>
+            </button>
+          ) : (
+            <>
+              <button type="button" onClick={() => setSettingsSection('geral')} className="text-xs text-emerald-400 hover:text-emerald-300">Voltar às configurações</button>
+              <div className="rounded-lg bg-slate-800/70 border border-slate-700 p-3 text-xs text-slate-300">
+                Groq: <strong className={groqKey ? 'text-emerald-300' : 'text-amber-300'}>{groqKey ? 'Chave salva' : 'Sem chave'}</strong>
+                <p className="mt-1 text-slate-400">A chave fica neste navegador, separada do save. A memória do jogo é armazenada na própria partida.</p>
+              </div>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-semibold text-slate-300">Chave de API da Groq</span>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={groqKeyDraft}
+                  onChange={event => setGroqKeyDraft(event.target.value)}
+                  placeholder={groqKey ? 'Cole uma nova chave para substituir' : 'gsk_...'}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-emerald-500"
+                />
+              </label>
+              <div className="flex justify-between gap-2">
+                <button type="button" onClick={() => { onDeleteGroqKey(); setGroqKeyDraft(''); }} disabled={!groqKey} className="px-3 py-2 rounded-lg border border-red-900/70 text-red-300 text-xs disabled:opacity-40 flex items-center gap-1.5">
+                  <Trash2 className="w-3.5 h-3.5" /> Apagar chave
+                </button>
+                <button type="button" onClick={() => { if (groqKeyDraft.trim()) { onSaveGroqKey(groqKeyDraft); setGroqKeyDraft(''); } setShowGroqSettings(false); }} disabled={!groqKeyDraft.trim()} className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold disabled:opacity-40">
+                  Salvar
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </header>
