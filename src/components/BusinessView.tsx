@@ -85,6 +85,7 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
       funcionarios: porteSelecionado === 'MEI' ? 1 : porteSelecionado === 'LTDA' ? 5 : 20,
       salarioMedio: 3500,
       capacidadeMaquinas: setor.produtividadeFuncionario * (porteSelecionado === 'MEI' ? 2 : 10),
+      capacidadeArmazenamento: setor.produtividadeFuncionario * (porteSelecionado === 'MEI' ? 4 : 20),
       precoVenda: setor.precoVendaBase,
       estoque: 50,
       caixaPJ: 15_000,
@@ -525,6 +526,15 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
               </span>
               <span className="font-mono text-rose-400">
                 -R$ {ultimoDRE.custoInsumos.toLocaleString('pt-BR')}
+              </span>
+            </div>
+
+            <div className="flex justify-between py-1.5 border-b border-slate-800/80">
+              <span className="text-slate-300 flex items-center gap-1.5">
+                <Warehouse className="w-3.5 h-3.5 text-amber-400" /> (-) Armazenagem de Estoque:
+              </span>
+              <span className="font-mono text-rose-400">
+                -R$ {(ultimoDRE.custoArmazenagem || 0).toLocaleString('pt-BR')}
               </span>
             </div>
 
