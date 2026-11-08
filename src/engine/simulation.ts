@@ -23,56 +23,91 @@ export const DIAS_DA_SEMANA: DiaSemana[] = [
  * - Quando o dia ultrapassa 30, dispara automaticamente o ciclo mensal completo
  *   (salários, contas a pagar, DRE de empresas, Copom e política).
  */
-export function avancarHorasSimulacao(estado: EstadoJogo, qtdHoras = 1): EstadoJogo {
-  let novoEstado = { ...estado };
+/**
+ * Avança o relógio em minutos simulados.
+ * A rotina pessoal só é processada ao completar uma hora; o fechamento mensal
+ * só acontece na virada do último dia do mês simulado.
+ */
+export function avancarMinutosSimulacao(estado: EstadoJogo, qtdMinutos = 1): EstadoJogo {
+  const passos = Number.isFinite(qtdMinutos) ? Math.max(0, Math.floor(qtdMinutos)) : 0;
+  let novoEstado: EstadoJogo = {
+    ...estado,
+    horaAtual: estado.horaAtual ?? 0,
+    minutoAtual: Math.min(59, Math.max(0, estado.minutoAtual ?? 0)),
+    horasTotais: estado.horasTotais ?? 0,
+  };
 
-  for (let h = 0; h < qtdHoras; h++) {
-    novoEstado.horaAtual += 1;
-    novoEstado.horasTotais += 1;
+  for (let minuto = 0; minuto < passos; minuto++) {
+    const proximoMinuto = (novoEstado.minutoAtual ?? 0) + 1;
+    if (proximoMinuto < 60) {
+      novoEstado = { ...novoEstado, minutoAtual: proximoMinuto };
+      continue;
+    }
 
-    // 1. Simulação horária da vida do personagem
+    let novaHora = (novoEstado.horaAtual ?? 0) + 1;
+    let novoDia = novoEstado.diaAtual;
+    let novoDiaSemana = novoEstado.diaSemanaAtual;
+    let virouDia = false;
+
+    if (novaHora >= 24) {
+      novaHora = 0;
+      novoDia += 1;
+      virouDia = true;
+      const indiceDia = DIAS_DA_SEMANA.indexOf(novoDiaSemana);
+      novoDiaSemana = DIAS_DA_SEMANA[(indiceDia + 1) % DIAS_DA_SEMANA.length];
+    }
+
+    novoEstado = {
+      ...novoEstado,
+      horaAtual: novaHora,
+      minutoAtual: 0,
+      horasTotais: novoEstado.horasTotais + 1,
+      diaAtual: novoDia,
+      diaSemanaAtual: novoDiaSemana,
+    };
+
+    if (virouDia) {
+      if (novoDia > 30) {
+        // O calendário legado usa meses simulados de 30 dias.
+        // O mês só fecha depois da meia-noite do 30º dia.
+        novoEstado = avancarMesSimulacao({ ...novoEstado, diaAtual: 1 });
+      } else if (
+        Math.random() < 0.10 &&
+        (!novoEstado.eventosPendentes || novoEstado.eventosPendentes.length === 0)
+      ) {
+        const novoEvento = sortearEventoDecisao(novoEstado);
+        if (novoEvento) {
+          novoEstado = { ...novoEstado, eventosPendentes: [novoEvento] };
+        }
+      }
+    }
+
+    // A hora que acabou de começar é a hora efetivamente vivida pelo personagem.
     const { novaVida, avisos } = simularHoraVida(
       novoEstado.vida,
       novoEstado.macro,
       novoEstado.horaAtual,
       novoEstado.diaSemanaAtual
     );
-    novoEstado.vida = novaVida;
+    novoEstado = { ...novoEstado, vida: novaVida };
 
-    // Se houve aviso crítico de rotina/exaustão, registra nas notícias locais ou destaques
     if (avisos.length > 0 && novoEstado.ultimoResumoMes) {
-      novoEstado.ultimoResumoMes = {
-        ...novoEstado.ultimoResumoMes,
-        destaques: [...avisos, ...novoEstado.ultimoResumoMes.destaques].slice(0, 6),
+      novoEstado = {
+        ...novoEstado,
+        ultimoResumoMes: {
+          ...novoEstado.ultimoResumoMes,
+          destaques: [...avisos, ...novoEstado.ultimoResumoMes.destaques].slice(0, 6),
+        },
       };
-    }
-
-    // 2. Virada do Dia
-    if (novoEstado.horaAtual >= 24) {
-      novoEstado.horaAtual = 0;
-      novoEstado.diaAtual += 1;
-
-      // Rotação do dia da semana
-      const idxDia = DIAS_DA_SEMANA.indexOf(novoEstado.diaSemanaAtual);
-      novoEstado.diaSemanaAtual = DIAS_DA_SEMANA[(idxDia + 1) % DIAS_DA_SEMANA.length];
-
-      // Sorteia evento de decisão se não houver pendente (chance de 10% por dia)
-      if (Math.random() < 0.10 && (!novoEstado.eventosPendentes || novoEstado.eventosPendentes.length === 0)) {
-        const novoEvento = sortearEventoDecisao(novoEstado);
-        if (novoEvento) {
-          novoEstado.eventosPendentes = [novoEvento];
-        }
-      }
-
-      // 3. Virada do Mês (cada mês possui 30 dias na simulação)
-      if (novoEstado.diaAtual > 30) {
-        novoEstado.diaAtual = 1;
-        novoEstado = avancarMesSimulacao(novoEstado);
-      }
     }
   }
 
   return novoEstado;
+}
+
+/** Compatibilidade: ações existentes que pedem horas continuam funcionando. */
+export function avancarHorasSimulacao(estado: EstadoJogo, qtdHoras = 1): EstadoJogo {
+  return avancarMinutosSimulacao(estado, Math.max(0, Math.floor(qtdHoras)) * 60);
 }
 
 /**
