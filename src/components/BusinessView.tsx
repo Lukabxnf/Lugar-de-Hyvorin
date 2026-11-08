@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Empresa, EstadoJogo } from '../engine/types';
 import { SETORES_EMPRESA } from '../engine/data';
+import { registrarTransacaoFinanceira } from '../engine/finance';
 
 interface BusinessViewProps {
   estado: EstadoJogo;
@@ -111,6 +112,13 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
       vida: {
         ...vida,
         saldoBancario: vida.saldoBancario - setor.custoAbertura,
+        historicoFinanceiro: registrarTransacaoFinanceira(
+          { ...vida, saldoBancario: vida.saldoBancario - setor.custoAbertura },
+          { dia: estado.diaAtual, mes: estado.mesAtual, ano: estado.anoAtual },
+          'despesa_paga',
+          `Abertura da empresa ${novaEmpresa.nome}`,
+          -setor.custoAbertura
+        ).historicoFinanceiro,
         reputacao: Math.min(100, vida.reputacao + 8),
       },
       empresas: novaLista,
@@ -190,6 +198,13 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
       vida: {
         ...vida,
         saldoBancario: vida.saldoBancario + valor,
+        historicoFinanceiro: registrarTransacaoFinanceira(
+          { ...vida, saldoBancario: vida.saldoBancario + valor },
+          { dia: estado.diaAtual, mes: estado.mesAtual, ano: estado.anoAtual },
+          'transferencia',
+          `Dividendos recebidos de ${currentEmpresa.nome}`,
+          valor
+        ).historicoFinanceiro,
         felicidade: Math.min(100, vida.felicidade + 4),
       },
       empresas: lista,
@@ -221,6 +236,13 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
       vida: {
         ...vida,
         saldoBancario: vida.saldoBancario - valor,
+        historicoFinanceiro: registrarTransacaoFinanceira(
+          { ...vida, saldoBancario: vida.saldoBancario - valor },
+          { dia: estado.diaAtual, mes: estado.mesAtual, ano: estado.anoAtual },
+          'transferencia',
+          `Aporte de capital na empresa ${currentEmpresa.nome}`,
+          -valor
+        ).historicoFinanceiro,
       },
       empresas: lista,
       empresaSelecionadaId: currentEmpresa.id,
@@ -242,6 +264,13 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
       vida: {
         ...vida,
         saldoBancario: vida.saldoBancario + valorLiquidacao,
+        historicoFinanceiro: registrarTransacaoFinanceira(
+          { ...vida, saldoBancario: vida.saldoBancario + valorLiquidacao },
+          { dia: estado.diaAtual, mes: estado.mesAtual, ano: estado.anoAtual },
+          'transferencia',
+          `Venda/liquidação da empresa ${currentEmpresa.nome}`,
+          valorLiquidacao
+        ).historicoFinanceiro,
         felicidade: Math.max(10, vida.felicidade - 5),
       },
       empresas: listaRestante,
