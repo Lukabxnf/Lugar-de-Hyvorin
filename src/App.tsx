@@ -7,13 +7,11 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Header } from './components/Header';
 import { TabNavigation } from './components/TabNavigation';
 import { LifeView } from './components/LifeView';
-import { BusinessView } from './components/BusinessView';
-import { MacroView } from './components/MacroView';
-import { PoliticsView } from './components/PoliticsView';
+import { WorkHub } from './components/WorkHub';
+import { AgendaView } from './components/AgendaView';
 import { GazetaView } from './components/GazetaView';
 import { NewGameModal } from './components/NewGameModal';
 import { ElectionModal } from './components/ElectionModal';
-import { MonthlySummaryModal } from './components/MonthlySummaryModal';
 import { EventDecisionModal } from './components/EventDecisionModal';
 
 import { EstadoJogo, OpcaoEvento } from './engine/types';
@@ -111,13 +109,12 @@ export default function App() {
 
   // Modals
   const [showNewGameModal, setShowNewGameModal] = useState<boolean>(false);
-  const [showSummaryModal, setShowSummaryModal] = useState<boolean>(false);
+  const [mostrarEventoModal, setMostrarEventoModal] = useState(false);
   const [electionVictoryData, setElectionVictoryData] = useState<{
     cargoNome: string;
     votos: number;
   } | null>(null);
 
-  const mesesObservadosRef = useRef(estado.mesesTotais);
   const estadoRef = useRef(estado);
   estadoRef.current = estado;
   const eventosIAProcessadosRef = useRef(new Set<string>());
@@ -188,14 +185,6 @@ export default function App() {
     }
   }, [estado.noticias, groqKey]);
 
-  // Mostra o fechamento mais recente quando o relógio atravessa um mês.
-  useEffect(() => {
-    if (estado.mesesTotais > mesesObservadosRef.current) {
-      setShowSummaryModal(true);
-    }
-    mesesObservadosRef.current = estado.mesesTotais;
-  }, [estado.mesesTotais]);
-
   // Toast auto-clear
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -265,6 +254,8 @@ export default function App() {
     const novo = criarEstadoInicial(perfilId);
     setEstado(novo);
     setShowNewGameModal(false);
+    setActiveTab('vida');
+    setMostrarEventoModal(false);
     showToast(`Nova jornada iniciada com sucesso!`);
   }, [showToast]);
 
@@ -274,7 +265,11 @@ export default function App() {
   const handleAdvanceMonths = useCallback(async (quantidade: number) => {
     if (![1, 6, 12].includes(quantidade) || fechamentoEmCursoRef.current) return;
     const anterior = estadoRef.current;
-    if (anterior.eventosPendentes.length > 0) return;
+    if (anterior.eventosPendentes.length > 0) {
+      setActiveTab('agenda');
+      showToast('Existe uma decisão pendente. Consulte a Agenda para continuar.');
+      return;
+    }
     fechamentoEmCursoRef.current = true;
     setFechandoPeriodo(true);
     try {
@@ -288,7 +283,7 @@ export default function App() {
       fechamentoEmCursoRef.current = false;
       setFechandoPeriodo(false);
     }
-  }, [groqKey]);
+  }, [groqKey, showToast]);
 
   // Ações opcionais de rotina são resolvidas de imediato, sem criar um relógio
   // de cliques obrigatório para trabalhar ou estudar em um jogo mensal.
@@ -307,6 +302,7 @@ export default function App() {
 
   // Resolução de Evento de Decisão Interativo
   const handleEscolherOpcaoEvento = useCallback((opcao: OpcaoEvento) => {
+    setMostrarEventoModal(false);
     setEstado((prev) => {
       const eventoAtual = prev.eventosPendentes[0];
       if (!eventoAtual) return prev;
@@ -389,7 +385,6 @@ export default function App() {
     setElectionVictoryData({ cargoNome, votos });
   }, []);
 
-  const temEmpresaAtiva = (estado.empresas && estado.empresas.length > 0) || !!estado.empresa;
   const eventoPendenteAtual = estado.eventosPendentes && estado.eventosPendentes.length > 0
     ? estado.eventosPendentes[0]
     : null;
@@ -422,50 +417,58 @@ export default function App() {
       <TabNavigation
         activeTab={activeTab}
         onSelectTab={setActiveTab}
-        temEmpresa={temEmpresaAtiva}
-        noticiasNaoLidas={estado.noticias.length}
-        emCampanha={estado.politica.emCampanha}
+        eventosPendentes={estado.eventosPendentes.length}
       />
 
-      {/* Conteúdo Principal */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-        {activeTab === 'vida' && (
-          <LifeView
-            estado={estado}
-            onUpdateEstado={setEstado}
-            onShowMessage={showToast}
-            onStartTime={handleConcluirAtividade}
-          />
-        )}
+      {/* Áreas de vida: carreira e políticas são ferramentas contextuais. */}
+      <main className="flex-1 mx-auto w-full max-w-[1480px] p-4 sm:p-6">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_290px] gap-5 items-start">
+          <section className="min-w-0">
+            {activeTab === 'vida' && (
+              <LifeView estado={estado} onUpdateEstado={setEstado} onShowMessage={showToast} onStartTime={handleConcluirAtividade} modo="vida" />
+            )}
+            {activeTab === 'trabalho' && (
+              <WorkHub estado={estado} onUpdateEstado={setEstado} onShowMessage={showToast}
+                onElectionVictory={handleElectionVictory} onStartTime={handleConcluirAtividade} />
+            )}
+            {activeTab === 'patrimonio' && (
+              <LifeView estado={estado} onUpdateEstado={setEstado} onShowMessage={showToast} modo="patrimonio" />
+            )}
+            {activeTab === 'mundo' && <GazetaView noticias={estado.noticias} />}
+            {activeTab === 'agenda' && (
+              <AgendaView estado={estado} onResolverEvento={() => setMostrarEventoModal(true)} />
+            )}
+          </section>
 
-        {activeTab === 'empresa' && (
-          <BusinessView
-            estado={estado}
-            onUpdateEstado={setEstado}
-            onShowMessage={showToast}
-          />
-        )}
-
-        {activeTab === 'macro' && (
-          <MacroView
-            estado={estado}
-            onUpdateEstado={setEstado}
-            onShowMessage={showToast}
-          />
-        )}
-
-        {activeTab === 'politica' && (
-          <PoliticsView
-            estado={estado}
-            onUpdateEstado={setEstado}
-            onShowMessage={showToast}
-            onElectionVictory={handleElectionVictory}
-          />
-        )}
-
-        {activeTab === 'gazeta' && (
-          <GazetaView noticias={estado.noticias} />
-        )}
+          <aside className="space-y-4 xl:sticky xl:top-24">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Precisa de você</h3>
+              {estado.eventosPendentes.length ? (
+                <>
+                  <p className="text-sm font-semibold text-amber-300">{estado.eventosPendentes[0].titulo}</p>
+                  <p className="line-clamp-4 text-xs leading-relaxed text-slate-400">{estado.eventosPendentes[0].descricao}</p>
+                  <button type="button" onClick={() => { setActiveTab('agenda'); setMostrarEventoModal(true); }}
+                    className="w-full rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-600">
+                    Abrir decisão
+                  </button>
+                </>
+              ) : (
+                <p className="text-sm text-slate-400">Nenhuma decisão obrigatória no momento. O mundo continua evoluindo ao avançar os meses.</p>
+              )}
+            </div>
+            <button type="button" onClick={() => setActiveTab('agenda')}
+              className="w-full rounded-2xl border border-slate-800 bg-slate-900/80 p-4 text-left hover:border-slate-600">
+              <span className="block text-xs font-bold uppercase tracking-wider text-slate-300">Último fechamento</span>
+              {estado.ultimoResumoMes ? (
+                <>
+                  <span className="mt-2 block text-sm font-semibold text-slate-100">{String(estado.mesAtual).padStart(2,'0')}/{estado.anoAtual}</span>
+                  <span className="mt-1 block text-xs text-slate-400">{estado.ultimoResumoMes.destaques[0] || 'Mês encerrado'}</span>
+                  <span className="mt-3 block text-xs font-semibold text-emerald-400">Abrir histórico na Agenda</span>
+                </>
+              ) : <span className="mt-2 block text-xs text-slate-400">Sua jornada está começando.</span>}
+            </button>
+          </aside>
+        </div>
       </main>
 
       {/* Rodapé Institucional */}
@@ -502,17 +505,9 @@ export default function App() {
         />
       )}
 
-      <MonthlySummaryModal
-        isOpen={showSummaryModal}
-        onClose={() => setShowSummaryModal(false)}
-        resumo={estado.ultimoResumoMes}
-        mes={estado.mesAtual}
-        ano={estado.anoAtual}
-      />
-
       {/* Modal de Crises & Decisões Interativas */}
       <EventDecisionModal
-        evento={eventoPendenteAtual}
+        evento={mostrarEventoModal ? eventoPendenteAtual : null}
         onEscolherOpcao={handleEscolherOpcaoEvento}
       />
     </div>
