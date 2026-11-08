@@ -15,6 +15,7 @@ export const NPCPortrait: React.FC<{ pessoa: Relacionamento; className?: string 
     : ['pai', 'filho', 'irmao'].includes(pessoa.tipo) ? false
     : ((seed >> 7) % 2 === 0);
   const config: AvatarConfig = {
+    formatoRosto: (['oval','fino','largo','redondo'] as const)[(seed >> 11) % 4],
     pele: pele[seed % pele.length],
     cabeloCor: pessoa.idade > 65 ? 'grisalho' : cabelos[(seed >> 3) % cabelos.length],
     cabeloEstilo: estilos[(seed >> 5) % estilos.length],
