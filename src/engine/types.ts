@@ -357,6 +357,7 @@ export interface VidaPessoal {
     carreiraId: string;
     mesesNoCargo: number;
     salarioAcordado: number;
+    faltasNoMes?: number;
   };
 
   carteira: CarteiraTrabalho;
@@ -364,8 +365,12 @@ export interface VidaPessoal {
   gestacaoAdocao?: GestacaoOuAdocao;
   veiculos: VeiculoProprio[];
 
-  rotinaHorarios: RotinaHorarios;
+  // Atividade escolhida pelo jogador ou por uma decisão contextual.
+  // O tempo restante é contado pelo motor, não por uma rotina automática.
+  rotinaHorarios: RotinaHorarios; // legado: preservado em saves antigos
   atividadeAtual: TipoAtividadeRotina;
+  horasRestantesAtividade?: number;
+  aulaFormal?: boolean;
 
   rotina: {
     padraoAlimentacao: 'economica' | 'saudavel' | 'premium';
@@ -474,6 +479,10 @@ export interface OpcaoEvento {
     deltaReputacao?: number;
     deltaAfinidadeRelId?: string;
     deltaAfinidadeValor?: number;
+    atividade?: TipoAtividadeRotina;
+    duracaoAtividadeHoras?: number;
+    aulaFormal?: boolean;
+    deltaFaltasTrabalho?: number;
     mensagemResultado: string;
   };
 }
@@ -522,6 +531,9 @@ export interface EstadoJogo {
 
   eventosPendentes: EventoDecisao[];
   eventosResolvidos: EventoHistoricoResolvido[];
+  // Evita disparar o mesmo compromisso mais de uma vez no mesmo dia.
+  agendaDisparadaDia?: string;
+  agendaEventosDisparados?: string[];
   
   ultimoResumoMes?: {
     saldoAnterior: number;

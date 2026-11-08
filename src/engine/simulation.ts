@@ -3,8 +3,8 @@ import { simularHoraVida, simularMesVida } from './life';
 import { simularMesEmpresa } from './business';
 import { isAnoEleitoral, simularMesPolitica } from './politics';
 import { sortearEventoDecisao, sortearEventoMensal } from './events';
-import { CARGOS_POLITICOS } from './data';
-import { DiaSemana, Empresa, EstadoJogo, HistoricoPonto, NoticiaGazeta } from './types';
+import { CARREIRAS, CARGOS_POLITICOS, CURSOS } from './data';
+import { DiaSemana, Empresa, EstadoJogo, EventoDecisao, HistoricoPonto, NoticiaGazeta } from './types';
 
 export const DIAS_DA_SEMANA: DiaSemana[] = [
   'Segunda-feira',
@@ -15,6 +15,122 @@ export const DIAS_DA_SEMANA: DiaSemana[] = [
   'Sábado',
   'Domingo',
 ];
+
+export function diasNoMes(ano: number, mes: number): number {
+  return new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+}
+
+function aplicarAgendaDoHorario(estado: EstadoJogo): EstadoJogo {
+  const chaveDia = `${estado.anoAtual}-${String(estado.mesAtual).padStart(2, '0')}-${String(estado.diaAtual).padStart(2, '0')}`;
+  const mesmaData = estado.agendaDisparadaDia === chaveDia;
+  let atualizado: EstadoJogo = mesmaData
+    ? estado
+    : { ...estado, agendaDisparadaDia: chaveDia, agendaEventosDisparados: [] };
+
+  if (atualizado.eventosPendentes.length > 0) return atualizado;
+  if (['Sábado', 'Domingo'].includes(atualizado.diaSemanaAtual)) return atualizado;
+
+  const disparados = atualizado.agendaEventosDisparados || [];
+  const data = `${atualizado.diaAtual}/${atualizado.mesAtual}/${atualizado.anoAtual}`;
+  const emprego = atualizado.vida.empregoAtual;
+  const carreira = emprego
+    ? CARREIRAS.find(item => item.id === emprego.carreiraId)
+    : undefined;
+
+  if (carreira && atualizado.horaAtual === carreira.horarioInicio) {
+    const id = `agenda_trabalho_${chaveDia}_${carreira.id}`;
+    if (!disparados.includes(id)) {
+      const duracao = Math.max(1, carreira.horarioFim - carreira.horarioInicio);
+      const evento: EventoDecisao = {
+        id,
+        categoria: 'trabalho',
+        urgencia: 'media',
+        titulo: `Início do expediente: ${carreira.titulo}`,
+        descricao: `Seu expediente começa agora, às ${carreira.horarioInicio}:00, e está previsto para terminar às ${carreira.horarioFim}:00. Você decide como lidar com o compromisso.`,
+        dataOcorrencia: `${data} • ${String(atualizado.horaAtual).padStart(2, '0')}:00`,
+        opcoes: [
+          {
+            id: 'comparecer_trabalho',
+            texto: 'Ir trabalhar',
+            descricaoImpacto: `Cumpre a jornada de ${duracao} horas. O trabalho consome energia, mas mantém sua presença profissional.`,
+            consequencias: {
+              atividade: 'trabalhando',
+              duracaoAtividadeHoras: duracao,
+              mensagemResultado: `Você compareceu ao trabalho como ${carreira.titulo}. A jornada começou.`,
+            },
+          },
+          {
+            id: 'faltar_trabalho',
+            texto: 'Faltar ao trabalho',
+            descricaoImpacto: 'Você ganha tempo livre agora, mas a falta será descontada no próximo pagamento e pode prejudicar sua reputação profissional.',
+            consequencias: {
+              deltaFaltasTrabalho: 1,
+              deltaReputacao: -2,
+              deltaFelicidade: 1,
+              mensagemResultado: 'Você faltou ao expediente. A ausência foi registrada e reduzirá seu próximo salário.',
+            },
+          },
+        ],
+      };
+      return {
+        ...atualizado,
+        agendaEventosDisparados: [...disparados, id],
+        eventosPendentes: [evento],
+      };
+    }
+  }
+
+  const cursoId = atualizado.vida.cursoMatriculado && !atualizado.vida.cursoMatriculado.concluido
+    ? atualizado.vida.cursoMatriculado.cursoId
+    : atualizado.vida.cursoAtual?.cursoId;
+  const curso = cursoId ? CURSOS.find(item => item.id === cursoId) : undefined;
+  const inicioAula = curso?.horarioInicio ?? 19;
+  const fimAula = curso?.horarioFim ?? 22;
+
+  if (curso && atualizado.horaAtual === inicioAula) {
+    const id = `agenda_estudo_${chaveDia}_${curso.id}`;
+    if (!disparados.includes(id)) {
+      const duracao = Math.max(1, fimAula - inicioAula);
+      const evento: EventoDecisao = {
+        id,
+        categoria: 'pessoal',
+        urgencia: 'media',
+        titulo: `Aula marcada: ${curso.nome}`,
+        descricao: `Sua aula começa agora, às ${inicioAula}:00, e termina às ${fimAula}:00. Sua presença conta para a frequência do curso.`,
+        dataOcorrencia: `${data} • ${String(atualizado.horaAtual).padStart(2, '0')}:00`,
+        opcoes: [
+          {
+            id: 'comparecer_aula',
+            texto: 'Assistir à aula',
+            descricaoImpacto: `Dedica ${duracao} horas ao curso e registra as aulas frequentadas.`,
+            consequencias: {
+              atividade: 'estudando',
+              duracaoAtividadeHoras: duracao,
+              aulaFormal: true,
+              mensagemResultado: `Você compareceu à aula de ${curso.nome}.`,
+            },
+          },
+          {
+            id: 'faltar_aula',
+            texto: 'Faltar à aula',
+            descricaoImpacto: 'Você perde a frequência desta aula e deixa de avançar o conteúdo hoje.',
+            consequencias: {
+              deltaFelicidade: 1,
+              mensagemResultado: 'Você faltou à aula. Nenhuma presença foi registrada neste encontro.',
+            },
+          },
+        ],
+      };
+      return {
+        ...atualizado,
+        agendaEventosDisparados: [...disparados, id],
+        eventosPendentes: [evento],
+      };
+    }
+  }
+
+  return atualizado;
+}
 
 /**
  * Avança o relógio simulado por uma ou mais HORAS.
@@ -36,6 +152,10 @@ export function avancarMinutosSimulacao(estado: EstadoJogo, qtdMinutos = 1): Est
     minutoAtual: Math.min(59, Math.max(0, estado.minutoAtual ?? 0)),
     horasTotais: estado.horasTotais ?? 0,
   };
+
+  // Um compromisso no horário atual aparece antes de consumir essa hora.
+  novoEstado = aplicarAgendaDoHorario(novoEstado);
+  if (novoEstado.eventosPendentes.length > 0 || passos === 0) return novoEstado;
 
   for (let minuto = 0; minuto < passos; minuto++) {
     const proximoMinuto = (novoEstado.minutoAtual ?? 0) + 1;
@@ -67,9 +187,8 @@ export function avancarMinutosSimulacao(estado: EstadoJogo, qtdMinutos = 1): Est
     };
 
     if (virouDia) {
-      if (novoDia > 30) {
-        // O calendário legado usa meses simulados de 30 dias.
-        // O mês só fecha depois da meia-noite do 30º dia.
+      if (novoDia > diasNoMes(novoEstado.anoAtual, novoEstado.mesAtual)) {
+        // O fechamento usa o número real de dias do mês, incluindo fevereiro bissexto.
         novoEstado = avancarMesSimulacao({ ...novoEstado, diaAtual: 1 });
       } else if (
         Math.random() < 0.10 &&
@@ -82,7 +201,12 @@ export function avancarMinutosSimulacao(estado: EstadoJogo, qtdMinutos = 1): Est
       }
     }
 
-    // A hora que acabou de começar é a hora efetivamente vivida pelo personagem.
+    novoEstado = aplicarAgendaDoHorario(novoEstado);
+    if (novoEstado.eventosPendentes.length > 0) {
+      // O relógio pausa na escolha: a hora de atividade começa depois da decisão.
+      break;
+    }
+
     const { novaVida, avisos } = simularHoraVida(
       novoEstado.vida,
       novoEstado.macro,
@@ -105,9 +229,11 @@ export function avancarMinutosSimulacao(estado: EstadoJogo, qtdMinutos = 1): Est
   return novoEstado;
 }
 
-/** Compatibilidade: ações existentes que pedem horas continuam funcionando. */
+/** Avança horas completas e mantém o mostrador sempre alinhado em HH:00. */
 export function avancarHorasSimulacao(estado: EstadoJogo, qtdHoras = 1): EstadoJogo {
-  return avancarMinutosSimulacao(estado, Math.max(0, Math.floor(qtdHoras)) * 60);
+  const horas = Number.isFinite(qtdHoras) ? Math.max(0, Math.floor(qtdHoras)) : 0;
+  const estadoAlinhado = { ...estado, minutoAtual: 0 };
+  return avancarMinutosSimulacao(estadoAlinhado, horas * 60);
 }
 
 /**

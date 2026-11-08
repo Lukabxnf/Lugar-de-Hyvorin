@@ -67,54 +67,6 @@ export function calcularIdadeExata(nascimento: DataCalendario, dataAtual: DataCa
 /**
  * Determina a atividade esperada pela rotina padrão do personagem de acordo com a hora e o dia da semana.
  */
-export function obterAtividadePorRotina(
-  vida: VidaPessoal,
-  hora: number,
-  diaSemana: DiaSemana
-): TipoAtividadeRotina {
-  const rotina = vida.rotinaHorarios;
-  const ehFimDeSemana = diaSemana === 'Sábado' || diaSemana === 'Domingo';
-
-  // Horário de sono
-  if (rotina.horarioDormir > rotina.horarioAcordar) {
-    if (hora >= rotina.horarioDormir || hora < rotina.horarioAcordar) {
-      return 'dormindo';
-    }
-  } else {
-    if (hora >= rotina.horarioDormir && hora < rotina.horarioAcordar) {
-      return 'dormindo';
-    }
-  }
-
-  // Se for dia útil (segunda a sexta)
-  if (!ehFimDeSemana) {
-    // Horário de trabalho (se tiver emprego formal)
-    if (
-      vida.empregoAtual &&
-      hora >= rotina.horarioTrabalhoInicio &&
-      hora < rotina.horarioTrabalhoFim
-    ) {
-      return 'trabalhando';
-    }
-
-    // Horário de estudo (se matriculado em curso)
-    if (
-      (vida.cursoMatriculado || vida.cursoAtual) &&
-      hora >= rotina.horarioEstudoInicio &&
-      hora < rotina.horarioEstudoFim
-    ) {
-      return 'estudando';
-    }
-  }
-
-  // Se tiver academia na rotina pela manhã (ex: 7h)
-  if (vida.rotina.academia && hora === rotina.horarioAcordar) {
-    return 'exercicio';
-  }
-
-  return 'livre';
-}
-
 /**
  * Simula uma hora individual na rotina e no relógio do personagem.
  */
@@ -126,10 +78,15 @@ export function simularHoraVida(
 ): { novaVida: VidaPessoal; avisos: string[] } {
   const avisos: string[] = [];
   const novaVida: VidaPessoal = { ...vida };
+  const horasAtividade = Math.max(0, Math.floor(vida.horasRestantesAtividade || 0));
 
-  // 1. Define a atividade com base na rotina ou atividade em curso
-  const atividade = obterAtividadePorRotina(novaVida, horaAtual, diaSemana);
-  novaVida.atividadeAtual = atividade;
+  // O personagem só executa uma atividade quando o jogador a escolheu
+  // ou quando aceitou uma decisão contextual que iniciou essa atividade.
+  const atividade = horasAtividade > 0 ? vida.atividadeAtual : 'livre';
+  if (horasAtividade === 0) {
+    novaVida.atividadeAtual = 'livre';
+    novaVida.horasRestantesAtividade = 0;
+  }
 
   // 2. Processa os efeitos da atividade
   switch (atividade) {
@@ -152,7 +109,7 @@ export function simularHoraVida(
       novaVida.energia = Math.max(0, Number((novaVida.energia - 1.5).toFixed(1)));
       novaVida.intelecto = Math.min(100, Number((novaVida.intelecto + 0.015).toFixed(3)));
 
-      if (novaVida.cursoMatriculado && !novaVida.cursoMatriculado.concluido) {
+      if (novaVida.aulaFormal && novaVida.cursoMatriculado && !novaVida.cursoMatriculado.concluido) {
         novaVida.cursoMatriculado = {
           ...novaVida.cursoMatriculado,
           aulasAssistidas: novaVida.cursoMatriculado.aulasAssistidas + 1,
@@ -180,6 +137,17 @@ export function simularHoraVida(
     default: {
       novaVida.energia = Math.max(0, Number((novaVida.energia - 0.6).toFixed(1)));
       break;
+    }
+  }
+
+  // Uma hora da atividade escolhida foi concluída.
+  if (horasAtividade > 0) {
+    const restantes = Math.max(0, horasAtividade - 1);
+    novaVida.horasRestantesAtividade = restantes;
+    if (restantes === 0) {
+      novaVida.atividadeAtual = 'livre';
+      novaVida.aulaFormal = false;
+      avisos.push('A atividade terminou. Você está com o tempo livre novamente.');
     }
   }
 
@@ -248,9 +216,19 @@ export function simularMesVida(
   if (novaVida.empregoAtual) {
     const carreira = CARREIRAS.find(c => c.id === novaVida.empregoAtual?.carreiraId);
     if (carreira) {
-      rendaTrabalho = novaVida.empregoAtual.salarioAcordado || carreira.salario;
+      const salarioBase = novaVida.empregoAtual.salarioAcordado || carreira.salario;
+      const faltas = Math.min(22, Math.max(0, Math.floor(novaVida.empregoAtual.faltasNoMes || 0)));
+      const descontoFaltas = salarioBase * (faltas / 22);
+      rendaTrabalho = Math.max(0, salarioBase - descontoFaltas);
       estresseTrabalho = carreira.estresse;
-      novaVida.empregoAtual.mesesNoCargo += 1;
+      novaVida.empregoAtual = {
+        ...novaVida.empregoAtual,
+        mesesNoCargo: novaVida.empregoAtual.mesesNoCargo + 1,
+        faltasNoMes: 0,
+      };
+      if (faltas > 0) {
+        logs.push(`Desconto salarial por ${faltas} falta(s) no mês: R$ ${Math.round(descontoFaltas).toLocaleString('pt-BR')}.`);
+      }
 
       // Atualiza experiência na Carteira de Trabalho
       novaVida.carteira.mesesTotaisContribuicao += 1;

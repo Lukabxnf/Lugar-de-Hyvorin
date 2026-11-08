@@ -35,6 +35,7 @@ import {
   NivelEducacao,
   Relacionamento,
   TipoMoradia,
+  TipoAtividadeRotina,
   VeiculoProprio,
 } from '../engine/types';
 import { CARREIRAS, CARGOS_POLITICOS, CURSOS, MORADIAS, VEICULOS_CATALOGO } from '../engine/data';
@@ -46,14 +47,14 @@ interface LifeViewProps {
   estado: EstadoJogo;
   onUpdateEstado: (novoEstado: EstadoJogo) => void;
   onShowMessage: (msg: string) => void;
-  onAvancarHoras?: (qtd: number) => void;
+  onStartTime?: () => void;
 }
 
 export const LifeView: React.FC<LifeViewProps> = ({
   estado,
   onUpdateEstado,
   onShowMessage,
-  onAvancarHoras,
+  onStartTime,
 }) => {
   const { vida, macro, politica, diaAtual, mesAtual, anoAtual, horaAtual, diaSemanaAtual } = estado;
   const [activeSubSection, setActiveSubSection] = useState<
@@ -674,34 +675,40 @@ export const LifeView: React.FC<LifeViewProps> = ({
     onShowMessage(`Matrícula confirmada no curso: ${curso.nome}!`);
   };
 
-  // 7. Ações de Rotina Rápida (Dormir/Descansar recupera energia horária)
-  const handleDescansarDormir = () => {
-    if (onAvancarHoras) {
-      onAvancarHoras(8);
-      onShowMessage('Você dormiu por 8 horas. Sua energia vital foi totalmente recuperada!');
-    } else {
-      onUpdateEstado({
-        ...estado,
-        vida: {
-          ...vida,
-          energia: 100,
-        },
-      });
-      onShowMessage('Descanso realizado com sucesso! Energia recuperada.');
+  // Ações diárias são escolhas explícitas. Nenhuma atividade começa só por causa do relógio.
+  const handleIniciarAtividade = (
+    atividade: Exclude<TipoAtividadeRotina, 'livre' | 'trabalhando'>,
+    duracao: number,
+    descricao: string
+  ) => {
+    if ((vida.horasRestantesAtividade || 0) > 0) {
+      onShowMessage('Finalize ou interrompa a atividade atual antes de começar outra.');
+      return;
     }
-  };
-
-  const handleAtualizarHorariosRotina = (patch: Partial<typeof vida.rotinaHorarios>) => {
     onUpdateEstado({
       ...estado,
       vida: {
         ...vida,
-        rotinaHorarios: {
-          ...vida.rotinaHorarios,
-          ...patch,
-        },
+        atividadeAtual: atividade,
+        horasRestantesAtividade: duracao,
+        aulaFormal: false,
       },
     });
+    onShowMessage(`Você escolheu ${descricao}. O relógio continuará avançando normalmente.`);
+    onStartTime?.();
+  };
+
+  const handleInterromperAtividade = () => {
+    onUpdateEstado({
+      ...estado,
+      vida: {
+        ...vida,
+        atividadeAtual: 'livre',
+        horasRestantesAtividade: 0,
+        aulaFormal: false,
+      },
+    });
+    onShowMessage('Você interrompeu a atividade. O tempo voltou a ficar livre.');
   };
 
   // 8. Carreira e CTPS
@@ -887,7 +894,7 @@ export const LifeView: React.FC<LifeViewProps> = ({
           { id: 'perfil', label: '👤 Perfil & Avatar' },
           { id: 'geral', label: '💳 Finanças & Score' },
           { id: 'historico', label: '📒 Livro-caixa' },
-          { id: 'rotina', label: '⏰ Rotina & Horários' },
+          { id: 'rotina', label: '🎯 Ações & Tempo' },
           { id: 'carreira', label: '💼 Trabalho & CTPS' },
           { id: 'familia', label: '❤️ Família & Relações' },
           { id: 'educacao', label: '🎓 Educação & Semestres' },
@@ -1192,97 +1199,79 @@ export const LifeView: React.FC<LifeViewProps> = ({
         </div>
       )}
 
-      {/* 3. SEÇÃO ROTINA & HORÁRIOS */}
+      {/* 3. AÇÕES PESSOAIS: o jogador escolhe, o relógio simula */}
       {activeSubSection === 'rotina' && (
-        <div className="space-y-6">
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+        <div className="space-y-5">
+          <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
                   <Clock className="w-5 h-5 text-emerald-400" />
-                  Rotina de Horários & Vitalidade
+                  O que você vai fazer agora?
                 </h3>
-                <p className="text-xs text-slate-400">
-                  Configure seus horários de trabalho, estudo e sono. Ficar acordado após a meia-noite sem descanso provoca exaustão.
+                <p className="text-xs text-slate-400 mt-1">
+                  Seu personagem não dorme, trabalha ou estuda automaticamente. Você escolhe a atividade e o tempo simula seus efeitos.
                 </p>
               </div>
-              <button
-                onClick={handleDescansarDormir}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition shadow-lg shadow-indigo-950/40 flex items-center gap-2"
-              >
-                <span>💤 Dormir / Descansar Agora (8h)</span>
-              </button>
-            </div>
-
-            {/* Configuração de Horários */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-              <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 text-xs space-y-2">
-                <span className="font-bold text-slate-200 block">Jornada de Trabalho</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-400">Início:</span>
-                  <select
-                    value={vida.rotinaHorarios?.horarioTrabalhoInicio ?? 8}
-                    onChange={(e) => handleAtualizarHorariosRotina({ horarioTrabalhoInicio: Number(e.target.value) })}
-                    className="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1"
-                  >
-                    {[7, 8, 9, 10].map(h => <option key={h} value={h}>{h}:00</option>)}
-                  </select>
-                  <span className="text-slate-400">Fim:</span>
-                  <select
-                    value={vida.rotinaHorarios?.horarioTrabalhoFim ?? 17}
-                    onChange={(e) => handleAtualizarHorariosRotina({ horarioTrabalhoFim: Number(e.target.value) })}
-                    className="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1"
-                  >
-                    {[14, 16, 17, 18, 19].map(h => <option key={h} value={h}>{h}:00</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 text-xs space-y-2">
-                <span className="font-bold text-slate-200 block">Horário de Estudos</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-400">Início:</span>
-                  <select
-                    value={vida.rotinaHorarios?.horarioEstudoInicio ?? 19}
-                    onChange={(e) => handleAtualizarHorariosRotina({ horarioEstudoInicio: Number(e.target.value) })}
-                    className="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1"
-                  >
-                    {[18, 19, 20].map(h => <option key={h} value={h}>{h}:00</option>)}
-                  </select>
-                  <span className="text-slate-400">Fim:</span>
-                  <select
-                    value={vida.rotinaHorarios?.horarioEstudoFim ?? 22}
-                    onChange={(e) => handleAtualizarHorariosRotina({ horarioEstudoFim: Number(e.target.value) })}
-                    className="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1"
-                  >
-                    {[21, 22, 23].map(h => <option key={h} value={h}>{h}:00</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 text-xs space-y-2">
-                <span className="font-bold text-slate-200 block">Horário de Sono</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-400">Dormir:</span>
-                  <select
-                    value={vida.rotinaHorarios?.horarioDormir ?? 23}
-                    onChange={(e) => handleAtualizarHorariosRotina({ horarioDormir: Number(e.target.value) })}
-                    className="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1"
-                  >
-                    {[21, 22, 23, 0].map(h => <option key={h} value={h}>{h}:00</option>)}
-                  </select>
-                  <span className="text-slate-400">Acordar:</span>
-                  <select
-                    value={vida.rotinaHorarios?.horarioAcordar ?? 7}
-                    onChange={(e) => handleAtualizarHorariosRotina({ horarioAcordar: Number(e.target.value) })}
-                    className="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1"
-                  >
-                    {[5, 6, 7, 8].map(h => <option key={h} value={h}>{h}:00</option>)}
-                  </select>
-                </div>
+              <div className="text-right">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">Horário atual</div>
+                <div className="font-mono text-xl font-bold text-emerald-300">{String(horaAtual).padStart(2, '0')}:00</div>
               </div>
             </div>
-          </div>
+            {(vida.horasRestantesAtividade || 0) > 0 && vida.atividadeAtual !== 'livre' ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+                <div>
+                  <div className="text-sm font-bold text-emerald-200">
+                    {vida.atividadeAtual === 'dormindo' ? 'Você escolheu dormir' :
+                      vida.atividadeAtual === 'estudando' ? (vida.aulaFormal ? 'Você está em aula' : 'Você está estudando por conta própria') :
+                      vida.atividadeAtual === 'trabalhando' ? 'Você está trabalhando' :
+                      vida.atividadeAtual === 'exercicio' ? 'Você escolheu fazer exercício' :
+                      vida.atividadeAtual === 'cuidando_familia' ? 'Você está passando tempo com a família' : 'Você escolheu lazer'}
+                  </div>
+                  <div className="text-xs text-slate-400 mt-1">{vida.horasRestantesAtividade} hora(s) simulada(s) restante(s).</div>
+                </div>
+                <button onClick={handleInterromperAtividade} className="rounded-lg border border-slate-600 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800">
+                  Interromper atividade
+                </button>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/50 p-4 text-sm text-slate-400">
+                Nenhuma atividade escolhida. Você está com o tempo livre.
+              </div>
+            )}
+          </section>
+
+          <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div>
+              <h4 className="font-bold text-slate-100">Atividades disponíveis</h4>
+              <p className="text-xs text-slate-400 mt-1">Cada ação consome tempo do jogo e altera energia, saúde, felicidade ou aprendizado.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              {[
+                { id: 'dormindo' as const, horas: 8, nome: 'Dormir', detalhe: 'Recupera energia durante 8 horas.', icone: '💤' },
+                { id: 'exercicio' as const, horas: 1, nome: 'Fazer exercício', detalhe: 'Melhora saúde e bem-estar por 1 hora.', icone: '🏋️' },
+                { id: 'estudando' as const, horas: 2, nome: 'Estudar em casa', detalhe: 'Desenvolve conhecimento por 2 horas. Não conta como presença em aula.', icone: '📚' },
+                { id: 'lazer' as const, horas: 2, nome: 'Ter um momento de lazer', detalhe: 'Ajuda a recuperar o equilíbrio emocional por 2 horas.', icone: '🎮' },
+                { id: 'cuidando_familia' as const, horas: 1, nome: 'Passar tempo com a família', detalhe: 'Dedica uma hora à convivência familiar.', icone: '❤️' },
+              ].map((acao) => (
+                <button
+                  key={acao.id}
+                  type="button"
+                  disabled={(vida.horasRestantesAtividade || 0) > 0}
+                  onClick={() => handleIniciarAtividade(acao.id, acao.horas, acao.nome.toLowerCase())}
+                  className="rounded-xl border border-slate-700 bg-slate-950/60 p-4 text-left transition hover:border-emerald-500/60 hover:bg-slate-800/70 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <div className="text-2xl">{acao.icone}</div>
+                  <div className="mt-2 text-sm font-bold text-slate-100">{acao.nome}</div>
+                  <div className="mt-1 text-xs text-slate-400">{acao.detalhe}</div>
+                  <div className="mt-3 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">{acao.horas} hora(s) de jogo</div>
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-500">
+              O trabalho e as aulas com horário marcado aparecem como eventos próprios. Você decide se comparece ou falta; o jogo registra as consequências.
+            </p>
+          </section>
         </div>
       )}
 
