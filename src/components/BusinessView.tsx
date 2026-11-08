@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Empresa, EstadoJogo } from '../engine/types';
 import { SETORES_EMPRESA } from '../engine/data';
+import { avaliarContratacaoEmpresa } from '../engine/business';
 import { formatarMoedaCompacta, registrarTransacaoFinanceira } from '../engine/finance';
 
 interface BusinessViewProps {
@@ -138,16 +139,45 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
 
   // 2. Modificar funcionários
   const handleAlterarFuncionarios = (delta: number) => {
-    if (!currentEmpresa) return;
-    const novosFunc = Math.max(1, currentEmpresa.funcionarios + delta);
-    const atualizada = { ...currentEmpresa, funcionarios: novosFunc };
-    const lista = empresasList.map((e) => (e.id === currentEmpresa.id ? atualizada : e));
-    saveUpdatedEmpresas(lista, currentEmpresa.id);
+    if (!currentEmpresa || !Number.isSafeInteger(delta) || delta === 0) return;
+    if (delta > 0) {
+      const analise = avaliarContratacaoEmpresa(currentEmpresa, delta);
+      if (!analise.aprovada) {
+        onShowMessage(analise.motivo);
+        return;
+      }
+      const atualizada = {
+        ...currentEmpresa,
+        funcionarios: currentEmpresa.funcionarios + delta,
+        caixaPJ: currentEmpresa.caixaPJ - analise.custoAdmissao,
+      };
+      saveUpdatedEmpresas(empresasList.map(e => e.id === atualizada.id ? atualizada : e), atualizada.id);
+      onShowMessage(`Contratação registrada: +${delta} funcionário(s). Custo de admissão: R$ ${analise.custoAdmissao.toLocaleString('pt-BR')}.`);
+      return;
+    }
+    if (currentEmpresa.funcionarios + delta < 1) {
+      onShowMessage('A empresa precisa manter ao menos um responsável pela operação.');
+      return;
+    }
+    // Rescisões e encargos não são gratuitos. O caixa da pessoa física não paga a dívida da PJ.
+    const custoRescisao = Math.abs(delta) * currentEmpresa.salarioMedio * 1.5;
+    if (!Number.isFinite(custoRescisao) || currentEmpresa.caixaPJ < custoRescisao) {
+      onShowMessage('Caixa da empresa insuficiente para as rescisões e encargos trabalhistas.');
+      return;
+    }
+    const atualizada = {
+      ...currentEmpresa,
+      funcionarios: currentEmpresa.funcionarios + delta,
+      caixaPJ: currentEmpresa.caixaPJ - custoRescisao,
+    };
+    saveUpdatedEmpresas(empresasList.map(e => e.id === atualizada.id ? atualizada : e), atualizada.id);
+    onShowMessage(`Equipe reduzida. Rescisões e encargos: R$ ${custoRescisao.toLocaleString('pt-BR')}.`);
   };
 
   // 3. Modificar preço de venda (suporte a input direto e delta)
   const handleDefinirPreco = (novoPreco: number) => {
     if (!currentEmpresa) return;
+    if (!Number.isFinite(novoPreco) || novoPreco <= 0) return;
     const valorValido = Math.max(1, novoPreco);
     const atualizada = { ...currentEmpresa, precoVenda: valorValido };
     const lista = empresasList.map((e) => (e.id === currentEmpresa.id ? atualizada : e));
@@ -167,6 +197,7 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
   // 4. Modificar salário médio (suporte a input direto e delta)
   const handleDefinirSalario = (novoSalario: number) => {
     if (!currentEmpresa) return;
+    if (!Number.isFinite(novoSalario) || novoSalario <= 0) return;
     const valorValido = Math.max(1518, novoSalario); // salário mínimo nacional
     const atualizada = { ...currentEmpresa, salarioMedio: valorValido };
     const lista = empresasList.map((e) => (e.id === currentEmpresa.id ? atualizada : e));
