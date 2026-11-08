@@ -288,6 +288,29 @@ export interface RotinaHorarios {
   horarioAcordar: number;        // ex: 7
 }
 
+export type TipoTransacaoFinanceira =
+  | 'salario'
+  | 'rendimento_cdi'
+  | 'parcela_emprestimo'
+  | 'despesa_paga'
+  | 'conta_vencida'
+  | 'juros_mora'
+  | 'emprestimo'
+  | 'evento'
+  | 'transferencia';
+
+export interface TransacaoFinanceira {
+  id: string;
+  data: string;
+  tipo: TipoTransacaoFinanceira;
+  descricao: string;
+  // Fluxo de caixa efetivo: positivo entra, negativo sai, zero não movimenta o caixa.
+  valor: number;
+  saldoApos: number;
+  // Obrigação criada ou juros acrescidos, sem saída imediata de caixa.
+  valorObrigacao?: number;
+}
+
 export interface VidaPessoal {
   nome: string;
   nomeCompleto: string;
@@ -297,6 +320,7 @@ export interface VidaPessoal {
   avatar: AvatarConfig;
 
   saldoBancario: number;
+  historicoFinanceiro?: TransacaoFinanceira[];
   dividaPessoal: number; // Dívidas vencidas acumuladas
   contasVencidas: ContaPagar[];
   emprestimosContratados: EmprestimoContratado[];
