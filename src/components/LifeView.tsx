@@ -62,11 +62,16 @@ export const LifeView: React.FC<LifeViewProps> = ({
   // Estado local para personalização do Avatar
   const [modalAvatarAberto, setModalAvatarAberto] = useState(false);
   const [avatarTemp, setAvatarTemp] = useState<AvatarConfig>({
+    sexo: vida.avatar?.sexo || 'masculino',
     pele: vida.avatar?.pele || 'morena',
     cabeloCor: vida.avatar?.cabeloCor || 'castanho',
     cabeloEstilo: vida.avatar?.cabeloEstilo || 'curto',
+    barba: vida.avatar?.barba || 'nenhuma',
+    bigode: vida.avatar?.bigode || false,
     roupa: vida.avatar?.roupa || 'casual',
     acessorio: vida.avatar?.acessorio || 'relogio',
+    tipoFisico: vida.avatar?.tipoFisico || 'medio',
+    alturaCm: vida.avatar?.alturaCm || 170,
   });
   const [nomeTemp, setNomeTemp] = useState(vida.nomeCompleto || vida.nome);
 
@@ -877,54 +882,17 @@ export const LifeView: React.FC<LifeViewProps> = ({
               {/* Avatar Box */}
               <div className="relative group shrink-0">
                 <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-950 border-2 border-emerald-500/50 flex flex-col items-center justify-center shadow-lg shadow-emerald-950/40 p-2">
-                  {/* Visual Avatar Rendering */}
-                  <div
-                    className={`w-14 h-14 rounded-full border-2 border-slate-700 flex items-center justify-center relative overflow-hidden ${
-                      vida.avatar?.pele === 'clara'
-                        ? 'bg-amber-100'
-                        : vida.avatar?.pele === 'morena'
-                        ? 'bg-amber-700'
-                        : vida.avatar?.pele === 'negra'
-                        ? 'bg-amber-900'
-                        : 'bg-amber-200'
-                    }`}
-                  >
-                    {/* Cabelo */}
-                    <div
-                      className={`absolute top-0 w-full h-4 ${
-                        vida.avatar?.cabeloCor === 'preto'
-                          ? 'bg-slate-950'
-                          : vida.avatar?.cabeloCor === 'loiro'
-                          ? 'bg-yellow-400'
-                          : vida.avatar?.cabeloCor === 'ruivo'
-                          ? 'bg-orange-700'
-                          : vida.avatar?.cabeloCor === 'grisalho'
-                          ? 'bg-slate-400'
-                          : 'bg-amber-950'
-                      } ${vida.avatar?.cabeloEstilo === 'careca' ? 'hidden' : ''}`}
-                    />
-                    {/* Acessório */}
-                    {vida.avatar?.acessorio === 'oculos' && (
-                      <div className="absolute top-5 w-8 h-2 border-t-2 border-slate-900 flex justify-between px-1">
-                        <div className="w-2 h-2 rounded-full border border-slate-900" />
-                        <div className="w-2 h-2 rounded-full border border-slate-900" />
-                      </div>
-                    )}
-                    {vida.avatar?.acessorio === 'chapeu' && (
-                      <div className="absolute top-0 w-12 h-3 bg-amber-950 rounded-t-full" />
-                    )}
-                    <span className="text-xs font-bold mt-2 text-slate-800">👤</span>
+                  <div className={`relative w-14 h-14 rounded-full border-2 border-slate-700 overflow-hidden ${avatarTemp.sexo === 'feminino' ? 'ring-1 ring-pink-400/40' : ''} ${vida.avatar?.pele === 'clara' ? 'bg-amber-100' : vida.avatar?.pele === 'negra' ? 'bg-amber-900' : vida.avatar?.pele === 'oriental' ? 'bg-amber-200' : 'bg-amber-700'}`}>
+                    <div className={`absolute top-0 left-0 w-full bg-amber-950 ${vida.avatar?.cabeloCor === 'preto' ? '!bg-slate-950' : vida.avatar?.cabeloCor === 'loiro' ? '!bg-yellow-400' : vida.avatar?.cabeloCor === 'ruivo' ? '!bg-orange-700' : vida.avatar?.cabeloCor === 'grisalho' ? '!bg-slate-400' : ''} ${vida.avatar?.cabeloEstilo === 'careca' ? 'hidden' : vida.avatar?.cabeloEstilo === 'longo' ? 'h-8 rounded-b-xl' : vida.avatar?.cabeloEstilo === 'crespo' ? 'h-5 rounded-b-2xl' : 'h-4 rounded-b-lg'}`} />
+                    <div className="absolute left-3 top-6 w-1 h-1 rounded-full bg-slate-900" />
+                    <div className="absolute right-3 top-6 w-1 h-1 rounded-full bg-slate-900" />
+                    <div className="absolute left-5 top-9 w-4 h-1 rounded-full bg-rose-900/70" />
+                    {(vida.avatar?.barba && vida.avatar.barba !== 'nenhuma') && <div className={`absolute bottom-0 left-2 right-2 bg-amber-950/90 ${vida.avatar.barba === 'cheia' ? 'h-4 rounded-b-xl' : 'h-2 rounded-b-lg'}`} />}
+                    {vida.avatar?.bigode && <div className="absolute left-4 top-9 w-6 h-1 rounded-full bg-amber-950" />}
                   </div>
-                  <span className="text-[10px] font-semibold text-emerald-400 mt-1 uppercase">
-                    {vida.avatar?.roupa || 'Casual'}
-                  </span>
+                  <span className="text-[10px] font-semibold text-emerald-400 mt-1 uppercase">{vida.avatar?.roupa || 'Casual'}</span>
                 </div>
-                <button
-                  onClick={() => setModalAvatarAberto(true)}
-                  className="mt-2 w-full text-center text-xs font-semibold py-1 px-2 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 transition"
-                >
-                  Editar Avatar
-                </button>
+                <button onClick={() => { setAvatarTemp({ sexo: vida.avatar?.sexo || 'masculino', pele: vida.avatar?.pele || 'morena', cabeloCor: vida.avatar?.cabeloCor || 'castanho', cabeloEstilo: vida.avatar?.cabeloEstilo || 'curto', barba: vida.avatar?.barba || 'nenhuma', bigode: vida.avatar?.bigode || false, roupa: vida.avatar?.roupa || 'casual', acessorio: vida.avatar?.acessorio || 'relogio', tipoFisico: vida.avatar?.tipoFisico || 'medio', alturaCm: vida.avatar?.alturaCm || 170 }); setNomeTemp(vida.nomeCompleto || vida.nome); setModalAvatarAberto(true); }} className="mt-2 w-full text-center text-xs font-semibold py-1 px-2 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 transition">Editar personagem</button>
               </div>
 
               {/* Informações Civis e Pessoais */}
@@ -1590,97 +1558,38 @@ export const LifeView: React.FC<LifeViewProps> = ({
         </div>
       )}
 
-      {/* MODAL PERSONALIZAR AVATAR */}
+      {/* EDITOR DE IDENTIDADE DO PERSONAGEM */}
       {modalAvatarAberto && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
-            <h3 className="text-base font-bold text-slate-100">Personalizar Perfil & Avatar</h3>
-
-            <div>
-              <label className="text-xs text-slate-400 block mb-1">Nome Completo</label>
-              <input
-                type="text"
-                value={nomeTemp}
-                onChange={(e) => setNomeTemp(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
-              />
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 sm:p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div><h3 className="text-lg font-bold text-slate-100">Personalizar personagem</h3><p className="text-xs text-slate-400">Defina sua identidade e aparência.</p></div>
+              <button onClick={() => setModalAvatarAberto(false)} className="text-slate-400 hover:text-white px-2 py-1">✕</button>
             </div>
-
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <label className="text-slate-400 block mb-1">Tom de Pele</label>
-                <select
-                  value={avatarTemp.pele}
-                  onChange={(e) => setAvatarTemp({ ...avatarTemp, pele: e.target.value as any })}
-                  className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-200"
-                >
-                  <option value="clara">Clara</option>
-                  <option value="morena">Morena</option>
-                  <option value="negra">Negra</option>
-                  <option value="oriental">Oriental</option>
-                </select>
+            <div><label className="text-xs text-slate-400 block mb-1">Nome completo</label><input type="text" value={nomeTemp} onChange={e => setNomeTemp(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100" /></div>
+            <section className="space-y-2"><h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400">Identidade</h4>
+              <div className="grid grid-cols-2 gap-2">
+                {(['masculino','feminino'] as const).map(sexo => <button key={sexo} type="button" onClick={() => setAvatarTemp({...avatarTemp,sexo, barba: sexo === 'feminino' ? 'nenhuma' : avatarTemp.barba})} className={`rounded-lg border px-3 py-3 text-sm font-semibold capitalize ${avatarTemp.sexo === sexo ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300' : 'border-slate-700 bg-slate-800 text-slate-300'}`}>{sexo === 'masculino' ? '♂ Masculino' : '♀ Feminino'}</button>)}
               </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Estilo de Cabelo</label>
-                <select
-                  value={avatarTemp.cabeloEstilo}
-                  onChange={(e) => setAvatarTemp({ ...avatarTemp, cabeloEstilo: e.target.value as any })}
-                  className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-200"
-                >
-                  <option value="curto">Curto</option>
-                  <option value="medio">Médio</option>
-                  <option value="longo">Longo</option>
-                  <option value="crespo">Crespo / Black</option>
-                  <option value="careca">Careca</option>
-                </select>
+              <label className="text-xs text-slate-400 block">Tom de pele</label><div className="grid grid-cols-4 gap-2">{(['clara','morena','negra','oriental'] as const).map(pele => <button key={pele} onClick={() => setAvatarTemp({...avatarTemp,pele})} className={`rounded-lg border px-2 py-2 text-xs capitalize ${avatarTemp.pele===pele?'border-emerald-400 bg-emerald-500/15 text-emerald-300':'border-slate-700 bg-slate-800 text-slate-300'}`}>{pele}</button>)}</div>
+            </section>
+            <section className="space-y-3"><h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400">Cabelo e pelos faciais</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <label className="text-xs text-slate-400">Estilo de cabelo<select value={avatarTemp.cabeloEstilo} onChange={e=>setAvatarTemp({...avatarTemp,cabeloEstilo:e.target.value as AvatarConfig['cabeloEstilo']})} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-100"><option value="curto">Curto</option><option value="medio">Médio</option><option value="longo">Longo</option><option value="crespo">Crespo</option><option value="careca">Careca</option></select></label>
+                <label className="text-xs text-slate-400">Cor do cabelo<select value={avatarTemp.cabeloCor} onChange={e=>setAvatarTemp({...avatarTemp,cabeloCor:e.target.value as AvatarConfig['cabeloCor']})} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-100"><option value="preto">Preto</option><option value="castanho">Castanho</option><option value="loiro">Loiro</option><option value="ruivo">Ruivo</option><option value="grisalho">Grisalho</option></select></label>
+                <label className="text-xs text-slate-400">Barba<select value={avatarTemp.barba || 'nenhuma'} onChange={e=>setAvatarTemp({...avatarTemp,barba:e.target.value as AvatarConfig['barba']})} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-100"><option value="nenhuma">Sem barba</option><option value="curta">Barba curta</option><option value="cheia">Barba cheia</option></select></label>
+                <label className="text-xs text-slate-400 flex items-center gap-2"><input type="checkbox" checked={!!avatarTemp.bigode} onChange={e=>setAvatarTemp({...avatarTemp,bigode:e.target.checked})} /> Usar bigode</label>
+                <label className="text-xs text-slate-400">Roupa<select value={avatarTemp.roupa} onChange={e=>setAvatarTemp({...avatarTemp,roupa:e.target.value as AvatarConfig['roupa']})} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-100"><option value="casual">Casual</option><option value="social">Social / terno</option><option value="trabalho">Trabalho / campo</option><option value="esporte">Esportivo</option><option value="elegante">Elegante</option></select></label>
+                <label className="text-xs text-slate-400">Acessório<select value={avatarTemp.acessorio} onChange={e=>setAvatarTemp({...avatarTemp,acessorio:e.target.value as AvatarConfig['acessorio']})} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-100"><option value="nenhum">Nenhum</option><option value="oculos">Óculos</option><option value="relogio">Relógio</option><option value="chapeu">Chapéu</option></select></label>
               </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Cor do Cabelo</label>
-                <select
-                  value={avatarTemp.cabeloCor}
-                  onChange={(e) => setAvatarTemp({ ...avatarTemp, cabeloCor: e.target.value as any })}
-                  className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-200"
-                >
-                  <option value="castanho">Castanho</option>
-                  <option value="preto">Preto</option>
-                  <option value="loiro">Loiro</option>
-                  <option value="ruivo">Ruivo</option>
-                  <option value="grisalho">Grisalho</option>
-                </select>
+            </section>
+            <section className="space-y-3"><h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400">Características físicas</h4><p className="text-xs text-slate-500">Esses atributos fazem parte da ficha do personagem. Não alteram o desenho do avatar.</p>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs text-slate-400">Tipo físico<select value={avatarTemp.tipoFisico || 'medio'} onChange={e=>setAvatarTemp({...avatarTemp,tipoFisico:e.target.value as AvatarConfig['tipoFisico']})} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-100"><option value="magro">Magro</option><option value="medio">Médio</option><option value="forte">Forte</option><option value="robusto">Robusto</option></select></label>
+                <label className="text-xs text-slate-400">Altura: {avatarTemp.alturaCm || 170} cm<input type="range" min="140" max="210" step="1" value={avatarTemp.alturaCm || 170} onChange={e=>setAvatarTemp({...avatarTemp,alturaCm:Number(e.target.value)})} className="mt-3 w-full accent-emerald-500" /></label>
               </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Traje / Roupa</label>
-                <select
-                  value={avatarTemp.roupa}
-                  onChange={(e) => setAvatarTemp({ ...avatarTemp, roupa: e.target.value as any })}
-                  className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-200"
-                >
-                  <option value="casual">Casual</option>
-                  <option value="social">Social / Terno</option>
-                  <option value="trabalho">Trabalho / Campo</option>
-                  <option value="esporte">Esportivo</option>
-                  <option value="elegante">Elegante</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setModalAvatarAberto(false)}
-                className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSalvarAvatar}
-                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white"
-              >
-                Salvar Alterações
-              </button>
-            </div>
+            </section>
+            <div className="flex justify-end gap-2 border-t border-slate-800 pt-4"><button onClick={()=>setModalAvatarAberto(false)} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white">Cancelar</button><button onClick={handleSalvarAvatar} className="px-5 py-2 rounded-lg text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white">Salvar alterações</button></div>
           </div>
         </div>
       )}
