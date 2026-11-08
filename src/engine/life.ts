@@ -670,6 +670,16 @@ export function simularMesVida(
 
   novaVida.felicidade = Math.max(5, Math.min(100, Number((novaVida.felicidade + deltaFelicidade * 0.5).toFixed(1))));
 
+  // Veículos são bens patrimoniais: inflação altera preços nominais, enquanto
+  // desgaste e idade reduzem valor real. Não desaparecem quando se compra outro.
+  const fatorInflacaoMes = Math.pow(1 + Math.max(-50, macro.inflacaoIpca12m) / 100, 1 / 12);
+  novaVida.veiculos = (novaVida.veiculos || []).map(veiculo => ({
+    ...veiculo,
+    valorMercadoAtual: Math.max(0, Math.round(
+      Math.max(0, veiculo.valorMercadoAtual) * fatorInflacaoMes * 0.991
+    )),
+  }));
+
   // Networking cresce com intelecto e reputação
   const ganhoNetworking = novaVida.reputacao * 0.02 + novaVida.intelecto * 0.015;
   novaVida.redeContatos = Math.min(100, Number((novaVida.redeContatos + ganhoNetworking).toFixed(1)));
