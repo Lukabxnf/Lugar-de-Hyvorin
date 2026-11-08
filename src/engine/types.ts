@@ -134,6 +134,7 @@ export interface CursoMatriculado {
   aprovado: boolean;
   concluido: boolean;
   mesesDecorridos: number;
+  mesesNoSemestre?: number;
   mesesTotais: number;
   concedeNivel?: NivelEducacao;
 }
