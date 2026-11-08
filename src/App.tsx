@@ -133,7 +133,7 @@ export default function App() {
       setEstado((atual) => {
         const pendente = atual.eventosPendentes[0];
         if (!pendente || pendente.id !== evento.id) return atual;
-        const opcoesNarradas = new Map(narrado.opcoes.map((opcao) => [opcao.id, opcao]));
+        const opcoesNarradas = new Map(narrado.opcoes.map((opcao) => [opcao.id, opcao] as const));
         return {
           ...atual,
           eventosPendentes: [{
