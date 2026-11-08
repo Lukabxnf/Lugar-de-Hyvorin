@@ -9,7 +9,7 @@
     "preview": "npm run build && NODE_ENV=production node server.js",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx --test src/engine/simulation.test.ts",
+    "test": "tsx --test src/engine/simulation.test.ts src/services/groq.test.ts",
     "start": "NODE_ENV=production node server.js"
   },
   "dependencies": {
