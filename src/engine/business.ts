@@ -17,42 +17,52 @@ export function simularMesEmpresa(
   const fatorDolar = (macro.cambioDolar / 5.2) * (setor.sensibilidadeDolar * 0.4);
   const custoInsumoEfetivo = setor.custoInsumoBase * (1 + inflacaoMensal + (fatorDolar > 0 ? (fatorDolar - 0.4) * 0.1 : 0));
 
-  // 2. Capacidade produtiva (mão de obra x maquinário)
-  const capacidadeMaoDeObra = empresa.funcionarios * setor.produtividadeFuncionario;
-  const capacidadeReal = Math.min(capacidadeMaoDeObra, empresa.capacidadeMaquinas);
-  
-  // Produção do mês
-  const unidadesProduzidas = Math.round(capacidadeReal);
-  const estoqueTotal = empresa.estoque + unidadesProduzidas;
+  // 2. Capacidade produtiva: a fábrica só produz o que consegue vender
+  // ou armazenar, respeitando trabalhadores, máquinas e estoque existente.
+  const capacidadeMaoDeObra = Math.max(0, empresa.funcionarios) * setor.produtividadeFuncionario;
+  const capacidadeReal = Math.max(0, Math.min(capacidadeMaoDeObra, empresa.capacidadeMaquinas));
 
-  // 3. Demanda do mercado por unidades
-  // Base de clientes = 1000 * porte multiplier
+  // 3. Demanda: preço muito acima do mercado derruba a procura sem piso artificial.
   const porteMultiplier = empresa.porte === 'MEI' ? 1 : empresa.porte === 'LTDA' ? 5 : 25;
   const demandaBase = 1200 * porteMultiplier;
+  const razaoPreco = Math.max(0.01, empresa.precoVenda / setor.precoVendaBase);
+  const efeitoPreco = Math.pow(razaoPreco, -setor.elasticidadePreco)
+    * Math.exp(-Math.max(0, razaoPreco - 1) * 0.12);
 
-  // Efeito Preço: elasticidade
-  const razaoPreco = empresa.precoVenda / setor.precoVendaBase;
-  const efeitoPreco = Math.max(0.1, Math.pow(razaoPreco, -setor.elasticidadePreco));
+  const efeitoPib = Math.max(0.2, 1 + (macro.crescimentoAnualPib / 100));
+  const efeitoDesemprego = Math.max(0.2, 1 - ((macro.taxaDesemprego - 7.0) / 100));
+  const efeitoSelic = Math.max(0.2, 1 - ((macro.taxaSelic - 10.0) / 100) * setor.sensibilidadeSelic);
+  const efeitoDolarAgro = setor.id === 'agronegocio'
+    ? Math.max(0.2, (macro.cambioDolar / 5.0) * 0.8)
+    : 1.0;
 
-  // Efeito Macroeconômico: PIB, Desemprego e Selic
-  const efeitoPib = 1 + (macro.crescimentoAnualPib / 100);
-  const efeitoDesemprego = 1 - ((macro.taxaDesemprego - 7.0) / 100);
-  const efeitoSelic = 1 - ((macro.taxaSelic - 10.0) / 100) * setor.sensibilidadeSelic;
+  const demandaFinal = Math.max(0, Math.round(
+    demandaBase * efeitoPreco * efeitoPib * efeitoDesemprego * efeitoSelic * efeitoDolarAgro
+  ));
 
-  // Bônus especial para Agronegócio com dólar alto
-  const efeitoDolarAgro = setor.id === 'agronegocio' ? (macro.cambioDolar / 5.0) * 0.8 : 1.0;
-
-  const demandaFinal = Math.max(
-    10,
-    Math.round(demandaBase * efeitoPreco * efeitoPib * efeitoDesemprego * efeitoSelic * efeitoDolarAgro)
+  // Saves antigos ganham capacidade coerente sem descartar o estoque já conquistado.
+  const capacidadeArmazenamento = Math.max(
+    Math.max(0, empresa.estoque),
+    empresa.capacidadeArmazenamento ?? Math.round(capacidadeReal * 2)
   );
+  const estoqueExistente = Math.max(0, empresa.estoque);
+  const espacoDisponivel = Math.max(0, capacidadeArmazenamento - estoqueExistente);
+  const necessidadeReposicao = Math.max(0, demandaFinal - estoqueExistente);
+  const unidadesProduzidas = Math.floor(Math.min(
+    capacidadeReal,
+    espacoDisponivel,
+    necessidadeReposicao
+  ));
+  const estoqueTotal = estoqueExistente + unidadesProduzidas;
 
-  // 4. Vendas
+  // 4. Vendas limitadas à procura efetiva. Estoque antigo é escoado antes de nova produção.
   const unidadesVendidas = Math.min(demandaFinal, estoqueTotal);
   const novoEstoque = Math.max(0, estoqueTotal - unidadesVendidas);
 
   // 5. Custos Operacionais
   const custoInsumos = unidadesProduzidas * custoInsumoEfetivo;
+  // Estoque parado consome capital, espaço e seguro/armazenagem.
+  const custoArmazenagem = novoEstoque * custoInsumoEfetivo * 0.002;
   
   // Encargos trabalhistas brasileiros (~ 35% sobre folha)
   const custoFolha = empresa.funcionarios * empresa.salarioMedio * 1.35;
@@ -68,7 +78,7 @@ export function simularMesEmpresa(
   const impostos = receita * aliquotaImposto;
 
   // 7. Lucro Líquido
-  const lucroLiquido = receita - (custoInsumos + custoFolha + jurosDividaMensal + impostos);
+  const lucroLiquido = receita - (custoInsumos + custoArmazenagem + custoFolha + jurosDividaMensal + impostos);
   const novoCaixa = empresa.caixaPJ + lucroLiquido;
 
   // Histórico de lucro
@@ -95,6 +105,7 @@ export function simularMesEmpresa(
   return {
     novaEmpresa: {
       ...empresa,
+      capacidadeArmazenamento,
       estoque: novoEstoque,
       caixaPJ: novoCaixa,
       ativa,
@@ -102,6 +113,7 @@ export function simularMesEmpresa(
       ultimoMes: {
         receita: Math.round(receita),
         custoInsumos: Math.round(custoInsumos),
+        custoArmazenagem: Math.round(custoArmazenagem),
         custoFolha: Math.round(custoFolha),
         jurosDivida: Math.round(jurosDividaMensal),
         impostos: Math.round(impostos),
