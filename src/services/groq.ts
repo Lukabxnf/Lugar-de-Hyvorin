@@ -2,7 +2,7 @@ import type { EstadoJogo, EventoDecisao, NoticiaGazeta } from '../engine/types';
 
 export const GROQ_STORAGE_KEY = 'cidadao_groq_key';
 
-function somenteCampos<T extends Record<string, any>>(origem: T | undefined, campos: string[]) {
+function somenteCampos(origem: any, campos: string[]) {
   if (!origem) return undefined;
   return Object.fromEntries(campos.filter((campo) => origem[campo] !== undefined).map((campo) => [campo, origem[campo]]));
 }
