@@ -4,7 +4,7 @@ import { simularMesEmpresa } from './business';
 import { isAnoEleitoral, simularMesPolitica } from './politics';
 import { sortearEventoDecisao, sortearEventoMensal } from './events';
 import { CARREIRAS, CARGOS_POLITICOS, CURSOS } from './data';
-import { DiaSemana, Empresa, EstadoJogo, EventoDecisao, HistoricoPonto, NoticiaGazeta } from './types';
+import { DiaSemana, Empresa, EstadoJogo, EventoDecisao, HistoricoPonto, NoticiaGazeta, PropostaFechamentoIA } from './types';
 
 export const DIAS_DA_SEMANA: DiaSemana[] = [
   'Segunda-feira',
@@ -236,6 +236,10 @@ export function avancarHorasSimulacao(estado: EstadoJogo, qtdHoras = 1): EstadoJ
   return avancarMinutosSimulacao(estadoAlinhado, horas * 60);
 }
 
+function impactoContextualSeguro(valor: number | undefined, limite: number): number {
+  return typeof valor === 'number' && Number.isFinite(valor) && Math.abs(valor) <= limite ? valor : 0;
+}
+
 /**
  * Executa a simulação mensal completa:
  * - Salários da carteira e cargos públicos.
@@ -245,7 +249,7 @@ export function avancarHorasSimulacao(estado: EstadoJogo, qtdHoras = 1): EstadoJ
  * - Mandatos, aprovação popular e calendário eleitoral do TSE.
  * - Notícias da Gazeta do Brasil.
  */
-export function avancarMesSimulacao(estado: EstadoJogo): EstadoJogo {
+export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFechamentoIA): EstadoJogo {
   // Decisões importantes precisam ser resolvidas antes do próximo fechamento.
   if (estado.eventosPendentes.length > 0) return estado;
   const novoMesesTotais = estado.mesesTotais + 1;
@@ -283,6 +287,15 @@ export function avancarMesSimulacao(estado: EstadoJogo): EstadoJogo {
       novasNoticias.pop();
     }
     destaques.push(`📰 NOTÍCIA: ${evento.titulo}`);
+  }
+
+  // A IA participa da análise causal, mas não substitui as contas do motor.
+  choqueInflacao += impactoContextualSeguro(propostaIA?.choqueInflacao, 0.6);
+  choquePib += impactoContextualSeguro(propostaIA?.choquePib, 0.8);
+  choqueDolar += impactoContextualSeguro(propostaIA?.choqueDolar, 0.15);
+  impactoApoioParlamento += impactoContextualSeguro(propostaIA?.impactoApoioParlamento, 3);
+  if (propostaIA?.justificativa && propostaIA.justificativa.length <= 250) {
+    destaques.unshift(`Cenário do mês: ${propostaIA.justificativa}`);
   }
 
   // 2. Gastos extras de políticas ativas aprovadas
@@ -407,6 +420,16 @@ export function avancarMesSimulacao(estado: EstadoJogo): EstadoJogo {
     politica: politicaFinal,
     noticias: novasNoticias,
     historico: novoHistorico,
+    memoriaIA: [...(estado.memoriaIA || []), {
+      mes: novoMes,
+      ano: novoAno,
+      sintese: propostaIA?.justificativa || destaques[0] || 'Mês sem grandes acontecimentos.',
+      saldoPessoal: Math.round(novaVida.saldoBancario),
+      inflacao: novaMacro.inflacaoIpca12m,
+      desemprego: novaMacro.taxaDesemprego,
+      dolar: novaMacro.cambioDolar,
+      decisoesRecentes: (estado.eventosResolvidos || []).slice(0, 5).map(decisao => `${decisao.titulo}: ${decisao.opcaoEscolhida}`),
+    }].slice(-120),
     ultimoResumoMes: {
       saldoAnterior: Math.round(saldoAnterior),
       saldoAtual: Math.round(novaVida.saldoBancario),
@@ -417,13 +440,42 @@ export function avancarMesSimulacao(estado: EstadoJogo): EstadoJogo {
     },
   };
 
-  // Eventos contextuais são apresentados após o fechamento. A IA poderá
-  // enriquecer a análise; o save preserva os resultados que realmente ocorreram.
+  // O evento proposto pela IA é novo, mas limitado a atributos verificáveis.
+  // Nenhum texto da IA recebe permissão para criar dinheiro, cargo ou emprego.
+  const contexto = propostaIA?.acontecimento;
+  const categoriaValida = contexto?.categoria !== 'empresa' || novasEmpresas.some(e => e.ativa);
+  const trabalhoValido = contexto?.categoria !== 'trabalho' || !!novaVida.empregoAtual;
+  const politicaValida = contexto?.categoria !== 'politica' || politicaFinal.cargoAtual !== 'cidadao';
+  if (contexto && categoriaValida && trabalhoValido && politicaValida &&
+      contexto.opcoes.length >= 2 && contexto.opcoes.length <= 3) {
+    const eventoIA: EventoDecisao = {
+      id: `ev_ia_${novoAno}_${novoMes}_${novoMesesTotais}`,
+      categoria: contexto.categoria,
+      urgencia: contexto.urgencia,
+      titulo: contexto.titulo,
+      descricao: contexto.descricao,
+      dataOcorrencia: `1/${novoMes}/${novoAno}`,
+      opcoes: contexto.opcoes.map((opcao, indice) => ({
+        id: `ia_opcao_${indice + 1}`,
+        texto: opcao.texto,
+        descricaoImpacto: opcao.descricaoImpacto,
+        consequencias: {
+          deltaSaude: impactoContextualSeguro(opcao.deltaSaude, 10),
+          deltaFelicidade: impactoContextualSeguro(opcao.deltaFelicidade, 12),
+          deltaEnergia: impactoContextualSeguro(opcao.deltaEnergia, 15),
+          deltaIntelecto: impactoContextualSeguro(opcao.deltaIntelecto, 3),
+          deltaReputacao: impactoContextualSeguro(opcao.deltaReputacao, 5),
+          mensagemResultado: opcao.mensagemResultado,
+        },
+      })),
+    };
+    return { ...atualizado, eventosPendentes: [eventoIA] };
+  }
+
+  // Reserva local em caso de resposta ausente/inválida ou falta de crédito da API.
   if (Math.random() < 0.3) {
     const eventoDoMes = sortearEventoDecisao(atualizado);
-    if (eventoDoMes) {
-      return { ...atualizado, eventosPendentes: [eventoDoMes] };
-    }
+    if (eventoDoMes) return { ...atualizado, eventosPendentes: [eventoDoMes] };
   }
   return atualizado;
 }

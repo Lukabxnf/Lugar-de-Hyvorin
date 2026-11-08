@@ -20,9 +20,9 @@ import { EstadoJogo, OpcaoEvento } from './engine/types';
 import { aplicarImpactoAfinidadeFamiliar } from './engine/events';
 import { registrarTransacaoFinanceira } from './engine/finance';
 import { criarEstadoInicial } from './engine/presets';
-import { avancarMultiplosMeses } from './engine/simulation';
+import { avancarMesSimulacao, avancarMultiplosMeses } from './engine/simulation';
 import { simularHoraVida } from './engine/life';
-import { GROQ_STORAGE_KEY, montarLeituraIA, narrarFato, narrarGazeta } from './services/groq';
+import { GROQ_STORAGE_KEY, analisarFechamentoMes, montarLeituraIA, narrarFato, narrarGazeta } from './services/groq';
 
 const STORAGE_KEY = 'cidadao_sim_save_v1';
 
@@ -102,6 +102,8 @@ export default function App() {
   // UI state
   const [activeTab, setActiveTab] = useState<string>('vida');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [fechandoPeriodo, setFechandoPeriodo] = useState(false);
+  const fechamentoEmCursoRef = useRef(false);
   const [groqKey, setGroqKey] = useState<string>(() => {
     try { return localStorage.getItem(GROQ_STORAGE_KEY) || ''; } catch { return ''; }
   });
@@ -265,11 +267,27 @@ export default function App() {
     showToast(`Nova jornada iniciada com sucesso!`);
   }, [showToast]);
 
-  // Avanço deliberado: nunca salta meses, nem ignora decisões pendentes.
-  const handleAdvanceMonths = useCallback((quantidade: number) => {
-    if (![1, 6, 12].includes(quantidade)) return;
-    setEstado((anterior) => avancarMultiplosMeses(anterior, quantidade));
-  }, []);
+  // Uma análise contextual por avanço solicitado. Os meses adicionais são
+  // processados pelo motor, um a um, com pausa obrigatória em decisões pendentes.
+  // Se a API falhar ou esgotar a cota, o jogo continua sem bloquear a partida.
+  const handleAdvanceMonths = useCallback(async (quantidade: number) => {
+    if (![1, 6, 12].includes(quantidade) || fechamentoEmCursoRef.current) return;
+    const anterior = estadoRef.current;
+    if (anterior.eventosPendentes.length > 0) return;
+    fechamentoEmCursoRef.current = true;
+    setFechandoPeriodo(true);
+    try {
+      const proposta = groqKey ? await analisarFechamentoMes(groqKey, anterior) : null;
+      let proximo = avancarMesSimulacao(anterior, proposta || undefined);
+      if (quantidade > 1 && proximo.eventosPendentes.length === 0) {
+        proximo = avancarMultiplosMeses(proximo, quantidade - 1);
+      }
+      setEstado(proximo);
+    } finally {
+      fechamentoEmCursoRef.current = false;
+      setFechandoPeriodo(false);
+    }
+  }, [groqKey]);
 
   // Ações opcionais de rotina são resolvidas de imediato, sem criar um relógio
   // de cliques obrigatório para trabalhar ou estudar em um jogo mensal.
@@ -381,6 +399,7 @@ export default function App() {
       <Header
         estado={estado}
         onAdvanceMonths={handleAdvanceMonths}
+        fechandoPeriodo={fechandoPeriodo}
         onOpenNewGame={() => setShowNewGameModal(true)}
         onSaveGame={handleSaveGame}
         onLoadGame={handleLoadGame}
@@ -389,6 +408,14 @@ export default function App() {
         onSaveGroqKey={handleSaveGroqKey}
         onDeleteGroqKey={handleDeleteGroqKey}
       />
+
+      {fechandoPeriodo && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/65 backdrop-blur-sm" role="status" aria-live="polite">
+          <div className="rounded-xl border border-slate-700 bg-slate-900 px-6 py-4 text-sm font-semibold text-slate-100 shadow-xl">
+            Fechando o período e preparando o próximo mês...
+          </div>
+        </div>
+      )}
 
       {/* Navegação entre Abas */}
       <TabNavigation
