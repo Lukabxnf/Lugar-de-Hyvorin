@@ -320,6 +320,7 @@ export default function App() {
         temEmpresa={temEmpresaAtiva}
         noticiasNaoLidas={estado.noticias.length}
         emCampanha={estado.politica.emCampanha}
+        temCargoPolitico={!['cidadao', 'lider_comunitario'].includes(estado.politica.cargoAtual)}
       />
 
       {/* Conteúdo Principal */}
@@ -330,6 +331,7 @@ export default function App() {
             onUpdateEstado={setEstado}
             onShowMessage={showToast}
             onStartTime={() => setIsPlaying(true)}
+            onOpenPolitics={() => setActiveTab('politica')}
           />
         )}
 
