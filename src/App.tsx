@@ -17,6 +17,7 @@ import { MonthlySummaryModal } from './components/MonthlySummaryModal';
 import { EventDecisionModal } from './components/EventDecisionModal';
 
 import { EstadoJogo, OpcaoEvento } from './engine/types';
+import { aplicarImpactoAfinidadeFamiliar } from './engine/events';
 import { criarEstadoInicial } from './engine/presets';
 import { avancarHorasSimulacao, avancarMinutosSimulacao, avancarMesSimulacao, avancarMultiplosMeses } from './engine/simulation';
 
@@ -244,6 +245,14 @@ export default function App() {
       const novoIntelecto = Math.min(100, prev.vida.intelecto + (c.deltaIntelecto || 0));
       const novaReputacao = Math.min(100, prev.vida.reputacao + (c.deltaReputacao || 0));
 
+      const novaFamilia = c.deltaAfinidadeRelId && c.deltaAfinidadeValor !== undefined
+        ? aplicarImpactoAfinidadeFamiliar(
+            prev.vida.familia,
+            c.deltaAfinidadeRelId,
+            c.deltaAfinidadeValor
+          )
+        : prev.vida.familia;
+
       const resolvido = {
         id: eventoAtual.id,
         titulo: eventoAtual.titulo,
@@ -262,8 +271,9 @@ export default function App() {
           saude: novaSaude,
           felicidade: novaFelicidade,
           energia: novaEnergia,
-          intelecto: novoIntelecto,
-          reputacao: novaReputacao,
+          intelecto: Math.max(0, Math.min(100, prev.vida.intelecto + (c.deltaIntelecto || 0))),
+          reputacao: Math.max(0, Math.min(100, novaReputacao)),
+          familia: novaFamilia,
         },
         eventosPendentes: prev.eventosPendentes.slice(1),
         eventosResolvidos: [resolvido, ...prev.eventosResolvidos].slice(0, 30),
