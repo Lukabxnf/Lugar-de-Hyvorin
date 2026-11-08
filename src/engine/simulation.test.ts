@@ -178,6 +178,23 @@ test('Life: dynamic age calculation from birth date is strictly accurate', () =>
   assert.equal(calcularIdadeExata(nascimento, dataDepois), 26);
 });
 
+test('Finance: monthly salary and CDI movements enter the transaction ledger exactly once', () => {
+  const estado = criarEstadoInicial('estudante');
+  const { novaVida } = simularMesVida(
+    estado.vida,
+    estado.macro,
+    0,
+    { dia: 1, mes: 6, ano: 2026 }
+  );
+  const historico = novaVida.historicoFinanceiro || [];
+
+  assert.equal(historico.filter(tx => tx.tipo === 'salario').length, 1);
+  assert.equal(historico.filter(tx => tx.tipo === 'rendimento_cdi').length, 1);
+  assert.ok(historico.some(tx => tx.tipo === 'despesa_paga' || tx.tipo === 'conta_vencida'));
+  assert.ok(historico.every(tx => Number.isFinite(tx.valor) && Number.isFinite(tx.saldoApos)));
+  assert.ok(historico.length <= 200);
+});
+
 test('Finance: effective 5.47% CDI compounds correctly over 91 months', () => {
   const monthlyRate = calcularTaxaMensalEfetiva(5.47);
   const initialBalance = 1_000_000;
