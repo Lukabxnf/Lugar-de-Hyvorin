@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Header } from './components/Header';
 import { TabNavigation } from './components/TabNavigation';
 import { LifeView } from './components/LifeView';
@@ -18,7 +18,7 @@ import { EventDecisionModal } from './components/EventDecisionModal';
 
 import { EstadoJogo, OpcaoEvento } from './engine/types';
 import { criarEstadoInicial } from './engine/presets';
-import { avancarHorasSimulacao, avancarMesSimulacao, avancarMultiplosMeses } from './engine/simulation';
+import { avancarHorasSimulacao, avancarMinutosSimulacao, avancarMesSimulacao, avancarMultiplosMeses } from './engine/simulation';
 
 const STORAGE_KEY = 'cidadao_sim_save_v1';
 
@@ -103,6 +103,23 @@ export default function App() {
     votos: number;
   } | null>(null);
 
+  const mesesObservadosRef = useRef(estado.mesesTotais);
+
+  // Mostra o fechamento mais recente quando o relógio atravessa um mês.
+  useEffect(() => {
+    if (estado.mesesTotais > mesesObservadosRef.current) {
+      setShowSummaryModal(true);
+    }
+    mesesObservadosRef.current = estado.mesesTotais;
+  }, [estado.mesesTotais]);
+
+  // Eventos importantes interrompem a reprodução para não serem ignorados.
+  useEffect(() => {
+    if (estado.eventosPendentes.length > 0) {
+      setIsPlaying(false);
+    }
+  }, [estado.eventosPendentes.length]);
+
   // Toast auto-clear
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -159,20 +176,14 @@ export default function App() {
     showToast(`Nova jornada iniciada com sucesso!`);
   }, [showToast]);
 
-  // Avançar Horas na Simulação (Relógio contínuo)
+  // Avança minutos do relógio de jogo; a rotina pessoal é processada nas viradas de hora.
+  const handleAdvanceMinutes = useCallback((qtdMinutos = 10) => {
+    setEstado((prev) => avancarMinutosSimulacao(prev, qtdMinutos));
+  }, []);
+
+  // Compatibilidade com ações internas que já solicitam horas completas.
   const handleAdvanceHours = useCallback((qtdHoras = 1) => {
-    setEstado((prev) => {
-      const proximo = avancarHorasSimulacao(prev, qtdHoras);
-      if (proximo.mesesTotais > prev.mesesTotais) {
-        setShowSummaryModal(true);
-        setIsPlaying(false);
-      }
-      // Se um evento interativo surgiu, pausa o relógio para que o jogador tome a decisão
-      if (proximo.eventosPendentes && proximo.eventosPendentes.length > 0) {
-        setIsPlaying(false);
-      }
-      return proximo;
-    });
+    setEstado((prev) => avancarHorasSimulacao(prev, qtdHoras));
   }, []);
 
   // Avanço manual de 1 mês completo
@@ -204,23 +215,17 @@ export default function App() {
     });
   }, [showToast]);
 
-  // Ciclo de reprodução: AVANÇA HORAS (X1 = 500ms, X2 = 250ms, X3 = 140ms, X5 = 60ms)
-  // O relógio movimenta horas, rotina diária e dia da semana.
-  // A virada de mês ocorre automaticamente após o 30º dia.
+  // X1 = 10 minutos simulados/segundo real; X2, X3 e X5 escalam a mesma base.
+  // O intervalo único evita acumular timers diferentes ao trocar a velocidade.
   useEffect(() => {
     if (!isPlaying) return;
 
-    let intervalMs = 500;
-    if (playSpeed === 2) intervalMs = 250;
-    else if (playSpeed === 3) intervalMs = 140;
-    else if (playSpeed === 5) intervalMs = 60;
+    const interval = window.setInterval(() => {
+      handleAdvanceMinutes(playSpeed * 10);
+    }, 1000);
 
-    const interval = setInterval(() => {
-      handleAdvanceHours(1);
-    }, intervalMs);
-
-    return () => clearInterval(interval);
-  }, [isPlaying, playSpeed, handleAdvanceHours]);
+    return () => window.clearInterval(interval);
+  }, [isPlaying, playSpeed, handleAdvanceMinutes]);
 
   // Resolução de Evento de Decisão Interativo
   const handleEscolherOpcaoEvento = useCallback((opcao: OpcaoEvento) => {
