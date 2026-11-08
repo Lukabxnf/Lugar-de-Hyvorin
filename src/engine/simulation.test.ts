@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { simularMesMacroeconomia } from './macro';
 import { calcularIdadeExata, calcularTaxaMensalEfetiva, simularHoraVida, simularMesVida } from './life';
 import { simularMesEmpresa } from './business';
-import { isAnoEleitoral } from './politics';
+import { cargoCompativelComEleicao, isAnoEleitoral } from './politics';
 import { criarEstadoInicial } from './presets';
 import { avancarHorasSimulacao, avancarMinutosSimulacao, avancarMesSimulacao } from './simulation';
 import { Macroeconomia, VidaPessoal, Empresa, DataCalendario } from './types';
@@ -315,16 +315,33 @@ test('Business: multiple companies simulate and accumulate profits independently
   assert.ok(proximo.ultimoResumoMes !== undefined);
 });
 
-test('Politics: electoral calendar correctly identifies 24-month general and 48-month municipal elections', () => {
-  const m24 = isAnoEleitoral(24);
-  assert.equal(m24.mesesAteEleicao, 0);
-  assert.equal(m24.tipoEleicao, 'geral');
+test('Politics: election calendar is anchored to October and alternates general/municipal cycles', () => {
+  const janeiro2026 = isAnoEleitoral(0);
+  assert.equal(janeiro2026.anoEleicao, 2026);
+  assert.equal(janeiro2026.mesesAteEleicao, 9);
+  assert.equal(janeiro2026.tipoEleicao, 'geral');
+  assert.equal(janeiro2026.ehAnoEleitoral, true);
 
-  const m48 = isAnoEleitoral(48);
-  assert.equal(m48.mesesAteEleicao, 0);
-  assert.equal(m48.tipoEleicao, 'municipal');
+  const outubro2026 = isAnoEleitoral(9);
+  assert.equal(outubro2026.mesesAteEleicao, 0);
+  assert.equal(outubro2026.tipoEleicao, 'geral');
 
-  const m18 = isAnoEleitoral(18);
-  assert.equal(m18.mesesAteEleicao, 6);
-  assert.equal(m18.ehAnoEleitoral, true);
+  const outubro2028 = isAnoEleitoral(33);
+  assert.equal(outubro2028.mesesAteEleicao, 0);
+  assert.equal(outubro2028.tipoEleicao, 'municipal');
+
+  const outubro2030 = isAnoEleitoral(57);
+  assert.equal(outubro2030.mesesAteEleicao, 0);
+  assert.equal(outubro2030.tipoEleicao, 'geral');
+
+  const setembro2026 = isAnoEleitoral(8);
+  assert.equal(setembro2026.mesesAteEleicao, 1);
+});
+
+test('Politics: candidate offices match the correct election level', () => {
+  assert.equal(cargoCompativelComEleicao('municipal', 'vereador'), true);
+  assert.equal(cargoCompativelComEleicao('municipal', 'prefeito'), true);
+  assert.equal(cargoCompativelComEleicao('municipal', 'presidente'), false);
+  assert.equal(cargoCompativelComEleicao('geral', 'presidente'), true);
+  assert.equal(cargoCompativelComEleicao('geral', 'prefeito'), false);
 });
