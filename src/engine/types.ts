@@ -458,6 +458,7 @@ export interface PoliticaGoverno {
   fundoEleitoralPessoal: number; // R$
   fundoPartidarioMes: number;
   emCampanha: boolean;
+  carreiraPoliticaIniciada?: boolean;
   cargoDisputado?: CargoPoliticoId;
   campanhaInicioMesTotal?: number;
   ultimaEleicaoMesTotal?: number;
