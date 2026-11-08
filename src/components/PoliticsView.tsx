@@ -1,3 +1,4 @@
+import { NumericField } from './NumericField';
 import React, { useState } from 'react';
 import {
   Landmark,
@@ -494,13 +495,7 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  placeholder="Doar valor pessoal..."
-                  value={quantiaFundoCampanha}
-                  onChange={(e) => setQuantiaFundoCampanha(e.target.value)}
-                  className="flex-1 bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-200"
-                />
+                <NumericField ariaLabel="Valor destinado à campanha" min={0} step={100} value={Number(quantiaFundoCampanha) || 0} onCommit={n => setQuantiaFundoCampanha(String(n))} className="flex-1 bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-200" />
                 <button
                   onClick={handleDoarCampanha}
                   className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition"
