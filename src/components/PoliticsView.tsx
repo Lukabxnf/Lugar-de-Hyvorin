@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Landmark,
   Vote,
@@ -16,7 +16,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { CargoPoliticoId, EstadoJogo, PropostaPolitica } from '../engine/types';
-import { CARGOS_POLITICOS } from '../engine/data';
+import { CARREIRAS, CARGOS_POLITICOS } from '../engine/data';
 import { cargoCompativelComEleicao, isAnoEleitoral, simularEleicao, votarProposta } from '../engine/politics';
 
 interface PoliticsViewProps {
@@ -41,7 +41,15 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
     politica.cargoDisputado || (eleicaoInfo.tipoEleicao === 'municipal' ? 'vereador' : 'deputado_federal')
   );
   const [quantiaFundoCampanha, setQuantiaFundoCampanha] = useState('10000');
-  const [activeSubTab, setActiveSubTab] = useState<'carreira' | 'campanha' | 'gabinete'>('carreira');
+  const temMandatoEletivo = !['cidadao', 'lider_comunitario'].includes(politica.cargoAtual);
+  const [activeSubTab, setActiveSubTab] = useState<'carreira' | 'campanha' | 'gabinete'>(
+    temMandatoEletivo ? 'carreira' : 'campanha'
+  );
+
+  // Sem mandato eletivo, esta tela funciona somente como processo de candidatura.
+  useEffect(() => {
+    setActiveSubTab(temMandatoEletivo ? 'carreira' : 'campanha');
+  }, [temMandatoEletivo]);
 
   const cargosOrdem: CargoPoliticoId[] = [
     'cidadao',
@@ -219,6 +227,34 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
 
     if (eleito) {
       onElectionVictory(cargoAlvoInfo.nome, porcentagemVotos);
+
+      // A vitória transforma a ocupação em mandato eletivo: encerra o contrato
+      // anterior na CTPS e registra o cargo público como o único vínculo ativo.
+      const carreiraAnterior = vida.empregoAtual?.cargoPoliticoId
+        ? undefined
+        : CARREIRAS.find(item => item.id === vida.empregoAtual?.carreiraId);
+      const tituloAnterior = carreiraAnterior?.titulo;
+      let registroAnteriorEncerrado = false;
+      const historicoEncerrado = (vida.carteira.historicoRegistros || []).map(registro => {
+        if (!registroAnteriorEncerrado && tituloAnterior && registro.cargo === tituloAnterior && !registro.mesFim) {
+          registroAnteriorEncerrado = true;
+          return { ...registro, mesFim: estado.mesAtual, anoFim: estado.anoAtual };
+        }
+        return registro;
+      });
+      const novoRegistroPolitico = {
+        empresaOuOrgao: cargoAlvoInfo.esfera === 'municipal'
+          ? 'Poder Público Municipal'
+          : cargoAlvoInfo.esfera === 'estadual'
+            ? 'Poder Público Estadual'
+            : 'União / Governo Federal',
+        cargo: cargoAlvoInfo.nome,
+        salario: cargoAlvoInfo.salarioMensal,
+        mesInicio: estado.mesAtual,
+        anoInicio: estado.anoAtual,
+        mesesContribuicao: 0,
+      };
+
       onUpdateEstado({
         ...estado,
         politica: {
@@ -237,6 +273,17 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
         },
         vida: {
           ...vida,
+          empregoAtual: {
+            carreiraId: `politico_${cargoDisputa}`,
+            cargoPoliticoId: cargoDisputa,
+            mesesNoCargo: 0,
+            salarioAcordado: cargoAlvoInfo.salarioMensal,
+            faltasNoMes: 0,
+          },
+          carteira: {
+            ...vida.carteira,
+            historicoRegistros: [novoRegistroPolitico, ...historicoEncerrado],
+          },
           reputacao: Math.min(100, vida.reputacao + 20),
           felicidade: Math.min(100, vida.felicidade + 25),
         },
@@ -317,26 +364,33 @@ export const PoliticsView: React.FC<PoliticsViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Sub tabs */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
-        {[
-          { id: 'carreira', label: 'Mandato Atual & Hierarquia' },
-          { id: 'campanha', label: 'Campanha & Eleições' },
-          { id: 'gabinete', label: 'Gabinete, Leis & Reformas' },
-        ].map((sec) => (
-          <button
-            key={sec.id}
-            onClick={() => setActiveSubTab(sec.id as any)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${
-              activeSubTab === sec.id
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                : 'bg-slate-800/40 text-slate-400 hover:text-slate-200 border-transparent'
-            }`}
-          >
-            {sec.label}
-          </button>
-        ))}
-      </div>
+      {/* A candidatura pode ser iniciada pela carreira; poderes de governo exigem mandato. */}
+      {temMandatoEletivo ? (
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
+          {[
+            { id: 'carreira', label: 'Mandato Atual' },
+            { id: 'campanha', label: 'Campanha & Eleições' },
+            { id: 'gabinete', label: 'Gabinete, Leis & Reformas' },
+          ].map((sec) => (
+            <button
+              key={sec.id}
+              onClick={() => setActiveSubTab(sec.id as any)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${
+                activeSubTab === sec.id
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : 'bg-slate-800/40 text-slate-400 hover:text-slate-200 border-transparent'
+              }`}
+            >
+              {sec.label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="border-b border-slate-800 pb-3">
+          <h2 className="text-lg font-bold text-slate-100">Processo de candidatura a cargo eletivo</h2>
+          <p className="mt-1 text-xs text-slate-400">Esta área mostra somente requisitos, campanha e votação. O gabinete e as funções de governo são liberados após a eleição.</p>
+        </div>
+      )}
 
       {/* SECTION: CARREIRA & HIERARQUIA */}
       {activeSubTab === 'carreira' && (
