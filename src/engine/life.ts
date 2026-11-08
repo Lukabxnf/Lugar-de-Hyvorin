@@ -1,4 +1,5 @@
 import { CARREIRAS, CURSOS, MORADIAS, VEICULOS_CATALOGO } from './data';
+import { registrarTransacaoFinanceira } from './finance';
 import {
   ContaPagar,
   DataCalendario,
@@ -212,6 +213,24 @@ export function simularMesVida(
     emprestimosContratados: (vida.emprestimosContratados || []).map(e => ({ ...e })),
     titulosConquistados: [...(vida.titulosConquistados || [])],
     habilidades: { ...(vida.habilidades || {}) },
+    historicoFinanceiro: [...(vida.historicoFinanceiro || [])],
+  };
+
+  const registrar = (
+    tipo: Parameters<typeof registrarTransacaoFinanceira>[2],
+    descricao: string,
+    valor: number,
+    valorObrigacao?: number
+  ) => {
+    const atualizada = registrarTransacaoFinanceira(
+      novaVida,
+      dataAtual,
+      tipo,
+      descricao,
+      valor,
+      valorObrigacao
+    );
+    novaVida.historicoFinanceiro = atualizada.historicoFinanceiro;
   };
 
   // 1. Atualização de Idade com base na Data de Nascimento Real
@@ -251,8 +270,19 @@ export function simularMesVida(
     rendimentoInvestimentos = novaVida.saldoBancario * taxaCdiMensal;
   }
 
-  // Deposita as entradas financeiras no saldo bancário
-  novaVida.saldoBancario += rendaTotalTrabalho + rendimentoInvestimentos;
+  // Registra separadamente salário e CDI para permitir auditoria do saldo.
+  if (rendaTotalTrabalho > 0) {
+    novaVida.saldoBancario += rendaTotalTrabalho;
+    registrar(
+      'salario',
+      salarioPolitico > rendaTrabalho ? 'Remuneração do cargo político' : 'Salário do trabalho',
+      rendaTotalTrabalho
+    );
+  }
+  if (rendimentoInvestimentos > 0) {
+    novaVida.saldoBancario += rendimentoInvestimentos;
+    registrar('rendimento_cdi', 'Rendimento mensal de CDI', rendimentoInvestimentos);
+  }
 
   // 4. Apuração das Despesas Obrigatórias do Mês
   const despesasDoMes: { categoria: ContaPagar['categoria']; descricao: string; valor: number }[] = [];
@@ -351,6 +381,7 @@ export function simularMesVida(
       // Tenta pagar a parcela
       if (novaVida.saldoBancario >= emp.valorParcela) {
         novaVida.saldoBancario -= emp.valorParcela;
+        registrar('parcela_emprestimo', `Parcela ${emp.parcelasPagas + 1}/${emp.parcelasTotais} de ${emp.descricao}`, -emp.valorParcela);
         emp.parcelasPagas += 1;
         emp.saldoDevedor = Math.max(0, emp.saldoDevedor - emp.valorParcela);
         emp.status = emp.saldoDevedor <= 0 ? 'quitado' : 'em_dia';
@@ -379,7 +410,9 @@ export function simularMesVida(
   for (const item of despesasDoMes) {
     if (novaVida.saldoBancario >= item.valor) {
       novaVida.saldoBancario -= item.valor;
+      registrar('despesa_paga', item.descricao, -item.valor);
     } else {
+      registrar('conta_vencida', item.descricao, 0, item.valor);
       // Transforma a despesa não paga em conta vencida com cobrança formal
       const novaConta: ContaPagar = {
         id: `conta_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -409,6 +442,9 @@ export function simularMesVida(
 
   novaVida.contasVencidas = novaVida.contasVencidas.map(c => {
     const jurosDoMes = (c.valor + c.jurosMoraAcumulados) * taxaMoraMensal;
+    if (jurosDoMes > 0) {
+      registrar('juros_mora', `Juros de mora: ${c.descricao}`, 0, jurosDoMes);
+    }
     const dias = c.diasAtraso + 30;
     const jurosAcum = Number((c.jurosMoraAcumulados + jurosDoMes).toFixed(2));
     totalDividasVencidas += c.valor + jurosAcum;
