@@ -4,6 +4,7 @@ import { simularMesMacroeconomia } from './macro';
 import { calcularIdadeExata, calcularTaxaMensalEfetiva, evoluirRelacionamentoMensal, simularHoraVida, simularMesVida } from './life';
 import { simularMesEmpresa } from './business';
 import { cargoCompativelComEleicao, isAnoEleitoral } from './politics';
+import { aplicarImpactoAfinidadeFamiliar, sortearEventoDecisao } from './events';
 import { criarEstadoInicial } from './presets';
 import { avancarHorasSimulacao, avancarMinutosSimulacao, avancarMesSimulacao } from './simulation';
 import { Macroeconomia, VidaPessoal, Empresa, DataCalendario, Relacionamento } from './types';
@@ -235,6 +236,37 @@ test('Business: large legacy inventory is preserved and production pauses until 
   assert.equal(result.ultimoMes.unidadesProduzidas, 0);
   assert.equal(result.capacidadeArmazenamento, legacyStock);
   assert.ok(result.ultimoMes.custoArmazenagem! > 0);
+});
+
+test('Family events: choices update the targeted relationship affinity only', () => {
+  const estado = criarEstadoInicial('estudante');
+  const contato = estado.vida.familia.conhecidos[0];
+  const novaFamilia = aplicarImpactoAfinidadeFamiliar(
+    estado.vida.familia,
+    contato.id,
+    8
+  );
+
+  assert.equal(
+    novaFamilia.conhecidos.find(p => p.id === contato.id)?.nivelAfinidade,
+    Math.min(100, contato.nivelAfinidade + 8)
+  );
+  assert.equal(novaFamilia.conhecidos.length, estado.vida.familia.conhecidos.length);
+  assert.equal(novaFamilia.amigos.length, estado.vida.familia.amigos.length);
+});
+
+test('Family events: a family decision can be generated with non-financial consequences', () => {
+  const estado = criarEstadoInicial('estudante');
+  const originalRandom = Math.random;
+  Math.random = () => 0.1;
+  try {
+    const evento = sortearEventoDecisao(estado);
+    assert.equal(evento?.categoria, 'familia');
+    assert.ok(evento?.opcoes.some(opcao => opcao.consequencias.deltaAfinidadeValor !== undefined));
+    assert.ok(evento?.opcoes.every(opcao => opcao.consequencias.ganhoFinanceiro === undefined && opcao.consequencias.custoFinanceiro === undefined));
+  } finally {
+    Math.random = originalRandom;
+  }
 });
 
 test('Relationships: time apart reduces affinity and dating duration advances monthly', () => {
