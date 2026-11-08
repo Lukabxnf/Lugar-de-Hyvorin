@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simularMesMacroeconomia } from './macro';
-import { simularMesVida } from './life';
+import { calcularIdadeExata, simularHoraVida, simularMesVida } from './life';
 import { simularMesEmpresa } from './business';
 import { isAnoEleitoral } from './politics';
 import { criarEstadoInicial } from './presets';
-import { avancarMesSimulacao } from './simulation';
-import { Macroeconomia, VidaPessoal, Empresa } from './types';
+import { avancarHorasSimulacao, avancarMesSimulacao } from './simulation';
+import { Macroeconomia, VidaPessoal, Empresa, DataCalendario } from './types';
 
 test('Macro: Taylor Rule responds by raising Selic when inflation is above target', () => {
   const macroAltaInflacao: Macroeconomia = {
@@ -30,71 +30,81 @@ test('Macro: Taylor Rule responds by raising Selic when inflation is above targe
   assert.ok(ataCopom.includes('eleva'), 'Copom minutes should state rate increase');
 });
 
-test('Life: positive bank balance accumulates yield and CTPS increments experience', () => {
-  const macro: Macroeconomia = {
-    pib: 11200,
-    crescimentoAnualPib: 2.0,
-    inflacaoIpca12m: 4.0,
-    metaInflacao: 3.5,
-    taxaSelic: 12.0,
-    taxaDesemprego: 7.0,
-    cambioDolar: 5.20,
-    dividaPublicaPib: 75.0,
-    resultadoPrimarioMes: 0,
-    arrecadacaoTributariaMes: 300,
-    despesaPublicaMes: 300,
-    confiancaEmpresarial: 60,
-    riscoPais: 200,
-  };
+test('Time & Clock: avancarHorasSimulacao advances hours, days and day of week', () => {
+  const estado = criarEstadoInicial('estudante');
+  assert.equal(estado.horaAtual, 8);
+  assert.equal(estado.diaAtual, 1);
+  assert.equal(estado.diaSemanaAtual, 'Segunda-feira');
 
-  const vida: VidaPessoal = {
-    nome: 'Investidor Trabalhador',
-    idade: 30,
-    mesesVividos: 360,
-    saldoBancario: 100_000,
+  // Avança 1 hora
+  const estado1h = avancarHorasSimulacao(estado, 1);
+  assert.equal(estado1h.horaAtual, 9);
+  assert.equal(estado1h.diaAtual, 1);
+  assert.equal(estado1h.diaSemanaAtual, 'Segunda-feira');
+
+  // Avança 15 horas (8 + 1 + 15 = 24 -> 00:00 do dia 2, Terça-feira)
+  const estado24h = avancarHorasSimulacao(estado1h, 15);
+  assert.equal(estado24h.horaAtual, 0);
+  assert.equal(estado24h.diaAtual, 2);
+  assert.equal(estado24h.diaSemanaAtual, 'Terça-feira');
+});
+
+test('Life Routine: sleeping recovers energy while working expends energy', () => {
+  const estado = criarEstadoInicial('estudante');
+  const macro = estado.macro;
+
+  // Pessoa dormindo às 2h da madrugada
+  const vidaDormindo: VidaPessoal = {
+    ...estado.vida,
+    energia: 40,
+  };
+  const { novaVida: vidaAposSono } = simularHoraVida(vidaDormindo, macro, 2, 'Segunda-feira');
+  assert.ok(vidaAposSono.energia > 40, 'Sleeping must restore energy');
+
+  // Pessoa trabalhando às 10h da manhã
+  const vidaTrabalhando: VidaPessoal = {
+    ...estado.vida,
+    energia: 80,
+  };
+  const { novaVida: vidaAposTrabalho } = simularHoraVida(vidaTrabalhando, macro, 10, 'Segunda-feira');
+  assert.ok(vidaAposTrabalho.energia < 80, 'Working must expend energy');
+});
+
+test('Life: dynamic age calculation from birth date is strictly accurate', () => {
+  const nascimento: DataCalendario = { dia: 15, mes: 5, ano: 2000 };
+
+  // Antes do aniversário no ano 2026
+  const dataAntes: DataCalendario = { dia: 10, mes: 5, ano: 2026 };
+  assert.equal(calcularIdadeExata(nascimento, dataAntes), 25);
+
+  // No dia do aniversário
+  const dataAniversario: DataCalendario = { dia: 15, mes: 5, ano: 2026 };
+  assert.equal(calcularIdadeExata(nascimento, dataAniversario), 26);
+
+  // Após o aniversário
+  const dataDepois: DataCalendario = { dia: 20, mes: 6, ano: 2026 };
+  assert.equal(calcularIdadeExata(nascimento, dataDepois), 26);
+});
+
+test('Finance: expenses exceeding cash become overdue bills without automatic loans', () => {
+  const estado = criarEstadoInicial('estudante');
+  const macro = estado.macro;
+
+  // Pessoa com saldo baixo e despesas altas
+  const vidaPobre: VidaPessoal = {
+    ...estado.vida,
+    saldoBancario: 50, // Insuficiente para aluguel, saúde e alimentação
     dividaPessoal: 0,
-    saude: 80,
-    felicidade: 80,
-    intelecto: 50,
-    energia: 85,
-    reputacao: 50,
-    redeContatos: 50,
-    moradia: 'pais',
-    casaPropria: true,
-    educacao: 'superior',
-    empregoAtual: {
-      carreiraId: 'dev_junior',
-      mesesNoCargo: 5,
-      salarioAcordado: 4500,
-    },
-    carteira: {
-      numeroCtps: '999.888-SP',
-      mesesTotaisContribuicao: 5,
-      experienciaPorArea: { tecnologia: 5 },
-      historicoRegistros: [],
-    },
-    familia: {
-      estadoCivil: 'solteiro',
-      filhos: [],
-      parentes: [],
-      amigos: [],
-    },
-    veiculos: [],
-    rotina: {
-      padraoAlimentacao: 'saudavel',
-      horasSono: 8,
-      planoSaude: 'basico',
-      academia: false,
-      terapia: false,
-      lazerNivel: 'economico',
-    },
+    contasVencidas: [],
+    emprestimosContratados: [],
+    scoreCredito: 750,
   };
 
-  const { novaVida } = simularMesVida(vida, macro, 0);
-  assert.ok(novaVida.saldoBancario > 100_000, 'Investments should generate yield');
-  assert.equal(novaVida.mesesVividos, 361);
-  assert.equal(novaVida.carteira.mesesTotaisContribuicao, 6, 'CTPS contributions should increase');
-  assert.equal(novaVida.carteira.experienciaPorArea.tecnologia, 6);
+  const { novaVida, logs } = simularMesVida(vidaPobre, macro, 0, { dia: 1, mes: 2, ano: 2026 });
+  assert.ok(novaVida.saldoBancario >= 0, 'Balance must not become negative');
+  assert.ok(novaVida.contasVencidas.length > 0, 'Unpaid expenses must become overdue bills (contasVencidas)');
+  assert.ok(novaVida.scoreCredito < 750, 'Credit score must drop due to overdue bills');
+  assert.ok(logs.some(l => l.includes('Contas em Atraso')), 'Logs should notify about overdue bills');
 });
 
 test('Business: multiple companies simulate and accumulate profits independently', () => {

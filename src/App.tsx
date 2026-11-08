@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { TabNavigation } from './components/TabNavigation';
 import { LifeView } from './components/LifeView';
@@ -14,25 +14,49 @@ import { GazetaView } from './components/GazetaView';
 import { NewGameModal } from './components/NewGameModal';
 import { ElectionModal } from './components/ElectionModal';
 import { MonthlySummaryModal } from './components/MonthlySummaryModal';
+import { EventDecisionModal } from './components/EventDecisionModal';
 
-import { EstadoJogo } from './engine/types';
+import { EstadoJogo, OpcaoEvento } from './engine/types';
 import { criarEstadoInicial } from './engine/presets';
-import { avancarMesSimulacao, avancarMultiplosMeses } from './engine/simulation';
+import { avancarHorasSimulacao, avancarMesSimulacao, avancarMultiplosMeses } from './engine/simulation';
 
 const STORAGE_KEY = 'cidadao_sim_save_v1';
 
 function sanitizarEstado(raw: any): EstadoJogo {
   const base = criarEstadoInicial('estudante');
   const empresas = raw.empresas || (raw.empresa ? [raw.empresa] : base.empresas);
+
+  const idadeSalva = raw.vida?.idade || 25;
+  const dataNascimentoPadrao = raw.vida?.dataNascimento || {
+    dia: 15,
+    mes: 5,
+    ano: 2026 - idadeSalva,
+  };
+
   return {
     ...base,
     ...raw,
+    horaAtual: raw.horaAtual ?? 8,
+    diaAtual: raw.diaAtual ?? 1,
+    diaSemanaAtual: raw.diaSemanaAtual ?? 'Segunda-feira',
+    horasTotais: raw.horasTotais ?? 0,
     empresas,
     empresa: empresas[0],
     vida: {
       ...base.vida,
       ...raw.vida,
-      energia: raw.vida?.energia ?? 80,
+      nomeCompleto: raw.vida?.nomeCompleto || raw.vida?.nome || base.vida.nomeCompleto,
+      dataNascimento: dataNascimentoPadrao,
+      avatar: raw.vida?.avatar || base.vida.avatar,
+      scoreCredito: raw.vida?.scoreCredito ?? 750,
+      limiteCreditoPreAprovado: raw.vida?.limiteCreditoPreAprovado ?? 4500,
+      contasVencidas: raw.vida?.contasVencidas || [],
+      emprestimosContratados: raw.vida?.emprestimosContratados || [],
+      titulosConquistados: raw.vida?.titulosConquistados || ['Certificado de Ensino Médio'],
+      habilidades: raw.vida?.habilidades || base.vida.habilidades,
+      rotinaHorarios: raw.vida?.rotinaHorarios || base.vida.rotinaHorarios,
+      atividadeAtual: raw.vida?.atividadeAtual || 'livre',
+      energia: raw.vida?.energia ?? 85,
       familia: raw.vida?.familia || base.vida.familia,
       veiculos: raw.vida?.veiculos || base.vida.veiculos,
       carteira: raw.vida?.carteira || base.vida.carteira,
@@ -46,6 +70,8 @@ function sanitizarEstado(raw: any): EstadoJogo {
       ...base.politica,
       ...raw.politica,
     },
+    eventosPendentes: raw.eventosPendentes || [],
+    eventosResolvidos: raw.eventosResolvidos || [],
   };
 }
 
@@ -58,7 +84,7 @@ export default function App() {
         return sanitizarEstado(JSON.parse(salvo));
       }
     } catch {
-      // fallback
+      // fallback em caso de erro de deserialização
     }
     return criarEstadoInicial('estudante');
   });
@@ -121,7 +147,19 @@ export default function App() {
     showToast(`Nova jornada iniciada com sucesso!`);
   }, [showToast]);
 
-  // Advance 1 month
+  // Avançar Horas na Simulação (Relógio contínuo)
+  const handleAdvanceHours = useCallback((qtdHoras = 1) => {
+    setEstado((prev) => {
+      const proximo = avancarHorasSimulacao(prev, qtdHoras);
+      // Se um evento interativo surgiu, pausa o relógio para que o jogador tome a decisão
+      if (proximo.eventosPendentes && proximo.eventosPendentes.length > 0) {
+        setIsPlaying(false);
+      }
+      return proximo;
+    });
+  }, []);
+
+  // Avanço manual de 1 mês completo
   const handleAdvanceMonth = useCallback(() => {
     setEstado((prev) => {
       const proximo = avancarMesSimulacao(prev);
@@ -129,37 +167,85 @@ export default function App() {
     });
   }, []);
 
-  // Advance 6 months
+  // Avanço manual de 6 meses
   const handleAdvanceSixMonths = useCallback(() => {
     setEstado((prev) => {
       const proximo = avancarMultiplosMeses(prev, 6);
-      showToast('O tempo avançou 6 meses!');
+      showToast('O tempo avançou 6 meses completos!');
       return proximo;
     });
   }, [showToast]);
 
-  // Advance 1 year
+  // Avanço manual de 1 ano
   const handleAdvanceYear = useCallback(() => {
     setEstado((prev) => {
       const proximo = avancarMultiplosMeses(prev, 12);
-      showToast(`Um ano se passou! Bem-vindo ao ano de ${proximo.anoAtual}.`);
+      showToast(`Um ano se passou! Bem-vindo a ${proximo.anoAtual}.`);
       return proximo;
     });
   }, [showToast]);
 
-  // Auto-play interval
+  // Ciclo de reprodução: AVANÇA HORAS (X1 = 500ms, X2 = 250ms, X3 = 140ms, X5 = 60ms)
+  // O relógio movimenta horas, rotina diária e dia da semana.
+  // A virada de mês ocorre automaticamente após o 30º dia.
   useEffect(() => {
     if (!isPlaying) return;
 
-    const baseMs = 2400; // 1x = 2.4s per month
-    const intervalMs = Math.round(baseMs / playSpeed);
+    let intervalMs = 500;
+    if (playSpeed === 2) intervalMs = 250;
+    else if (playSpeed === 3) intervalMs = 140;
+    else if (playSpeed === 5) intervalMs = 60;
 
     const interval = setInterval(() => {
-      handleAdvanceMonth();
+      handleAdvanceHours(1);
     }, intervalMs);
 
     return () => clearInterval(interval);
-  }, [isPlaying, playSpeed, handleAdvanceMonth]);
+  }, [isPlaying, playSpeed, handleAdvanceHours]);
+
+  // Resolução de Evento de Decisão Interativo
+  const handleEscolherOpcaoEvento = useCallback((opcao: OpcaoEvento) => {
+    setEstado((prev) => {
+      const eventoAtual = prev.eventosPendentes[0];
+      if (!eventoAtual) return prev;
+
+      const c = opcao.consequencias;
+      let novoSaldo = prev.vida.saldoBancario;
+      if (c.custoFinanceiro) novoSaldo -= c.custoFinanceiro;
+      if (c.ganhoFinanceiro) novoSaldo += c.ganhoFinanceiro;
+
+      const novaSaude = Math.max(10, Math.min(100, prev.vida.saude + (c.deltaSaude || 0)));
+      const novaFelicidade = Math.max(5, Math.min(100, prev.vida.felicidade + (c.deltaFelicidade || 0)));
+      const novaEnergia = Math.max(0, Math.min(100, prev.vida.energia + (c.deltaEnergia || 0)));
+      const novoIntelecto = Math.min(100, prev.vida.intelecto + (c.deltaIntelecto || 0));
+      const novaReputacao = Math.min(100, prev.vida.reputacao + (c.deltaReputacao || 0));
+
+      const resolvido = {
+        id: eventoAtual.id,
+        titulo: eventoAtual.titulo,
+        opcaoEscolhida: opcao.texto,
+        data: eventoAtual.dataOcorrencia,
+        resultado: c.mensagemResultado,
+      };
+
+      showToast(c.mensagemResultado);
+
+      return {
+        ...prev,
+        vida: {
+          ...prev.vida,
+          saldoBancario: novoSaldo,
+          saude: novaSaude,
+          felicidade: novaFelicidade,
+          energia: novaEnergia,
+          intelecto: novoIntelecto,
+          reputacao: novaReputacao,
+        },
+        eventosPendentes: prev.eventosPendentes.slice(1),
+        eventosResolvidos: [resolvido, ...prev.eventosResolvidos].slice(0, 30),
+      };
+    });
+  }, [showToast]);
 
   // Election victory trigger
   const handleElectionVictory = useCallback((cargoNome: string, votos: number) => {
@@ -168,10 +254,13 @@ export default function App() {
   }, []);
 
   const temEmpresaAtiva = (estado.empresas && estado.empresas.length > 0) || !!estado.empresa;
+  const eventoPendenteAtual = estado.eventosPendentes && estado.eventosPendentes.length > 0
+    ? estado.eventosPendentes[0]
+    : null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
-      {/* Header */}
+      {/* Header com Relógio Simulado e Controles X1, X2, X3, X5 */}
       <Header
         estado={estado}
         isPlaying={isPlaying}
@@ -187,7 +276,7 @@ export default function App() {
         onSelectTab={setActiveTab}
       />
 
-      {/* Tabs */}
+      {/* Navegação entre Abas */}
       <TabNavigation
         activeTab={activeTab}
         onSelectTab={setActiveTab}
@@ -196,13 +285,14 @@ export default function App() {
         emCampanha={estado.politica.emCampanha}
       />
 
-      {/* Main Content Area */}
+      {/* Conteúdo Principal */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
         {activeTab === 'vida' && (
           <LifeView
             estado={estado}
             onUpdateEstado={setEstado}
             onShowMessage={showToast}
+            onAvancarHoras={handleAdvanceHours}
           />
         )}
 
@@ -236,13 +326,13 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer */}
+      {/* Rodapé Institucional */}
       <footer className="border-t border-slate-900 bg-slate-950 py-4 px-6 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>
             🇧🇷 <strong>CIDADÃO:</strong> Simulador de Vida, Negócios, Macroeconomia & Política Brasileira
           </span>
-          <span>Modelo modular e determinístico com Regra de Taylor, Curva de Phillips e Ciclos Eleitorais</span>
+          <span>Relógio horário simulado • Regra de Taylor & Curva de Phillips • CTPS & Score de Crédito</span>
         </div>
       </footer>
 
@@ -254,7 +344,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Modals */}
+      {/* Modais */}
       <NewGameModal
         isOpen={showNewGameModal}
         onClose={() => setShowNewGameModal(false)}
@@ -276,6 +366,12 @@ export default function App() {
         resumo={estado.ultimoResumoMes}
         mes={estado.mesAtual}
         ano={estado.anoAtual}
+      />
+
+      {/* Modal de Crises & Decisões Interativas */}
+      <EventDecisionModal
+        evento={eventoPendenteAtual}
+        onEscolherOpcao={handleEscolherOpcaoEvento}
       />
     </div>
   );

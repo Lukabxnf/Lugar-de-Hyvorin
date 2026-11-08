@@ -6,9 +6,7 @@ import {
   Heart,
   Smile,
   Brain,
-  Award,
   Users,
-  CheckCircle2,
   Shield,
   Dumbbell,
   Sparkles,
@@ -21,122 +19,469 @@ import {
   Coins,
   ArrowRight,
   TrendingUp,
+  User,
+  CreditCard,
+  AlertTriangle,
+  Clock,
+  CheckCircle,
+  Calendar,
+  Coffee,
 } from 'lucide-react';
-import { EstadoJogo, NivelEducacao, Relacionamento, TipoMoradia, VeiculoProprio } from '../engine/types';
+import {
+  AvatarConfig,
+  ContaPagar,
+  EmprestimoContratado,
+  EstadoJogo,
+  NivelEducacao,
+  Relacionamento,
+  TipoMoradia,
+  VeiculoProprio,
+} from '../engine/types';
 import { CARREIRAS, CURSOS, MORADIAS, VEICULOS_CATALOGO } from '../engine/data';
+import { calcularIdadeExata } from '../engine/life';
 
 interface LifeViewProps {
   estado: EstadoJogo;
   onUpdateEstado: (novoEstado: EstadoJogo) => void;
   onShowMessage: (msg: string) => void;
+  onAvancarHoras?: (qtd: number) => void;
 }
 
 export const LifeView: React.FC<LifeViewProps> = ({
   estado,
   onUpdateEstado,
   onShowMessage,
+  onAvancarHoras,
 }) => {
-  const { vida, macro, politica } = estado;
+  const { vida, macro, politica, diaAtual, mesAtual, anoAtual, horaAtual, diaSemanaAtual } = estado;
   const [activeSubSection, setActiveSubSection] = useState<
-    'geral' | 'carreira' | 'familia' | 'bens' | 'educacao' | 'moradia' | 'estilo'
-  >('geral');
+    'perfil' | 'geral' | 'rotina' | 'carreira' | 'familia' | 'educacao' | 'bens' | 'moradia'
+  >('perfil');
 
-  const [quantiaEmprestimo, setQuantiaEmprestimo] = useState('5000');
-  const [quantiaPagarDivida, setQuantiaPagarDivida] = useState('');
-  const [novoFilhoNome, setNovoFilhoNome] = useState('');
+  // Estado local para personalização do Avatar
+  const [modalAvatarAberto, setModalAvatarAberto] = useState(false);
+  const [avatarTemp, setAvatarTemp] = useState<AvatarConfig>({
+    pele: vida.avatar?.pele || 'morena',
+    cabeloCor: vida.avatar?.cabeloCor || 'castanho',
+    cabeloEstilo: vida.avatar?.cabeloEstilo || 'curto',
+    roupa: vida.avatar?.roupa || 'casual',
+    acessorio: vida.avatar?.acessorio || 'relogio',
+  });
+  const [nomeTemp, setNomeTemp] = useState(vida.nomeCompleto || vida.nome);
 
-  // 1. Quitar dívida pessoal
-  const handlePagarDivida = (valor: number) => {
-    if (valor <= 0 || valor > vida.saldoBancario) {
-      onShowMessage('Saldo insuficiente para pagar esse valor.');
+  // Estados locais para contratação de empréstimos e ações
+  const [valorEmprestimoNovo, setValorEmprestimoNovo] = useState('5000');
+  const [prazoEmprestimoNovo, setPrazoEmprestimoNovo] = useState('24');
+  const [modalNovoEmprestimo, setModalNovoEmprestimo] = useState(false);
+
+  // 1. Salvar alterações no Avatar e Identidade
+  const handleSalvarAvatar = () => {
+    onUpdateEstado({
+      ...estado,
+      vida: {
+        ...vida,
+        nome: nomeTemp.split(' ')[0] || vida.nome,
+        nomeCompleto: nomeTemp,
+        avatar: { ...avatarTemp },
+      },
+    });
+    setModalAvatarAberto(false);
+    onShowMessage('Perfil e Avatar atualizados com sucesso!');
+  };
+
+  // 2. Pagamento de Conta Vencida individual
+  const handlePagarContaVencida = (contaId: string) => {
+    const conta = vida.contasVencidas.find(c => c.id === contaId);
+    if (!conta) return;
+    const totalDevido = Math.round(conta.valor + conta.jurosMoraAcumulados);
+
+    if (vida.saldoBancario < totalDevido) {
+      onShowMessage(`Saldo insuficiente para quitar esta conta (R$ ${totalDevido.toLocaleString('pt-BR')}).`);
       return;
     }
-    const valorReal = Math.min(valor, vida.dividaPessoal);
-    const novoSaldo = vida.saldoBancario - valorReal;
-    const novaDivida = vida.dividaPessoal - valorReal;
+
+    const novasContas = vida.contasVencidas.filter(c => c.id !== contaId);
+    const novoSaldo = vida.saldoBancario - totalDevido;
+    const totalDivida = novasContas.reduce((acc, c) => acc + c.valor + c.jurosMoraAcumulados, 0);
 
     onUpdateEstado({
       ...estado,
       vida: {
         ...vida,
         saldoBancario: novoSaldo,
-        dividaPessoal: novaDivida,
+        contasVencidas: novasContas,
+        dividaPessoal: Math.round(totalDivida),
+        scoreCredito: Math.min(1000, vida.scoreCredito + 15),
       },
     });
-    onShowMessage(`Dívida amortizada em R$ ${valorReal.toLocaleString('pt-BR')}!`);
-    setQuantiaPagarDivida('');
+    onShowMessage(`Conta '${conta.descricao}' quitada! Seu score de crédito melhorou.`);
   };
 
-  // 2. Tomar empréstimo pessoal
-  const handleTomarEmprestimo = (valor: number) => {
-    if (valor <= 0) return;
-    const taxaJuros = macro.taxaSelic + 18;
+  // 3. Pagar todas as contas vencidas de uma vez
+  const handlePagarTodasContasVencidas = () => {
+    const totalGeral = vida.contasVencidas.reduce((acc, c) => acc + c.valor + c.jurosMoraAcumulados, 0);
+    if (vida.saldoBancario < totalGeral) {
+      onShowMessage(`Saldo insuficiente para quitar todas as contas (Total: R$ ${Math.round(totalGeral).toLocaleString('pt-BR')}).`);
+      return;
+    }
+
+    onUpdateEstado({
+      ...estado,
+      vida: {
+        ...vida,
+        saldoBancario: vida.saldoBancario - totalGeral,
+        contasVencidas: [],
+        dividaPessoal: 0,
+        scoreCredito: Math.min(1000, vida.scoreCredito + 50),
+      },
+    });
+    onShowMessage('Todas as contas em atraso foram quitadas! Seu nome está 100% limpo.');
+  };
+
+  // 4. Contratar novo empréstimo formal com pré-aprovação de crédito
+  const handleContratarEmprestimo = () => {
+    const valor = Number(valorEmprestimoNovo);
+    const parcelas = Number(prazoEmprestimoNovo);
+
+    if (isNaN(valor) || valor <= 0) {
+      onShowMessage('Informe um valor de empréstimo válido.');
+      return;
+    }
+    if (valor > vida.limiteCreditoPreAprovado) {
+      onShowMessage(`Valor excede seu limite pré-aprovado de R$ ${vida.limiteCreditoPreAprovado.toLocaleString('pt-BR')}.`);
+      return;
+    }
+    if (vida.contasVencidas.length > 0) {
+      onShowMessage('Bancos bloqueiam crédito para pessoas com contas vencidas ativas no Serasa/SPC.');
+      return;
+    }
+
+    // Taxa mensal realista: Selic anual / 12 + spread do banco baseado no score
+    const spreadRisco = (1000 - vida.scoreCredito) / 1000 * 1.5; // +0% a +1.5% ao mês
+    const taxaMensal = Number((((macro.taxaSelic / 12) + 0.8 + spreadRisco) / 100).toFixed(4));
+    
+    // Parcela pela tabela Price simplificada
+    const fatorJuros = Math.pow(1 + taxaMensal, parcelas);
+    const valorParcela = Math.round(valor * ((taxaMensal * fatorJuros) / (fatorJuros - 1)));
+
+    const novoEmprestimo: EmprestimoContratado = {
+      id: `emp_${Date.now()}`,
+      tipo: 'pessoal',
+      banco: 'Banco do Brasil / Caixa Econômica',
+      descricao: `Crédito Pessoal (${parcelas}x)`,
+      valorOriginal: valor,
+      saldoDevedor: valorParcela * parcelas,
+      valorParcela,
+      parcelasTotais: parcelas,
+      parcelasPagas: 0,
+      taxaJurosMensal: Number((taxaMensal * 100).toFixed(2)),
+      diaVencimentoParcela: 10,
+      status: 'em_dia',
+    };
+
     onUpdateEstado({
       ...estado,
       vida: {
         ...vida,
         saldoBancario: vida.saldoBancario + valor,
-        dividaPessoal: vida.dividaPessoal + valor,
+        emprestimosContratados: [...vida.emprestimosContratados, novoEmprestimo],
       },
     });
-    onShowMessage(`Empréstimo de R$ ${valor.toLocaleString('pt-BR')} liberado na conta (Taxa: ${taxaJuros.toFixed(1)}% a.a.)!`);
+    setModalNovoEmprestimo(false);
+    onShowMessage(`Empréstimo de R$ ${valor.toLocaleString('pt-BR')} creditado em conta corrente!`);
   };
 
-  // 3. Mudar moradia
-  const handleMudarMoradia = (tipo: TipoMoradia) => {
-    const info = MORADIAS[tipo];
-    if (info.custoMensal > vida.saldoBancario && tipo !== 'pais') {
-      onShowMessage('Você precisa de ao menos um mês de aluguel disponível em conta.');
+  // 5. Interações Sociais Orgânicas (Conhecer Pessoas, Flertar, Namorar, Casar)
+  const handleConhecerPessoas = () => {
+    const custo = 35; // Café ou transporte
+    if (vida.saldoBancario < custo) {
+      onShowMessage('Saldo insuficiente para sair e socializar.');
       return;
     }
+
+    const nomesBrasileiros = [
+      'Juliana Prado', 'Gabriel Nogueira', 'Camila Santos', 'Felipe Azevedo',
+      'Larissa Ribeiro', 'Matheus Vasconcelos', 'Beatriz Castelo', 'Thiago Moreira',
+      'Amanda Alencar', 'Vinícius Rocha', 'Mariana Valente', 'Diego Guimarães'
+    ];
+    const profissoes = [
+      'Analista de Marketing', 'Advogado(a)', 'Engenheiro(a) Civil', 'Arquiteto(a)',
+      'Designer Gráfico', 'Contador(a)', 'Jornalista', 'Médico(a) Residente',
+      'Servidor(a) Público', 'Programador(a)', 'Gestor(a) Comercial'
+    ];
+
+    const nomeEscolhido = nomesBrasileiros[Math.floor(Math.random() * nomesBrasileiros.length)];
+    const profEscolhida = profissoes[Math.floor(Math.random() * profissoes.length)];
+
+    const novoConhecido: Relacionamento = {
+      id: `conhecido_${Date.now()}`,
+      nome: nomeEscolhido,
+      tipo: 'conhecido',
+      nivelAfinidade: 35 + Math.floor(Math.random() * 15),
+      idade: Math.max(18, vida.idade + Math.floor(Math.random() * 5) - 2),
+      ocupacao: profEscolhida,
+      personalidade: 'Simpático(a) e sociável',
+    };
+
+    const conhecidosAtuais = vida.familia?.conhecidos || [];
     onUpdateEstado({
       ...estado,
       vida: {
         ...vida,
-        moradia: tipo,
-        casaPropria: false,
+        saldoBancario: vida.saldoBancario - custo,
+        energia: Math.max(0, vida.energia - 5),
+        felicidade: Math.min(100, vida.felicidade + 4),
+        familia: {
+          ...vida.familia,
+          conhecidos: [novoConhecido, ...conhecidosAtuais].slice(0, 8),
+        },
       },
     });
-    onShowMessage(`Você se mudou para: ${info.nome}!`);
+    onShowMessage(`Você conheceu ${novoConhecido.nome} (${novoConhecido.ocupacao})! Um novo contato foi adicionado.`);
   };
 
-  // 4. Comprar imóvel próprio
-  const handleComprarImovel = (tipo: TipoMoradia) => {
-    const info = MORADIAS[tipo];
-    if (!info.custoCompra || vida.saldoBancario < info.custoCompra) {
-      onShowMessage('Saldo insuficiente para comprar este imóvel à vista.');
+  // Evoluir relação com conhecido (Conversar, Almoço, Flertar)
+  const handleAumentarAfinidade = (rel: Relacionamento, tipoAcao: 'conversar' | 'almoco' | 'encontro') => {
+    let custo = 0;
+    let ganho = 5;
+    let gastoEnergia = 3;
+
+    if (tipoAcao === 'almoco') {
+      custo = 55;
+      ganho = 10;
+    } else if (tipoAcao === 'encontro') {
+      custo = 180;
+      ganho = 18;
+      gastoEnergia = 6;
+    }
+
+    if (vida.saldoBancario < custo) {
+      onShowMessage('Saldo insuficiente para esta atividade.');
       return;
     }
+
+    const atualizarLista = (lista: Relacionamento[]) =>
+      lista.map(r => (r.id === rel.id ? { ...r, nivelAfinidade: Math.min(100, r.nivelAfinidade + ganho) } : r));
+
+    let novaFamilia = { ...vida.familia };
+    if (novaFamilia.conjuge?.id === rel.id) {
+      novaFamilia.conjuge = { ...novaFamilia.conjuge, nivelAfinidade: Math.min(100, novaFamilia.conjuge.nivelAfinidade + ganho) };
+    }
+    novaFamilia.filhos = atualizarLista(novaFamilia.filhos || []);
+    novaFamilia.parentes = atualizarLista(novaFamilia.parentes || []);
+    novaFamilia.amigos = atualizarLista(novaFamilia.amigos || []);
+    novaFamilia.conhecidos = atualizarLista(novaFamilia.conhecidos || []);
+
     onUpdateEstado({
       ...estado,
       vida: {
         ...vida,
-        moradia: tipo,
-        casaPropria: true,
-        saldoBancario: vida.saldoBancario - info.custoCompra,
-        felicidade: Math.min(100, vida.felicidade + 25),
+        saldoBancario: vida.saldoBancario - custo,
+        energia: Math.max(0, vida.energia - gastoEnergia),
+        felicidade: Math.min(100, vida.felicidade + (ganho * 0.4)),
+        familia: novaFamilia,
       },
     });
-    onShowMessage(`Parabéns! Escritura assinada. Você comprou ${info.nome}!`);
+    onShowMessage(`Você teve um ótimo momento com ${rel.nome}! Afinidade: +${ganho}%.`);
   };
 
-  // 5. Matricular em curso
-  const handleMatricularCurso = (cursoId: string) => {
-    const curso = CURSOS.find((c) => c.id === cursoId);
+  // Pedir em Namoro (necessita afinidade >= 65 e ser conhecido/amigo/flerte)
+  const handlePedirEmNamoro = (rel: Relacionamento) => {
+    if (vida.familia?.estadoCivil === 'casado' || vida.familia?.estadoCivil === 'namorando') {
+      onShowMessage('Você já tem um relacionamento amoroso compromissado.');
+      return;
+    }
+    if (rel.nivelAfinidade < 60) {
+      onShowMessage(`${rel.nome} ainda não tem afinidade suficiente para assumir um namoro. Saia e converse mais.`);
+      return;
+    }
+
+    const novoPar: Relacionamento = {
+      ...rel,
+      tipo: 'namorado',
+      nivelAfinidade: Math.min(100, rel.nivelAfinidade + 15),
+    };
+
+    const novosConhecidos = (vida.familia.conhecidos || []).filter(c => c.id !== rel.id);
+    const novosAmigos = (vida.familia.amigos || []).filter(a => a.id !== rel.id);
+
+    onUpdateEstado({
+      ...estado,
+      vida: {
+        ...vida,
+        felicidade: Math.min(100, vida.felicidade + 20),
+        familia: {
+          ...vida.familia,
+          estadoCivil: 'namorando',
+          conjuge: novoPar,
+          conhecidos: novosConhecidos,
+          amigos: novosAmigos,
+        },
+      },
+    });
+    onShowMessage(`❤️ Parabéns! ${rel.nome} aceitou seu pedido de namoro! Vocês agora estão oficialmente juntos.`);
+  };
+
+  // Casar no Cartório de Registro Civil
+  const handleCasarNoCartorio = () => {
+    if (!vida.familia?.conjuge || vida.familia.estadoCivil !== 'namorando') {
+      onShowMessage('É necessário estar namorando alguém antes de oficializar o matrimônio.');
+      return;
+    }
+    if (vida.familia.conjuge.nivelAfinidade < 75) {
+      onShowMessage('Seu parceiro(a) ainda acha muito cedo para casamento. Fortaleça a afinidade primeiro.');
+      return;
+    }
+    const custoCartorio = 1_250;
+    if (vida.saldoBancario < custoCartorio) {
+      onShowMessage(`Você precisa de ao menos R$ ${custoCartorio} para as taxas de certidão e habilitação no cartório.`);
+      return;
+    }
+
+    onUpdateEstado({
+      ...estado,
+      vida: {
+        ...vida,
+        saldoBancario: vida.saldoBancario - custoCartorio,
+        felicidade: Math.min(100, vida.felicidade + 30),
+        familia: {
+          ...vida.familia,
+          estadoCivil: 'casado',
+          conjuge: {
+            ...vida.familia.conjuge,
+            tipo: 'conjuge',
+            nivelAfinidade: 100,
+          },
+        },
+      },
+    });
+    onShowMessage('💍 Certidão de Casamento formalmente registrada no Cartório de Registro Civil! Parabéns!');
+  };
+
+  // Iniciar Processo de Filhos (Gestação ou Adoção)
+  const handleIniciarFilhos = (tipo: 'gestacao' | 'adocao') => {
+    if (vida.gestacaoAdocao?.emAndamento) {
+      onShowMessage('Já existe um processo familiar em andamento no momento.');
+      return;
+    }
+    if (vida.familia?.estadoCivil !== 'casado' && vida.familia?.estadoCivil !== 'namorando') {
+      onShowMessage('Para planejamento familiar, é recomendável estar em união estável ou casamento.');
+      return;
+    }
+
+    const meses = tipo === 'gestacao' ? 9 : 8;
+    onUpdateEstado({
+      ...estado,
+      vida: {
+        ...vida,
+        felicidade: Math.min(100, vida.felicidade + 15),
+        gestacaoAdocao: {
+          emAndamento: true,
+          tipo,
+          mesesRestantes: meses,
+          parceiroNome: vida.familia.conjuge?.nome || 'Cônjuge',
+        },
+      },
+    });
+    onShowMessage(
+      tipo === 'gestacao'
+        ? '🍼 Gestação iniciada com sucesso! O acompanhamento pré-natal durará 9 meses na simulação.'
+        : '📋 Processo na Vara da Infância e Adoção iniciado! O trâmite legal durará cerca de 8 meses.'
+    );
+  };
+
+  // 6. Educação: Assistir aula e Estudar para provas
+  const handleAssistirAula = () => {
+    if (!vida.cursoMatriculado || vida.cursoMatriculado.concluido) {
+      onShowMessage('Você não possui matrícula ativa em nenhum curso no momento.');
+      return;
+    }
+    if (vida.energia < 8) {
+      onShowMessage('Energia muito baixa para assistir aula. Vá descansar primeiro.');
+      return;
+    }
+
+    const cm = vida.cursoMatriculado;
+    onUpdateEstado({
+      ...estado,
+      vida: {
+        ...vida,
+        energia: Math.max(0, vida.energia - 8),
+        intelecto: Math.min(100, Number((vida.intelecto + 0.3).toFixed(1))),
+        cursoMatriculado: {
+          ...cm,
+          aulasAssistidas: cm.aulasAssistidas + 1,
+        },
+      },
+    });
+    onShowMessage(`Aula assistida com presença confirmada! Frequência: ${cm.aulasAssistidas + 1}/${cm.aulasRequeridas}.`);
+  };
+
+  const handleEstudarProvas = () => {
+    if (!vida.cursoMatriculado || vida.cursoMatriculado.concluido) {
+      onShowMessage('Você não possui curso em andamento.');
+      return;
+    }
+    if (vida.energia < 12) {
+      onShowMessage('Energia insuficiente para maratona de estudos.');
+      return;
+    }
+
+    const cm = vida.cursoMatriculado;
+    const novaNota = Math.min(10, Number((cm.notaMedia + 0.4).toFixed(1)));
+
+    onUpdateEstado({
+      ...estado,
+      vida: {
+        ...vida,
+        energia: Math.max(0, vida.energia - 12),
+        intelecto: Math.min(100, Number((vida.intelecto + 0.5).toFixed(1))),
+        cursoMatriculado: {
+          ...cm,
+          notaMedia: novaNota,
+        },
+      },
+    });
+    onShowMessage(`Estudos intensivos realizados! Média projetada elevada para ${novaNota}.`);
+  };
+
+  const handleMatricularNovoCurso = (cursoId: string) => {
+    const curso = CURSOS.find(c => c.id === cursoId);
     if (!curso) return;
-    if (vida.cursoAtual) {
-      onShowMessage('Você já está matriculado em outro curso. Conclua-o primeiro.');
+
+    if (vida.cursoMatriculado && !vida.cursoMatriculado.concluido) {
+      onShowMessage('Você já está cursando um programa. Conclua-o antes de se matricular em outro.');
       return;
     }
     if (vida.saldoBancario < curso.custoMensal) {
-      onShowMessage('Saldo insuficiente para a matrícula/primeira mensalidade.');
+      onShowMessage('Saldo insuficiente para pagar a primeira mensalidade de matrícula.');
       return;
     }
+
+    const novoCursoMatr = {
+      cursoId: curso.id,
+      nome: curso.nome,
+      tipo: curso.tipo,
+      semestreAtual: 1,
+      totalSemestres: curso.totalSemestres || 2,
+      aulasAssistidas: 0,
+      aulasRequeridas: 120,
+      provasRealizadas: 0,
+      provasRequeridas: 2,
+      notaMedia: 7.5,
+      aprovado: true,
+      concluido: false,
+      mesesDecorridos: 0,
+      mesesTotais: curso.duracaoMeses,
+      concedeNivel: curso.concedeNivel,
+    };
+
     onUpdateEstado({
       ...estado,
       vida: {
         ...vida,
         saldoBancario: vida.saldoBancario - curso.custoMensal,
+        cursoMatriculado: novoCursoMatr,
         cursoAtual: {
           cursoId: curso.id,
           mesesRestantes: curso.duracaoMeses,
@@ -146,12 +491,41 @@ export const LifeView: React.FC<LifeViewProps> = ({
     onShowMessage(`Matrícula confirmada no curso: ${curso.nome}!`);
   };
 
-  // 6. Candidatar-se a carreira formal (CTPS)
+  // 7. Ações de Rotina Rápida (Dormir/Descansar recupera energia horária)
+  const handleDescansarDormir = () => {
+    if (onAvancarHoras) {
+      onAvancarHoras(8);
+      onShowMessage('Você dormiu por 8 horas. Sua energia vital foi totalmente recuperada!');
+    } else {
+      onUpdateEstado({
+        ...estado,
+        vida: {
+          ...vida,
+          energia: 100,
+        },
+      });
+      onShowMessage('Descanso realizado com sucesso! Energia recuperada.');
+    }
+  };
+
+  const handleAtualizarHorariosRotina = (patch: Partial<typeof vida.rotinaHorarios>) => {
+    onUpdateEstado({
+      ...estado,
+      vida: {
+        ...vida,
+        rotinaHorarios: {
+          ...vida.rotinaHorarios,
+          ...patch,
+        },
+      },
+    });
+  };
+
+  // 8. Carreira e CTPS
   const handleCandidatarCarreira = (carreiraId: string) => {
-    const carreira = CARREIRAS.find((c) => c.id === carreiraId);
+    const carreira = CARREIRAS.find(c => c.id === carreiraId);
     if (!carreira) return;
 
-    // Verificar educação
     const ordemEdu: Record<NivelEducacao, number> = {
       fundamental: 0,
       medio: 1,
@@ -165,35 +539,25 @@ export const LifeView: React.FC<LifeViewProps> = ({
       onShowMessage(`Requisito educacional não atendido: exige ${carreira.requisitoEducacao.toUpperCase()}.`);
       return;
     }
-
     if (vida.intelecto < carreira.requisitoIntelecto) {
       onShowMessage(`Intelecto insuficiente: exige ${carreira.requisitoIntelecto} pontos (atual: ${Math.round(vida.intelecto)}).`);
       return;
     }
 
-    // Verificar meses comprovados na CTPS na área
     const expComprovada = vida.carteira?.experienciaPorArea?.[carreira.area] || 0;
     if (expComprovada < carreira.experienciaMinimaMeses) {
-      onShowMessage(
-        `Experiência insuficiente na área ${carreira.area.toUpperCase()}! Exige ${carreira.experienciaMinimaMeses} meses registrados na CTPS (você tem ${expComprovada}m).`
-      );
+      onShowMessage(`Experiência insuficiente: exige ${carreira.experienciaMinimaMeses} meses comprovados na CTPS.`);
       return;
     }
 
-    // Registrar admissão na Carteira de Trabalho
     const novoRegistro = {
       empresaOuOrgao: carreira.area === 'concurso' ? 'Governo Federal / Órgão Público' : 'Empresa Nacional S/A',
       cargo: carreira.titulo,
       salario: carreira.salario,
-      mesInicio: estado.mesAtual,
-      anoInicio: estado.anoAtual,
+      mesInicio: mesAtual,
+      anoInicio: anoAtual,
       mesesContribuicao: 0,
     };
-
-    const historicoAtualizado = [
-      novoRegistro,
-      ...(vida.carteira?.historicoRegistros || []),
-    ];
 
     onUpdateEstado({
       ...estado,
@@ -206,14 +570,13 @@ export const LifeView: React.FC<LifeViewProps> = ({
         },
         carteira: {
           ...vida.carteira,
-          historicoRegistros: historicoAtualizado,
+          historicoRegistros: [novoRegistro, ...(vida.carteira?.historicoRegistros || [])],
         },
       },
     });
-    onShowMessage(`Contrato assinado e carteira assinada! Parabéns pelo cargo de ${carreira.titulo}!`);
+    onShowMessage(`Contrato assinado na CTPS! Parabéns pelo cargo de ${carreira.titulo}!`);
   };
 
-  // 7. Demissão voluntária
   const handlePedirDemissao = () => {
     if (!vida.empregoAtual) return;
     onUpdateEstado({
@@ -223,213 +586,40 @@ export const LifeView: React.FC<LifeViewProps> = ({
         empregoAtual: undefined,
       },
     });
-    onShowMessage('Você rescindiu seu contrato de trabalho formal.');
+    onShowMessage('Você solicitou rescisão do seu contrato de trabalho formal.');
   };
 
-  // 8. Comprar veículo
-  const handleComprarVeiculo = (veiculoId: string) => {
-    const modelo = VEICULOS_CATALOGO[veiculoId];
-    if (!modelo) return;
-    if (vida.saldoBancario < modelo.precoCompra) {
-      onShowMessage(`Saldo insuficiente para comprar ${modelo.nome} (R$ ${modelo.precoCompra.toLocaleString('pt-BR')}).`);
-      return;
-    }
-
-    const novoVeiculo: VeiculoProprio = {
-      id: `veic_${Date.now()}`,
-      modeloId: modelo.id,
-      nome: modelo.nome,
-      anoCompra: estado.anoAtual,
-      valorMercadoAtual: modelo.precoCompra,
-    };
-
-    onUpdateEstado({
-      ...estado,
-      vida: {
-        ...vida,
-        saldoBancario: vida.saldoBancario - modelo.precoCompra,
-        felicidade: Math.min(100, vida.felicidade + 15),
-        veiculos: [...(vida.veiculos || []), novoVeiculo],
-      },
-    });
-    onShowMessage(`Parabéns! Você adquiriu ${modelo.nome}! Chaves em mãos.`);
+  // Auxiliares visuais
+  const getCorScore = (score: number) => {
+    if (score < 350) return { texto: 'Ruim (Alto Risco)', cor: 'text-red-400', bg: 'bg-red-950/60 border-red-800' };
+    if (score < 600) return { texto: 'Regular', cor: 'text-amber-400', bg: 'bg-amber-950/60 border-amber-800' };
+    if (score < 800) return { texto: 'Bom', cor: 'text-emerald-400', bg: 'bg-emerald-950/60 border-emerald-800' };
+    return { texto: 'Excelente', cor: 'text-cyan-300', bg: 'bg-cyan-950/60 border-cyan-800' };
   };
 
-  // 9. Vender veículo
-  const handleVenderVeiculo = (veicId: string) => {
-    const veic = vida.veiculos?.find((v) => v.id === veicId);
-    if (!veic) return;
-    const valorVenda = Math.round(veic.valorMercadoAtual * 0.9); // 10% margem de repasse
-    const novosVeiculos = vida.veiculos.filter((v) => v.id !== veicId);
-
-    onUpdateEstado({
-      ...estado,
-      vida: {
-        ...vida,
-        saldoBancario: vida.saldoBancario + valorVenda,
-        veiculos: novosVeiculos,
-      },
-    });
-    onShowMessage(`Veículo ${veic.nome} vendido por R$ ${valorVenda.toLocaleString('pt-BR')}!`);
-  };
-
-  // 10. Interagir com membro da família ou amigo
-  const handleInteragirRelacionamento = (rel: Relacionamento) => {
-    const custoLazer = 80;
-    if (vida.saldoBancario < custoLazer) {
-      onShowMessage('Saldo insuficiente para passeio/almoço juntos.');
-      return;
-    }
-
-    const novosFilhos = (vida.familia?.filhos || []).map((f) =>
-      f.id === rel.id ? { ...f, nivelAfinidade: Math.min(100, f.nivelAfinidade + 6) } : f
-    );
-    const novosParentes = (vida.familia?.parentes || []).map((p) =>
-      p.id === rel.id ? { ...p, nivelAfinidade: Math.min(100, p.nivelAfinidade + 6) } : p
-    );
-    const novosAmigos = (vida.familia?.amigos || []).map((a) =>
-      a.id === rel.id ? { ...a, nivelAfinidade: Math.min(100, a.nivelAfinidade + 6) } : a
-    );
-    let novoConjuge = vida.familia?.conjuge;
-    if (novoConjuge && novoConjuge.id === rel.id) {
-      novoConjuge = { ...novoConjuge, nivelAfinidade: Math.min(100, novoConjuge.nivelAfinidade + 6) };
-    }
-
-    onUpdateEstado({
-      ...estado,
-      vida: {
-        ...vida,
-        saldoBancario: vida.saldoBancario - custoLazer,
-        felicidade: Math.min(100, vida.felicidade + 4),
-        energia: Math.min(100, vida.energia + 3),
-        familia: {
-          ...vida.familia,
-          conjuge: novoConjuge,
-          filhos: novosFilhos,
-          parentes: novosParentes,
-          amigos: novosAmigos,
-        },
-      },
-    });
-    onShowMessage(`Momento especial compartilhado com ${rel.nome}! Afinidade aumentada.`);
-  };
-
-  // 11. Casar ou Pedir em Namoro
-  const handleCasarOuPedir = () => {
-    if (!vida.familia?.conjuge) {
-      // Iniciar relacionamento
-      const novoPar: Relacionamento = {
-        id: `rel_${Date.now()}`,
-        nome: 'Camila Ferreira',
-        tipo: 'namorado',
-        nivelAfinidade: 75,
-        idade: vida.idade,
-        ocupacao: 'Arquiteta Urbanista',
-      };
-      onUpdateEstado({
-        ...estado,
-        vida: {
-          ...vida,
-          felicidade: Math.min(100, vida.felicidade + 10),
-          familia: {
-            ...vida.familia,
-            estadoCivil: 'namorando',
-            conjuge: novoPar,
-          },
-        },
-      });
-      onShowMessage('Você começou a namorar com Camila! Felicidade em alta.');
-    } else if (vida.familia.estadoCivil === 'namorando') {
-      // Casamento formal
-      const custoFesta = 12000;
-      if (vida.saldoBancario < custoFesta) {
-        onShowMessage('Você precisa de ao menos R$ 12.000 para as alianças e cerimônia civil de casamento.');
-        return;
-      }
-      onUpdateEstado({
-        ...estado,
-        vida: {
-          ...vida,
-          saldoBancario: vida.saldoBancario - custoFesta,
-          felicidade: Math.min(100, vida.felicidade + 25),
-          familia: {
-            ...vida.familia,
-            estadoCivil: 'casado',
-            conjuge: { ...vida.familia.conjuge, tipo: 'conjuge', nivelAfinidade: 95 },
-          },
-        },
-      });
-      onShowMessage('Parabéns pelo casamento! Certidão assinada no cartório.');
-    }
-  };
-
-  // 12. Ter filho
-  const handleTerFilho = () => {
-    if (!novoFilhoNome.trim()) {
-      onShowMessage('Informe o nome do seu filho(a).');
-      return;
-    }
-    const novoFilho: Relacionamento = {
-      id: `filho_${Date.now()}`,
-      nome: novoFilhoNome.trim(),
-      tipo: 'filho',
-      nivelAfinidade: 90,
-      idade: 0,
-      custoMensalApoio: 850, // fraldas, alimentação, pediatra
-    };
-    onUpdateEstado({
-      ...estado,
-      vida: {
-        ...vida,
-        felicidade: Math.min(100, vida.felicidade + 20),
-        familia: {
-          ...vida.familia,
-          filhos: [...(vida.familia?.filhos || []), novoFilho],
-        },
-      },
-    });
-    setNovoFilhoNome('');
-    onShowMessage(`Nasceu ${novoFilho.nome}! Parabéns pelo novo integrante da família!`);
-  };
-
-  // 13. Rotina e hábitos
-  const handleUpdateRotina = (patch: Partial<typeof vida.rotina>) => {
-    onUpdateEstado({
-      ...estado,
-      vida: {
-        ...vida,
-        rotina: {
-          ...vida.rotina,
-          ...patch,
-        },
-      },
-    });
-  };
-
-  const empregoAtualObj = CARREIRAS.find((c) => c.id === vida.empregoAtual?.carreiraId);
-  const cursoAtualObj = CURSOS.find((c) => c.id === vida.cursoAtual?.cursoId);
-  const moradiaAtualObj = MORADIAS[vida.moradia];
-  const ehCidadaoComum = politica.cargoAtual === 'cidadao';
+  const scoreInfo = getCorScore(vida.scoreCredito || 750);
+  const idadeAtual = calcularIdadeExata(vida.dataNascimento, { dia: diaAtual, mes: mesAtual, ano: anoAtual });
 
   return (
     <div className="space-y-6">
-      {/* Top Banner: Sub-nav */}
+      {/* Sub-nav principal de Vida */}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
         {[
-          { id: 'geral', label: 'Finanças Pessoais' },
-          { id: 'carreira', label: 'Carreira & CTPS' },
-          { id: 'familia', label: 'Família & Relações' },
-          { id: 'bens', label: 'Veículos & Bens' },
-          { id: 'educacao', label: 'Educação & Cursos' },
-          { id: 'moradia', label: 'Moradia & Imóveis' },
-          { id: 'estilo', label: 'Rotina, Saúde & Hábitos' },
+          { id: 'perfil', label: '👤 Perfil & Avatar' },
+          { id: 'geral', label: '💳 Finanças & Score' },
+          { id: 'rotina', label: '⏰ Rotina & Horários' },
+          { id: 'carreira', label: '💼 Trabalho & CTPS' },
+          { id: 'familia', label: '❤️ Família & Relações' },
+          { id: 'educacao', label: '🎓 Educação & Semestres' },
+          { id: 'bens', label: '🚗 Veículos' },
+          { id: 'moradia', label: '🏠 Moradia' },
         ].map((sec) => (
           <button
             key={sec.id}
             onClick={() => setActiveSubSection(sec.id as any)}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${
               activeSubSection === sec.id
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
                 : 'bg-slate-800/40 text-slate-400 hover:text-slate-200 border-transparent'
             }`}
           >
@@ -438,542 +628,203 @@ export const LifeView: React.FC<LifeViewProps> = ({
         ))}
       </div>
 
-      {/* Attributes Grid (Saúde, Felicidade, Energia, Intelecto, Reputação condicional) */}
-      <div className={`grid grid-cols-2 ${ehCidadaoComum ? 'sm:grid-cols-4' : 'sm:grid-cols-5'} gap-3`}>
-        {/* Saúde */}
-        <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-xl">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-            <span className="flex items-center gap-1.5 font-semibold">
-              <Heart className="w-4 h-4 text-rose-400" /> Saúde
-            </span>
-            <span className="font-bold text-slate-200">{Math.round(vida.saude)}%</span>
-          </div>
-          <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-            <div
-              className={`h-full transition-all duration-300 ${
-                vida.saude > 60 ? 'bg-rose-500' : vida.saude > 30 ? 'bg-amber-500' : 'bg-red-600'
-              }`}
-              style={{ width: `${vida.saude}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Felicidade */}
-        <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-xl">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-            <span className="flex items-center gap-1.5 font-semibold">
-              <Smile className="w-4 h-4 text-amber-400" /> Felicidade
-            </span>
-            <span className="font-bold text-slate-200">{Math.round(vida.felicidade)}%</span>
-          </div>
-          <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-amber-400 transition-all duration-300"
-              style={{ width: `${vida.felicidade}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Energia Vital */}
-        <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-xl">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-            <span className="flex items-center gap-1.5 font-semibold">
-              <Zap className="w-4 h-4 text-yellow-300" /> Energia Diária
-            </span>
-            <span className="font-bold text-slate-200">{Math.round(vida.energia ?? 80)}%</span>
-          </div>
-          <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-yellow-400 transition-all duration-300"
-              style={{ width: `${vida.energia ?? 80}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Intelecto */}
-        <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-xl">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-            <span className="flex items-center gap-1.5 font-semibold">
-              <Brain className="w-4 h-4 text-indigo-400" /> Intelecto
-            </span>
-            <span className="font-bold text-slate-200">{Math.round(vida.intelecto)} pts</span>
-          </div>
-          <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-indigo-500 transition-all duration-300"
-              style={{ width: `${vida.intelecto}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Reputação Política: HIDE FOR ORDINARY CITIZEN */}
-        {!ehCidadaoComum && (
-          <div className="bg-slate-900/80 border border-amber-900/40 p-3.5 rounded-xl col-span-2 sm:col-span-1">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-              <span className="flex items-center gap-1.5 font-semibold text-amber-300">
-                <Award className="w-4 h-4 text-yellow-400" /> Reputação Política
-              </span>
-              <span className="font-bold text-slate-200">{Math.round(vida.reputacao)} pts</span>
-            </div>
-            <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-amber-400 transition-all duration-300"
-                style={{ width: `${vida.reputacao}%` }}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* SECTION: GERAL & FINANÇAS */}
-      {activeSubSection === 'geral' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-slate-200 text-base">Conta Bancária & CDI</h3>
-                <p className="text-xs text-slate-400">Rendimento automático atrelado à taxa Selic</p>
-              </div>
-              <span className="text-xs px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold">
-                CDI: {(macro.taxaSelic - 0.2).toFixed(2)}% a.a.
-              </span>
-            </div>
-
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800/80">
-              <div className="text-xs text-slate-400 mb-1 uppercase font-semibold">Saldo Pessoal Disponível</div>
-              <div className="text-3xl font-mono font-extrabold text-emerald-400">
-                R$ {vida.saldoBancario.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="mt-2 text-xs text-slate-400">
-                Rendimento mensal líquido estimado: +R${' '}
-                {((vida.saldoBancario * (((macro.taxaSelic - 0.2) / 100) / 12))).toFixed(2)}
-              </div>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-800 text-slate-300">
-                <span>Moradia ({moradiaAtualObj.nome}):</span>
-                <span className="font-mono text-slate-200">
-                  -R$ {vida.casaPropria ? (moradiaAtualObj.custoMensal * 0.3).toFixed(0) : moradiaAtualObj.custoMensal.toFixed(0)}/mês
-                </span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-800 text-slate-300">
-                <span>Filhos ({vida.familia?.filhos?.length || 0} dependentes):</span>
-                <span className="font-mono text-slate-200">
-                  -R${' '}
-                  {(vida.familia?.filhos || []).reduce((acc, f) => acc + (f.custoMensalApoio || 850), 0).toLocaleString('pt-BR')}
-                  /mês
-                </span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-800 text-slate-300">
-                <span>Salário Formal CLT/Concurso:</span>
-                <span className="font-mono text-emerald-400">
-                  +R$ {empregoAtualObj ? empregoAtualObj.salario.toLocaleString('pt-BR') : '0'}/mês
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Dívidas & Empréstimos */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-slate-200 text-base">Passivo & Crédito Pessoal</h3>
-                <p className="text-xs text-slate-400">Juros indexados à Selic + spread de risco</p>
-              </div>
-              <span
-                className={`text-xs px-2.5 py-1 rounded-md font-semibold ${
-                  vida.dividaPessoal > 0 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-slate-400'
-                }`}
-              >
-                {vida.dividaPessoal > 0 ? 'Endividado' : 'Sem dívidas'}
-              </span>
-            </div>
-
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800/80">
-              <div className="text-xs text-slate-400 mb-1 uppercase font-semibold">Total de Dívida Pessoal</div>
-              <div className={`text-3xl font-mono font-extrabold ${vida.dividaPessoal > 0 ? 'text-rose-400' : 'text-slate-500'}`}>
-                R$ {vida.dividaPessoal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="mt-2 text-xs text-slate-400">
-                Taxa Selic + Spread: {(macro.taxaSelic + 18).toFixed(2)}% ao ano
-              </div>
-            </div>
-
-            {vida.dividaPessoal > 0 && (
-              <div className="space-y-2 pt-1">
-                <label className="text-xs font-semibold text-slate-300 block">Amortizar Dívida</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    value={quantiaPagarDivida}
-                    onChange={(e) => setQuantiaPagarDivida(e.target.value)}
-                    placeholder="Valor em R$"
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500"
-                  />
-                  <button
-                    onClick={() => handlePagarDivida(Number(quantiaPagarDivida) || 0)}
-                    className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition"
-                  >
-                    Pagar
-                  </button>
-                  <button
-                    onClick={() => handlePagarDivida(Math.min(vida.saldoBancario, vida.dividaPessoal))}
-                    className="px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition"
-                  >
-                    Tudo
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-2 pt-2 border-t border-slate-800">
-              <label className="text-xs font-semibold text-slate-300 block">Tomar Empréstimo Bancário</label>
-              <div className="flex items-center gap-2">
-                <select
-                  value={quantiaEmprestimo}
-                  onChange={(e) => setQuantiaEmprestimo(e.target.value)}
-                  className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="2000">R$ 2.000 (Crédito Rápido)</option>
-                  <option value="5000">R$ 5.000 (Crédito Pessoal)</option>
-                  <option value="20000">R$ 20.000 (Empréstimo Médio)</option>
-                  <option value="80000">R$ 80.000 (Crédito Consignado / Alto)</option>
-                </select>
-                <button
-                  onClick={() => handleTomarEmprestimo(Number(quantiaEmprestimo))}
-                  className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition"
-                >
-                  Contratar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SECTION: CARREIRA & CARTEIRA DE TRABALHO (CTPS) */}
-      {activeSubSection === 'carreira' && (
+      {/* 1. SEÇÃO PERFIL & AVATAR */}
+      {activeSubSection === 'perfil' && (
         <div className="space-y-6">
-          {/* CTPS Document Header */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-l-4 border-l-blue-500">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold text-2xl">
-                <FileText className="w-7 h-7" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-bold text-slate-100">Carteira de Trabalho Digital (CTPS)</h3>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
-                    Nº {vida.carteira?.numeroCtps || 'BR-2026-98124'}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  Tempo total de contribuição previdenciária (INSS):{' '}
-                  <strong className="text-slate-200">{vida.carteira?.mesesTotaisContribuicao || 0} meses</strong>
-                </p>
-                {/* Area experience badges */}
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {Object.entries(vida.carteira?.experienciaPorArea || {}).map(([area, meses]) => (
-                    <span
-                      key={area}
-                      className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700"
-                    >
-                      {area}: {meses}m
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Current Job status */}
-            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-right">
-              <span className="text-[10px] text-slate-400 uppercase font-semibold block">Vínculo Atual</span>
-              <span className="text-sm font-bold text-slate-200 block">
-                {empregoAtualObj ? empregoAtualObj.titulo : 'Autônomo / Sem Registro'}
-              </span>
-              {empregoAtualObj && (
-                <div className="flex items-center justify-end gap-2 mt-1">
-                  <span className="text-xs text-emerald-400 font-mono font-bold">
-                    R$ {empregoAtualObj.salario.toLocaleString('pt-BR')}/mês
-                  </span>
-                  <button
-                    onClick={handlePedirDemissao}
-                    className="text-[10px] text-rose-400 hover:underline font-semibold"
-                  >
-                    Pedir Demissão
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Job Opportunities with Real CTPS and Education Prerequisites */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-slate-200 text-sm">Oportunidades no Mercado & Concursos</h3>
-              <span className="text-xs text-slate-400">Requer comprovação formal de experiência na CTPS</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {CARREIRAS.map((c) => {
-                const isCurrent = vida.empregoAtual?.carreiraId === c.id;
-                const expTem = vida.carteira?.experienciaPorArea?.[c.area] || 0;
-                const atendeExp = expTem >= c.experienciaMinimaMeses;
-                const atendeInt = vida.intelecto >= c.requisitoIntelecto;
-
-                return (
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl">
+            <div className="flex flex-col md:flex-row items-center gap-6">
+              {/* Avatar Box */}
+              <div className="relative group shrink-0">
+                <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-950 border-2 border-emerald-500/50 flex flex-col items-center justify-center shadow-lg shadow-emerald-950/40 p-2">
+                  {/* Visual Avatar Rendering */}
                   <div
-                    key={c.id}
-                    className={`p-4 rounded-xl border flex flex-col justify-between transition ${
-                      isCurrent
-                        ? 'bg-slate-800/80 border-emerald-500 ring-1 ring-emerald-500/20'
-                        : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
+                    className={`w-14 h-14 rounded-full border-2 border-slate-700 flex items-center justify-center relative overflow-hidden ${
+                      vida.avatar?.pele === 'clara'
+                        ? 'bg-amber-100'
+                        : vida.avatar?.pele === 'morena'
+                        ? 'bg-amber-700'
+                        : vida.avatar?.pele === 'negra'
+                        ? 'bg-amber-900'
+                        : 'bg-amber-200'
                     }`}
                   >
-                    <div>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="font-bold text-slate-200 text-sm">{c.titulo}</div>
-                          <div className="text-xs text-emerald-400 font-mono font-bold mt-0.5">
-                            R$ {c.salario.toLocaleString('pt-BR')}/mês
-                          </div>
-                        </div>
-                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
-                          {c.area}
-                        </span>
+                    {/* Cabelo */}
+                    <div
+                      className={`absolute top-0 w-full h-4 ${
+                        vida.avatar?.cabeloCor === 'preto'
+                          ? 'bg-slate-950'
+                          : vida.avatar?.cabeloCor === 'loiro'
+                          ? 'bg-yellow-400'
+                          : vida.avatar?.cabeloCor === 'ruivo'
+                          ? 'bg-orange-700'
+                          : vida.avatar?.cabeloCor === 'grisalho'
+                          ? 'bg-slate-400'
+                          : 'bg-amber-950'
+                      } ${vida.avatar?.cabeloEstilo === 'careca' ? 'hidden' : ''}`}
+                    />
+                    {/* Acessório */}
+                    {vida.avatar?.acessorio === 'oculos' && (
+                      <div className="absolute top-5 w-8 h-2 border-t-2 border-slate-900 flex justify-between px-1">
+                        <div className="w-2 h-2 rounded-full border border-slate-900" />
+                        <div className="w-2 h-2 rounded-full border border-slate-900" />
                       </div>
-
-                      <p className="text-xs text-slate-400 mt-2 leading-relaxed">{c.descricao}</p>
-
-                      <div className="mt-3 text-xs space-y-1 pt-2 border-t border-slate-800/80">
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Escolaridade Mínima:</span>
-                          <span className="font-semibold text-slate-300">{c.requisitoEducacao.toUpperCase()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Experiência na CTPS:</span>
-                          <span className={`font-mono font-semibold ${atendeExp ? 'text-emerald-400' : 'text-amber-400'}`}>
-                            {c.experienciaMinimaMeses} meses (Você tem {expTem}m)
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Intelecto Mínimo:</span>
-                          <span className={`font-mono font-semibold ${atendeInt ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {c.requisitoIntelecto} pts (Você tem {Math.round(vida.intelecto)})
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
-                      {isCurrent ? (
-                        <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Contrato Ativo
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => handleCandidatarCarreira(c.id)}
-                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1 shadow"
-                        >
-                          Candidatar-se à Vaga <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
+                    )}
+                    {vida.avatar?.acessorio === 'chapeu' && (
+                      <div className="absolute top-0 w-12 h-3 bg-amber-950 rounded-t-full" />
+                    )}
+                    <span className="text-xs font-bold mt-2 text-slate-800">👤</span>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SECTION: FAMÍLIA & RELACIONAMENTOS */}
-      {activeSubSection === 'familia' && (
-        <div className="space-y-6">
-          {/* Marital / Dating Status Banner */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center font-bold text-2xl">
-                <HeartHandshake className="w-6 h-6" />
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase font-semibold block">Estado Civil</span>
-                <h3 className="text-lg font-bold text-slate-100 capitalize">
-                  {vida.familia?.estadoCivil || 'Solteiro'}
-                </h3>
-                {vida.familia?.conjuge ? (
-                  <p className="text-xs text-slate-300 mt-0.5">
-                    Parceiro(a): <strong className="text-rose-300">{vida.familia.conjuge.nome}</strong> ({vida.familia.conjuge.ocupacao}) • Afinidade: {vida.familia.conjuge.nivelAfinidade}%
-                  </p>
-                ) : (
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Sem relacionamento amoroso ativo no momento.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {!vida.familia?.conjuge ? (
-                <button
-                  onClick={handleCasarOuPedir}
-                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition"
-                >
-                  Conhecer Alguém / Namorar
-                </button>
-              ) : vida.familia.estadoCivil === 'namorando' ? (
-                <button
-                  onClick={handleCasarOuPedir}
-                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition"
-                >
-                  💍 Pedir em Casamento (R$ 12k)
-                </button>
-              ) : (
-                <span className="text-xs text-emerald-400 font-bold px-3 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-800/40">
-                  União Estável & Feliz
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Children section with monthly upbringing costs */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-slate-200 text-sm flex items-center gap-2">
-                  <Baby className="w-4 h-4 text-cyan-400" /> Filhos & Dependentes (Custo de Criação)
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Crianças trazem felicidade e exigem orçamento mensal para saúde, educação e lazer.
-                </p>
-              </div>
-
-              {/* Add child input */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="Nome do bebê..."
-                  value={novoFilhoNome}
-                  onChange={(e) => setNovoFilhoNome(e.target.value)}
-                  className="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-200"
-                />
-                <button
-                  onClick={handleTerFilho}
-                  className="px-3 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs transition flex items-center gap-1"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Ter Filho
-                </button>
-              </div>
-            </div>
-
-            {/* Children Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {(vida.familia?.filhos || []).length === 0 ? (
-                <div className="col-span-full p-4 rounded-xl bg-slate-950 text-center text-xs text-slate-500">
-                  Nenhum filho registrado no momento.
+                  <span className="text-[10px] font-semibold text-emerald-400 mt-1 uppercase">
+                    {vida.avatar?.roupa || 'Casual'}
+                  </span>
                 </div>
-              ) : (
-                vida.familia.filhos.map((filho) => (
-                  <div key={filho.id} className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
-                    <div>
-                      <div className="font-bold text-slate-200 text-xs">{filho.nome}</div>
-                      <div className="text-[11px] text-slate-400">Idade: {filho.idade} anos</div>
-                      <div className="text-[11px] text-amber-400 font-mono mt-0.5">
-                        Custo: -R$ {filho.custoMensalApoio || 850}/mês
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleInteragirRelacionamento(filho)}
-                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-semibold"
-                    >
-                      Brincar
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+                <button
+                  onClick={() => setModalAvatarAberto(true)}
+                  className="mt-2 w-full text-center text-xs font-semibold py-1 px-2 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 transition"
+                >
+                  Editar Avatar
+                </button>
+              </div>
 
-          {/* Parents and Close Friends list */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
-            <h3 className="font-bold text-slate-200 text-sm flex items-center gap-2">
-              <Users className="w-4 h-4 text-emerald-400" /> Pais, Parentes & Amigos
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {[
-                ...(vida.familia?.parentes || []),
-                ...(vida.familia?.amigos || []),
-              ].map((rel) => (
-                <div key={rel.id} className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+              {/* Informações Civis e Pessoais */}
+              <div className="flex-1 space-y-3 w-full">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                   <div>
-                    <div className="font-bold text-slate-200 text-xs">{rel.nome}</div>
-                    <div className="text-[11px] text-slate-400 capitalize">{rel.tipo} • Afinidade: {rel.nivelAfinidade}%</div>
-                    {rel.ocupacao && <div className="text-[10px] text-slate-500">{rel.ocupacao}</div>}
+                    <h2 className="text-xl font-extrabold text-slate-100">{vida.nomeCompleto || vida.nome}</h2>
+                    <p className="text-xs text-slate-400">
+                      Nascido em: {vida.dataNascimento?.dia}/{vida.dataNascimento?.mes}/{vida.dataNascimento?.ano} • {idadeAtual} anos
+                    </p>
                   </div>
-                  <button
-                    onClick={() => handleInteragirRelacionamento(rel)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 text-xs font-semibold"
-                  >
-                    Visitar (-R$ 80)
-                  </button>
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                    Estado Civil: {vida.familia?.estadoCivil?.toUpperCase() || 'SOLTEIRO'}
+                  </span>
                 </div>
-              ))}
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-2">
+                  <div className="bg-slate-800/50 p-2.5 rounded-lg border border-slate-700/50">
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">CTPS Oficial</span>
+                    <span className="font-mono font-bold text-slate-200">{vida.carteira?.numeroCtps || 'Não emitida'}</span>
+                  </div>
+                  <div className="bg-slate-800/50 p-2.5 rounded-lg border border-slate-700/50">
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Escolaridade</span>
+                    <span className="font-bold text-slate-200 capitalize">{vida.educacao}</span>
+                  </div>
+                  <div className="bg-slate-800/50 p-2.5 rounded-lg border border-slate-700/50">
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Score Serasa</span>
+                    <span className={`font-mono font-bold ${scoreInfo.cor}`}>{vida.scoreCredito || 750} pts</span>
+                  </div>
+                  <div className="bg-slate-800/50 p-2.5 rounded-lg border border-slate-700/50">
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Cargo / Atuação</span>
+                    <span className="font-bold text-slate-200 truncate block">
+                      {vida.empregoAtual
+                        ? CARREIRAS.find(c => c.id === vida.empregoAtual?.carreiraId)?.titulo || 'Empregado'
+                        : 'Profissional Autônomo'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Títulos e Honrarias */}
+                <div className="pt-2">
+                  <span className="text-xs font-semibold text-slate-300 block mb-1.5">Diplomas & Títulos Conquistados:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(vida.titulosConquistados || ['Certificado de Ensino Médio']).map((tit, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2 py-0.5 rounded-md bg-indigo-950/60 border border-indigo-700/50 text-indigo-300 text-[11px] font-medium"
+                      >
+                        🎓 {tit}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* SECTION: BENS & VEÍCULOS */}
-      {activeSubSection === 'bens' && (
+      {/* 2. SEÇÃO FINANÇAS & DÍVIDAS */}
+      {activeSubSection === 'geral' && (
         <div className="space-y-6">
-          {/* Garage: Owned Vehicles */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          {/* Card Score Serasa / SPC */}
+          <div className={`p-5 rounded-2xl border ${scoreInfo.bg} flex flex-col md:flex-row items-center justify-between gap-4`}>
+            <div>
+              <div className="flex items-center gap-2">
+                <Shield className={`w-5 h-5 ${scoreInfo.cor}`} />
+                <h3 className="font-bold text-slate-100">Score de Crédito Serasa / SPC: {vida.scoreCredito || 750} / 1000</h3>
+                <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${scoreInfo.cor} bg-slate-900/60`}>
+                  {scoreInfo.texto}
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-1 max-w-xl">
+                O seu score é avaliado mensalmente com base na pontualidade no pagamento de boletos, histórico formal na CTPS e ausência de negativações. Contas atrasadas reduzem seu score e bloqueiam crédito bancário.
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <span className="text-xs text-slate-400 block">Crédito Pré-aprovado</span>
+              <span className="text-lg font-mono font-extrabold text-emerald-400">
+                R$ {(vida.limiteCreditoPreAprovado || 0).toLocaleString('pt-BR')}
+              </span>
+              <button
+                onClick={() => setModalNovoEmprestimo(true)}
+                disabled={(vida.limiteCreditoPreAprovado || 0) <= 0 || vida.contasVencidas.length > 0}
+                className="mt-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white transition block w-full"
+              >
+                Solicitar Empréstimo
+              </button>
+            </div>
+          </div>
+
+          {/* Contas Vencidas (Inadimplência Realista) */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="font-bold text-slate-200 text-sm flex items-center gap-2">
-                  <Car className="w-4 h-4 text-amber-400" /> Garagem Pessoal • Veículos Próprios
+                <h3 className="font-bold text-slate-100 flex items-center gap-2">
+                  <AlertTriangle className={`w-4 h-4 ${vida.contasVencidas.length > 0 ? 'text-red-400 animate-pulse' : 'text-slate-400'}`} />
+                  Contas em Atraso & Pendências Financeiras ({vida.contasVencidas.length})
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Veículos garantem mobilidade, conforto diário (+Energia) e prestígio social.
+                  Despesas não pagas no mês vencem e geram juros de mora diários sem contração automática de cheque especial.
                 </p>
               </div>
-              <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/30">
-                {(vida.veiculos || []).length} veículo(s)
-              </span>
+              {vida.contasVencidas.length > 0 && (
+                <button
+                  onClick={handlePagarTodasContasVencidas}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition shadow-lg shadow-rose-950/40"
+                >
+                  Quitar Todas as Contas
+                </button>
+              )}
             </div>
 
-            {(vida.veiculos || []).length === 0 ? (
-              <div className="p-6 rounded-xl bg-slate-950 border border-slate-800 text-center text-xs text-slate-400">
-                Você não possui veículos próprios. Depende de transporte público ou caronas.
+            {vida.contasVencidas.length === 0 ? (
+              <div className="p-4 rounded-xl bg-slate-800/40 border border-slate-700/50 text-center text-xs text-slate-400">
+                ✅ Parabéns! Nenhuma pendência financeira ou conta em atraso. Seu nome está completamente limpo.
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {vida.veiculos.map((v) => {
-                  const catalogoInfo = VEICULOS_CATALOGO[v.modeloId];
+              <div className="space-y-2">
+                {vida.contasVencidas.map(conta => {
+                  const total = Math.round(conta.valor + conta.jurosMoraAcumulados);
                   return (
-                    <div key={v.id} className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between">
+                    <div
+                      key={conta.id}
+                      className="p-3 rounded-xl bg-rose-950/30 border border-rose-800/50 flex items-center justify-between gap-3 text-xs"
+                    >
                       <div>
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-200 text-sm">{v.nome}</span>
-                          <span className="text-[10px] font-mono uppercase bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">
-                            {catalogoInfo?.categoria || 'Veículo'}
-                          </span>
-                        </div>
-                        <div className="text-xs text-slate-400 mt-2 space-y-1">
-                          <div>Valor venal de mercado: R$ {v.valorMercadoAtual.toLocaleString('pt-BR')}</div>
-                          <div>Manutenção + IPVA: -R$ {catalogoInfo?.custoMensalManutencao || 400}/mês</div>
-                          <div className="text-emerald-400">Bônus Conforto: +{catalogoInfo?.conforto || 10} pts</div>
-                        </div>
+                        <span className="font-bold text-slate-200 block">{conta.descricao}</span>
+                        <span className="text-[11px] text-rose-300">
+                          Vencimento: {conta.diaVencimento}/{conta.mesVencimento}/{conta.anoVencimento} • {conta.diasAtraso} dias de atraso • Juros: R$ {Math.round(conta.jurosMoraAcumulados)}
+                        </span>
                       </div>
-
-                      <div className="mt-4 pt-3 border-t border-slate-800 flex justify-end">
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="font-mono font-bold text-rose-300 text-sm">
+                          R$ {total.toLocaleString('pt-BR')}
+                        </span>
                         <button
-                          onClick={() => handleVenderVeiculo(v.id)}
-                          className="px-3 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900 text-rose-300 text-xs font-semibold transition"
+                          onClick={() => handlePagarContaVencida(conta.id)}
+                          className="px-3 py-1 rounded-lg font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition"
                         >
-                          Vender (R$ {Math.round(v.valorMercadoAtual * 0.9).toLocaleString('pt-BR')})
+                          Pagar
                         </button>
                       </div>
                     </div>
@@ -983,362 +834,637 @@ export const LifeView: React.FC<LifeViewProps> = ({
             )}
           </div>
 
-          {/* Dealership / Catalogue */}
-          <div className="space-y-3">
-            <h3 className="font-bold text-slate-200 text-sm">Concessionária & Catálogo de Veículos Novos</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Object.values(VEICULOS_CATALOGO).map((modelo) => {
-                const podeComprar = vida.saldoBancario >= modelo.precoCompra;
-                return (
-                  <div key={modelo.id} className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between">
-                    <div>
-                      <div className="font-bold text-slate-200 text-sm">{modelo.nome}</div>
-                      <div className="text-xs text-slate-400 mt-1 uppercase font-semibold text-[10px]">
-                        Categoria: {modelo.categoria}
-                      </div>
-
-                      <div className="text-xs text-slate-300 mt-3 space-y-1">
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Preço à Vista:</span>
-                          <span className="font-mono font-bold text-emerald-400">
-                            R$ {modelo.precoCompra.toLocaleString('pt-BR')}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">IPVA, Seguro & Combustível:</span>
-                          <span className="font-mono text-slate-300">
-                            R$ {modelo.custoMensalManutencao}/mês
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Conforto / Energia:</span>
-                          <span className="font-semibold text-yellow-300">+{modelo.conforto} pts</span>
-                        </div>
-                      </div>
+          {/* Empréstimos Formais Contratados */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
+            <h3 className="font-bold text-slate-100 flex items-center gap-2 mb-3">
+              <CreditCard className="w-4 h-4 text-emerald-400" />
+              Contratos de Empréstimo em Andamento ({vida.emprestimosContratados?.length || 0})
+            </h3>
+            {(!vida.emprestimosContratados || vida.emprestimosContratados.length === 0) ? (
+              <p className="text-xs text-slate-400">Você não possui contratos de empréstimo ativos no momento.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {vida.emprestimosContratados.map(emp => (
+                  <div key={emp.id} className="p-3.5 rounded-xl bg-slate-800/50 border border-slate-700/60 text-xs space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-slate-200">{emp.descricao}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${emp.status === 'quitado' ? 'bg-emerald-950 text-emerald-400' : 'bg-slate-800 text-slate-300'}`}>
+                        {emp.status.toUpperCase()}
+                      </span>
                     </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-800 flex justify-end">
-                      <button
-                        onClick={() => handleComprarVeiculo(modelo.id)}
-                        disabled={!podeComprar}
-                        className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 text-white font-bold text-xs transition"
-                      >
-                        Comprar Veículo
-                      </button>
+                    <div className="flex justify-between text-slate-400 text-[11px]">
+                      <span>Parcelas: {emp.parcelasPagas} / {emp.parcelasTotais}</span>
+                      <span className="font-mono text-slate-200">R$ {emp.valorParcela}/mês</span>
+                    </div>
+                    <div className="flex justify-between text-slate-400 text-[11px]">
+                      <span>Saldo Devedor:</span>
+                      <span className="font-mono font-bold text-amber-400">R$ {Math.round(emp.saldoDevedor).toLocaleString('pt-BR')}</span>
                     </div>
                   </div>
-                );
-              })}
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 3. SEÇÃO ROTINA & HORÁRIOS */}
+      {activeSubSection === 'rotina' && (
+        <div className="space-y-6">
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-emerald-400" />
+                  Rotina de Horários & Vitalidade
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Configure seus horários de trabalho, estudo e sono. Ficar acordado após a meia-noite sem descanso provoca exaustão.
+                </p>
+              </div>
+              <button
+                onClick={handleDescansarDormir}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition shadow-lg shadow-indigo-950/40 flex items-center gap-2"
+              >
+                <span>💤 Dormir / Descansar Agora (8h)</span>
+              </button>
+            </div>
+
+            {/* Configuração de Horários */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+              <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 text-xs space-y-2">
+                <span className="font-bold text-slate-200 block">Jornada de Trabalho</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400">Início:</span>
+                  <select
+                    value={vida.rotinaHorarios?.horarioTrabalhoInicio ?? 8}
+                    onChange={(e) => handleAtualizarHorariosRotina({ horarioTrabalhoInicio: Number(e.target.value) })}
+                    className="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1"
+                  >
+                    {[7, 8, 9, 10].map(h => <option key={h} value={h}>{h}:00</option>)}
+                  </select>
+                  <span className="text-slate-400">Fim:</span>
+                  <select
+                    value={vida.rotinaHorarios?.horarioTrabalhoFim ?? 17}
+                    onChange={(e) => handleAtualizarHorariosRotina({ horarioTrabalhoFim: Number(e.target.value) })}
+                    className="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1"
+                  >
+                    {[14, 16, 17, 18, 19].map(h => <option key={h} value={h}>{h}:00</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 text-xs space-y-2">
+                <span className="font-bold text-slate-200 block">Horário de Estudos</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400">Início:</span>
+                  <select
+                    value={vida.rotinaHorarios?.horarioEstudoInicio ?? 19}
+                    onChange={(e) => handleAtualizarHorariosRotina({ horarioEstudoInicio: Number(e.target.value) })}
+                    className="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1"
+                  >
+                    {[18, 19, 20].map(h => <option key={h} value={h}>{h}:00</option>)}
+                  </select>
+                  <span className="text-slate-400">Fim:</span>
+                  <select
+                    value={vida.rotinaHorarios?.horarioEstudoFim ?? 22}
+                    onChange={(e) => handleAtualizarHorariosRotina({ horarioEstudoFim: Number(e.target.value) })}
+                    className="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1"
+                  >
+                    {[21, 22, 23].map(h => <option key={h} value={h}>{h}:00</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 text-xs space-y-2">
+                <span className="font-bold text-slate-200 block">Horário de Sono</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400">Dormir:</span>
+                  <select
+                    value={vida.rotinaHorarios?.horarioDormir ?? 23}
+                    onChange={(e) => handleAtualizarHorariosRotina({ horarioDormir: Number(e.target.value) })}
+                    className="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1"
+                  >
+                    {[21, 22, 23, 0].map(h => <option key={h} value={h}>{h}:00</option>)}
+                  </select>
+                  <span className="text-slate-400">Acordar:</span>
+                  <select
+                    value={vida.rotinaHorarios?.horarioAcordar ?? 7}
+                    onChange={(e) => handleAtualizarHorariosRotina({ horarioAcordar: Number(e.target.value) })}
+                    className="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1"
+                  >
+                    {[5, 6, 7, 8].map(h => <option key={h} value={h}>{h}:00</option>)}
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* SECTION: EDUCAÇÃO & CURSOS */}
-      {activeSubSection === 'educacao' && (
-        <div className="space-y-5">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center">
-                <GraduationCap className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="text-xs text-slate-400 uppercase font-semibold">Maior Grau Acadêmico</div>
-                <div className="text-lg font-bold text-slate-100 uppercase tracking-wide">
-                  {vida.educacao.replace('_', ' ')}
-                </div>
-                <div className="text-xs text-indigo-400 mt-0.5">
-                  Intelecto Atual: {Math.round(vida.intelecto)} pontos
-                </div>
-              </div>
+      {/* 4. SEÇÃO RELAÇÕES & FAMÍLIA */}
+      {activeSubSection === 'familia' && (
+        <div className="space-y-6">
+          {/* Header de Família & Botão Conhecer Pessoas */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-5 rounded-2xl">
+            <div>
+              <h3 className="font-bold text-slate-100 flex items-center gap-2">
+                <Users className="w-5 h-5 text-emerald-400" />
+                Círculo Social, Romance & Família
+              </h3>
+              <p className="text-xs text-slate-400">
+                Construa afinidade naturalmente. Conheça pessoas, desenvolva amizades, namore e case no civil.
+              </p>
             </div>
+            <button
+              onClick={handleConhecerPessoas}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-lg shadow-emerald-950/40 flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" /> Conhecer Novas Pessoas (R$ 35)
+            </button>
+          </div>
 
-            {cursoAtualObj && vida.cursoAtual && (
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 w-full sm:w-72">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="font-semibold text-amber-300 truncate">{cursoAtualObj.nome}</span>
-                  <span className="text-slate-400 font-mono text-[11px]">
-                    {vida.cursoAtual.mesesRestantes}m restantes
-                  </span>
+          {/* Relacionamento Amoroso / Cônjuge */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
+            <h4 className="font-bold text-slate-100 mb-3 text-xs uppercase tracking-wider text-emerald-400">
+              Vida Amorosa & Parcerias
+            </h4>
+            {!vida.familia?.conjuge ? (
+              <div className="p-4 rounded-xl bg-slate-800/40 border border-slate-700/50 text-xs text-slate-400">
+                Você está solteiro(a). Interaja com conhecidos ou amigos na sua lista abaixo para desenvolver afinidade e pedir em namoro quando estiver pronto.
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl bg-slate-800/60 border border-slate-700 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Heart className="w-4 h-4 text-rose-400 fill-rose-400" />
+                    <span className="font-bold text-slate-100 text-sm">{vida.familia.conjuge.nome}</span>
+                    <span className="text-xs text-slate-400">({vida.familia.conjuge.ocupacao || 'Companheiro(a)'})</span>
+                  </div>
+                  <div className="text-xs text-slate-300 mt-1 flex items-center gap-3">
+                    <span>Status: <strong className="text-emerald-400 uppercase">{vida.familia.estadoCivil}</strong></span>
+                    <span>Afinidade: <strong className="text-rose-400">{vida.familia.conjuge.nivelAfinidade}%</strong></span>
+                  </div>
                 </div>
-                <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-amber-400 transition-all"
-                    style={{
-                      width: `${((cursoAtualObj.duracaoMeses - vida.cursoAtual.mesesRestantes) / cursoAtualObj.duracaoMeses) * 100}%`,
-                    }}
-                  />
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => handleAumentarAfinidade(vida.familia.conjuge!, 'encontro')}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-700 hover:bg-slate-600 text-slate-200 transition"
+                  >
+                    Encontro Romântico (R$ 180)
+                  </button>
+                  {vida.familia.estadoCivil === 'namorando' && (
+                    <button
+                      onClick={handleCasarNoCartorio}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white transition flex items-center gap-1"
+                    >
+                      💍 Casar no Cartório (R$ 1.250)
+                    </button>
+                  )}
+                  {vida.familia.estadoCivil === 'casado' && !vida.gestacaoAdocao?.emAndamento && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleIniciarFilhos('gestacao')}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition"
+                      >
+                        🍼 Planejar Gestação (9m)
+                      </button>
+                      <button
+                        onClick={() => handleIniciarFilhos('adocao')}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition"
+                      >
+                        📋 Iniciar Adoção (8m)
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <div className="text-[11px] text-slate-400 mt-1">
-                  Mensalidade: R$ {cursoAtualObj.custoMensal}/mês
-                </div>
+              </div>
+            )}
+
+            {/* Gestação ou Adoção em Andamento */}
+            {vida.gestacaoAdocao?.emAndamento && (
+              <div className="mt-3 p-3.5 rounded-xl bg-purple-950/40 border border-purple-700/60 flex items-center justify-between text-xs">
+                <span className="font-bold text-purple-200 flex items-center gap-2">
+                  <Baby className="w-4 h-4 text-purple-400" />
+                  Processo de {vida.gestacaoAdocao.tipo === 'gestacao' ? 'Gestação' : 'Adoção'} em curso!
+                </span>
+                <span className="text-purple-300 font-mono font-bold">
+                  Restam {vida.gestacaoAdocao.mesesRestantes} meses para o nascimento/conclusão
+                </span>
               </div>
             )}
           </div>
 
-          <div className="space-y-3">
-            <h3 className="font-bold text-slate-200 text-sm">Programas de Formação, Graduação e Pós</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {CURSOS.map((curso) => {
-                const isCurrent = vida.cursoAtual?.cursoId === curso.id;
-                return (
-                  <div
-                    key={curso.id}
-                    className="bg-slate-900/70 border border-slate-800 p-4 rounded-xl flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="font-bold text-slate-200 text-sm">{curso.nome}</div>
-                      <div className="text-xs text-slate-400 mt-1">
-                        Duração: {curso.duracaoMeses} meses | Mensalidade: R$ {curso.custoMensal.toLocaleString('pt-BR')}
-                      </div>
-                      <div className="text-xs text-indigo-300 font-semibold mt-1">
-                        Ganho Total: +{curso.ganhoIntelectoTotal} pts de Intelecto
-                        {curso.concedeNivel && ` • Confere título ${curso.concedeNivel.toUpperCase()}`}
-                      </div>
+          {/* Filhos e Dependentes com Fases de Crescimento */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
+            <h4 className="font-bold text-slate-100 mb-3 text-xs uppercase tracking-wider text-emerald-400">
+              Filhos & Dependentes ({vida.familia?.filhos?.length || 0})
+            </h4>
+            {(!vida.familia?.filhos || vida.familia.filhos.length === 0) ? (
+              <p className="text-xs text-slate-400">Você ainda não possui filhos.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {vida.familia.filhos.map(filho => (
+                  <div key={filho.id} className="p-3.5 rounded-xl bg-slate-800/50 border border-slate-700 text-xs space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-slate-200">{filho.nome}</span>
+                      <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 text-[10px] font-bold uppercase">
+                        {filho.filhoDetalhes?.fase || 'Criança'} ({filho.idade} anos)
+                      </span>
                     </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
-                      {isCurrent ? (
-                        <span className="text-xs text-amber-400 font-bold">Em andamento...</span>
-                      ) : (
-                        <button
-                          onClick={() => handleMatricularCurso(curso.id)}
-                          disabled={!!vida.cursoAtual}
-                          className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-slate-950 font-bold text-xs transition"
-                        >
-                          Matricular-se
-                        </button>
-                      )}
+                    <div className="text-slate-400 text-[11px] space-y-0.5">
+                      <div>Escola: <strong className="text-slate-300">{filho.filhoDetalhes?.escola || 'Escola Regular'}</strong></div>
+                      <div>Custo Mensal: <strong className="text-slate-300">R$ {filho.custoMensalApoio || 1200}/mês</strong></div>
+                      <div>Afinidade: <strong className="text-emerald-400">{filho.nivelAfinidade}%</strong></div>
                     </div>
+                    <button
+                      onClick={() => handleAumentarAfinidade(filho, 'conversar')}
+                      className="w-full py-1 text-center font-bold bg-slate-700 hover:bg-slate-600 rounded text-slate-200 transition"
+                    >
+                      Passeio & Atenção Familiar
+                    </button>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SECTION: MORADIA & IMÓVEIS */}
-      {activeSubSection === 'moradia' && (
-        <div className="space-y-5">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
-              <Home className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="text-xs text-slate-400 uppercase font-semibold">Residência Atual</div>
-              <div className="text-lg font-bold text-slate-100">{moradiaAtualObj.nome}</div>
-              <div className="text-xs text-emerald-400 font-mono mt-0.5">
-                {vida.casaPropria ? 'Imóvel Próprio (IPTU/Condomínio: 30%)' : 'Imóvel Alugado'} • R${' '}
-                {vida.casaPropria
-                  ? (moradiaAtualObj.custoMensal * 0.3).toFixed(0)
-                  : moradiaAtualObj.custoMensal.toFixed(0)}
-                /mês
+                ))}
               </div>
-            </div>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {Object.values(MORADIAS).map((m) => {
-              const isCurrent = vida.moradia === m.id;
-              return (
-                <div
-                  key={m.id}
-                  className={`p-4 rounded-xl border flex flex-col justify-between ${
-                    isCurrent
-                      ? 'bg-slate-800/70 border-emerald-500 ring-1 ring-emerald-500/20'
-                      : 'bg-slate-900/70 border-slate-800'
-                  }`}
-                >
+          {/* Lista de Conhecidos e Amigos */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
+            <h4 className="font-bold text-slate-100 mb-3 text-xs uppercase tracking-wider text-emerald-400">
+              Amigos & Contatos ({((vida.familia?.amigos?.length || 0) + (vida.familia?.conhecidos?.length || 0))})
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {[...(vida.familia?.amigos || []), ...(vida.familia?.conhecidos || [])].map(rel => (
+                <div key={rel.id} className="p-3 rounded-xl bg-slate-800/40 border border-slate-700/60 flex items-center justify-between gap-3 text-xs">
                   <div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-200 text-sm">{m.nome}</span>
-                      {isCurrent && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                          Atual
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-slate-400 mt-2 space-y-1">
-                      <div>Aluguel Mensal: R$ {m.custoMensal.toLocaleString('pt-BR')}</div>
-                      <div>Bônus Conforto: +{m.conforto} pts | Bônus Saúde: +{m.bonusSaude} pts</div>
-                      {m.custoCompra && (
-                        <div className="text-amber-400 font-mono font-semibold">
-                          Preço de Compra: R$ {m.custoCompra.toLocaleString('pt-BR')}
-                        </div>
-                      )}
-                    </div>
+                    <span className="font-bold text-slate-200 block">{rel.nome}</span>
+                    <span className="text-[11px] text-slate-400">{rel.ocupacao || 'Contato'} • Afinidade: {rel.nivelAfinidade}%</span>
                   </div>
-
-                  <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center gap-2">
-                    {!isCurrent && (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => handleAumentarAfinidade(rel, 'conversar')}
+                      className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 text-[11px] font-semibold"
+                    >
+                      Conversar
+                    </button>
+                    {rel.nivelAfinidade >= 60 && !vida.familia?.conjuge && (
                       <button
-                        onClick={() => handleMudarMoradia(m.id)}
-                        className="flex-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
+                        onClick={() => handlePedirEmNamoro(rel)}
+                        className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold"
                       >
-                        Alugar
-                      </button>
-                    )}
-                    {m.custoCompra && !vida.casaPropria && (
-                      <button
-                        onClick={() => handleComprarImovel(m.id)}
-                        disabled={vida.saldoBancario < m.custoCompra}
-                        className="flex-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 text-white text-xs font-bold transition"
-                      >
-                        Comprar Imóvel
+                        Pedir em Namoro
                       </button>
                     )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* SECTION: ESTILO DE VIDA, ROTINA & NUTRIÇÃO */}
-      {activeSubSection === 'estilo' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Sleep Routine & Nutrition */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
-            <h3 className="font-bold text-slate-200 text-sm flex items-center gap-2">
-              <Zap className="w-4 h-4 text-yellow-300" /> Sono & Alimentação (Gera Energia Vital)
-            </h3>
-
-            {/* Sleep hours */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300 block">Horas de Sono por Noite</label>
-              <div className="grid grid-cols-4 gap-2">
-                {[6, 7, 8, 9].map((horas) => (
-                  <button
-                    key={horas}
-                    onClick={() => handleUpdateRotina({ horasSono: horas })}
-                    className={`py-2 rounded-lg text-xs font-bold border transition ${
-                      (vida.rotina?.horasSono || 8) === horas
-                        ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500'
-                        : 'bg-slate-950 text-slate-400 border-slate-800'
-                    }`}
-                  >
-                    {horas} horas
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Nutrition quality */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300 block">Padrão Alimentar</label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'economica', label: 'Econômica', custo: 'R$ 450/m' },
-                  { id: 'saudavel', label: 'Saudável', custo: 'R$ 1.100/m' },
-                  { id: 'premium', label: 'Orgânica/Chef', custo: 'R$ 2.400/m' },
-                ].map((nut) => (
-                  <button
-                    key={nut.id}
-                    onClick={() => handleUpdateRotina({ padraoAlimentacao: nut.id as any })}
-                    className={`p-2 rounded-lg border text-left transition ${
-                      (vida.rotina?.padraoAlimentacao || 'saudavel') === nut.id
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500'
-                        : 'bg-slate-950 text-slate-400 border-slate-800'
-                    }`}
-                  >
-                    <div className="font-bold text-xs">{nut.label}</div>
-                    <div className="text-[10px] text-slate-400">{nut.custo}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Health insurance */}
-            <div className="space-y-1.5 pt-2 border-t border-slate-800">
-              <label className="text-xs font-semibold text-slate-300 block">Plano de Saúde</label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'nenhum', label: 'SUS Público', custo: 'R$ 0' },
-                  { id: 'basico', label: 'Básico', custo: 'R$ 450/m' },
-                  { id: 'completo', label: 'Premium', custo: 'R$ 1.400/m' },
-                ].map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => handleUpdateRotina({ planoSaude: p.id as any })}
-                    className={`p-2 rounded-lg border text-left transition ${
-                      (vida.rotina?.planoSaude || 'basico') === p.id
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500'
-                        : 'bg-slate-950 text-slate-400 border-slate-800'
-                    }`}
-                  >
-                    <div className="font-bold text-xs">{p.label}</div>
-                    <div className="text-[10px] text-slate-400">{p.custo}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Activities & Lifestyle Level */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
-            <h3 className="font-bold text-slate-200 text-sm flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-amber-400" /> Bem-estar, Academia & Lazer
-            </h3>
-
-            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800">
-              <div className="flex items-center gap-2">
-                <Dumbbell className="w-4 h-4 text-indigo-400" />
-                <div>
-                  <div className="font-semibold text-slate-200 text-xs">Academia & Esportes</div>
-                  <div className="text-[10px] text-slate-400">R$ 160/mês • +2 pts saúde</div>
-                </div>
-              </div>
-              <button
-                onClick={() => handleUpdateRotina({ academia: !vida.rotina?.academia })}
-                className={`px-3 py-1 rounded-lg font-bold text-xs ${
-                  vida.rotina?.academia ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'
-                }`}
-              >
-                {vida.rotina?.academia ? 'Ativo' : 'Inativo'}
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800">
-              <div className="flex items-center gap-2">
-                <Smile className="w-4 h-4 text-amber-400" />
-                <div>
-                  <div className="font-semibold text-slate-200 text-xs">Terapia & Saúde Mental</div>
-                  <div className="text-[10px] text-slate-400">R$ 600/mês • +3 pts felicidade</div>
-                </div>
-              </div>
-              <button
-                onClick={() => handleUpdateRotina({ terapia: !vida.rotina?.terapia })}
-                className={`px-3 py-1 rounded-lg font-bold text-xs ${
-                  vida.rotina?.terapia ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'
-                }`}
-              >
-                {vida.rotina?.terapia ? 'Ativo' : 'Inativo'}
-              </button>
-            </div>
-
-            {/* Leisure level */}
-            <div className="space-y-2 pt-2 border-t border-slate-800">
-              <label className="text-xs font-semibold text-slate-300 block">Padrão de Lazer Mensal</label>
-              {[
-                { id: 'economico', titulo: 'Econômico / Parques', custo: 'R$ 500/m' },
-                { id: 'moderado', titulo: 'Moderado / Restaurantes', custo: 'R$ 1.800/m' },
-                { id: 'ostentacao', titulo: 'Alto Padrão / Viagens', custo: 'R$ 8.000/m' },
-              ].map((lz) => (
-                <div
-                  key={lz.id}
-                  onClick={() => handleUpdateRotina({ lazerNivel: lz.id as any })}
-                  className={`p-3 rounded-xl border cursor-pointer transition flex items-center justify-between ${
-                    (vida.rotina?.lazerNivel || 'moderado') === lz.id
-                      ? 'bg-amber-500/10 border-amber-500/50'
-                      : 'bg-slate-950 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  <span className="font-bold text-slate-200 text-xs">{lz.titulo}</span>
-                  <span className="font-mono text-xs text-amber-400">{lz.custo}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. SEÇÃO EDUCAÇÃO & SEMESTRES */}
+      {activeSubSection === 'educacao' && (
+        <div className="space-y-6">
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
+            <h3 className="font-bold text-slate-100 flex items-center gap-2 mb-3">
+              <GraduationCap className="w-5 h-5 text-purple-400" />
+              Matrícula Acadêmica & Frequência
+            </h3>
+
+            {vida.cursoMatriculado && !vida.cursoMatriculado.concluido ? (
+              <div className="p-4 rounded-xl bg-purple-950/30 border border-purple-800/50 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="text-base font-extrabold text-purple-200">{vida.cursoMatriculado.nome}</span>
+                    <span className="text-xs text-purple-400 block">
+                      Semestre {vida.cursoMatriculado.semestreAtual} de {vida.cursoMatriculado.totalSemestres} • Nota Média: {vida.cursoMatriculado.notaMedia}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleAssistirAula}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white transition"
+                    >
+                      Assistir Aula (+Presença)
+                    </button>
+                    <button
+                      onClick={handleEstudarProvas}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-purple-300 border border-purple-700 transition"
+                    >
+                      Estudar p/ Provas
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs text-purple-300">
+                    <span>Frequência no Semestre: {vida.cursoMatriculado.aulasAssistidas} / {vida.cursoMatriculado.aulasRequeridas} aulas</span>
+                    <span>{Math.round((vida.cursoMatriculado.aulasAssistidas / vida.cursoMatriculado.aulasRequeridas) * 100)}%</span>
+                  </div>
+                  <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-purple-500 transition-all duration-300"
+                      style={{ width: `${Math.min(100, (vida.cursoMatriculado.aulasAssistidas / vida.cursoMatriculado.aulasRequeridas) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400">Você não possui nenhum curso em andamento no momento.</p>
+            )}
+          </div>
+
+          {/* Catálogo de Cursos */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
+            <h4 className="font-bold text-slate-100 mb-3 text-xs uppercase tracking-wider text-emerald-400">
+              Cursos & Programas de Especialização Disponíveis
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {CURSOS.filter(c => !(vida.titulosConquistados || []).some(t => t.includes(c.nome))).map(curso => (
+                <div key={curso.id} className="p-3.5 rounded-xl bg-slate-800/40 border border-slate-700 text-xs space-y-2">
+                  <div className="flex justify-between items-start">
+                    <span className="font-bold text-slate-200">{curso.nome}</span>
+                    <span className="font-mono text-emerald-400 font-bold shrink-0">R$ {curso.custoMensal}/mês</span>
+                  </div>
+                  <div className="flex justify-between text-[11px] text-slate-400">
+                    <span>Duração: {curso.duracaoMeses} meses ({curso.totalSemestres || 2} semestres)</span>
+                    <span>Intelecto: +{curso.ganhoIntelectoTotal} pts</span>
+                  </div>
+                  <button
+                    onClick={() => handleMatricularNovoCurso(curso.id)}
+                    disabled={vida.saldoBancario < curso.custoMensal || !!(vida.cursoMatriculado && !vida.cursoMatriculado.concluido)}
+                    className="w-full py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white transition"
+                  >
+                    Matricular-se
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. SEÇÃO TRABALHO & CARREIRA */}
+      {activeSubSection === 'carreira' && (
+        <div className="space-y-6">
+          {/* Emprego Atual */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
+              <div>
+                <h3 className="font-bold text-slate-100 flex items-center gap-2">
+                  <Briefcase className="w-5 h-5 text-emerald-400" />
+                  Cargo Atual na Carteira de Trabalho
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Número CTPS: <strong className="text-slate-200 font-mono">{vida.carteira?.numeroCtps}</strong>
+                </p>
+              </div>
+              {vida.empregoAtual && (
+                <button
+                  onClick={handlePedirDemissao}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600/30 hover:bg-rose-600/50 text-rose-300 border border-rose-500/40 transition"
+                >
+                  Pedir Demissão
+                </button>
+              )}
+            </div>
+
+            {vida.empregoAtual ? (
+              <div className="p-4 rounded-xl bg-slate-800/60 border border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                <div>
+                  <span className="font-bold text-slate-200 text-sm block">
+                    {CARREIRAS.find(c => c.id === vida.empregoAtual?.carreiraId)?.titulo}
+                  </span>
+                  <span className="text-slate-400">
+                    Salário Formal: <strong className="text-emerald-400 font-mono">R$ {vida.empregoAtual.salarioAcordado?.toLocaleString('pt-BR')}</strong> • Tempo no Cargo: {vida.empregoAtual.mesesNoCargo} meses
+                  </span>
+                </div>
+                <span className="px-3 py-1 rounded-full bg-emerald-950 text-emerald-400 font-bold uppercase text-[10px]">
+                  Contrato Ativo
+                </span>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400">Você não possui emprego formal de carteira assinada no momento.</p>
+            )}
+          </div>
+
+          {/* Vagas Abertas no Mercado */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
+            <h4 className="font-bold text-slate-100 mb-3 text-xs uppercase tracking-wider text-emerald-400">
+              Vagas Abertas & Requisitos Legais
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {CARREIRAS.map(car => (
+                <div key={car.id} className="p-3.5 rounded-xl bg-slate-800/40 border border-slate-700 text-xs space-y-2">
+                  <div className="flex justify-between items-start">
+                    <span className="font-bold text-slate-200">{car.titulo}</span>
+                    <span className="font-mono text-emerald-400 font-bold">R$ {car.salario.toLocaleString('pt-BR')}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">{car.descricao}</p>
+                  <div className="text-[10px] text-slate-400 space-y-0.5">
+                    <div>Requisito: {car.requisitoEducacao.toUpperCase()} • Intelecto mín: {car.requisitoIntelecto}</div>
+                    <div>Horário: {car.horarioInicio}:00 às {car.horarioFim}:00 • Estresse: {car.estresse}/10</div>
+                  </div>
+                  <button
+                    onClick={() => handleCandidatarCarreira(car.id)}
+                    disabled={vida.empregoAtual?.carreiraId === car.id}
+                    className="w-full py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white transition"
+                  >
+                    {vida.empregoAtual?.carreiraId === car.id ? 'Cargo Atual' : 'Candidatar-se'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. SEÇÃO VEÍCULOS & BENS */}
+      {activeSubSection === 'bens' && (
+        <div className="space-y-6">
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
+            <h3 className="font-bold text-slate-100 flex items-center gap-2 mb-3">
+              <Car className="w-5 h-5 text-cyan-400" />
+              Garagem & Veículos Próprios ({vida.veiculos?.length || 0})
+            </h3>
+            {(!vida.veiculos || vida.veiculos.length === 0) ? (
+              <p className="text-xs text-slate-400">Você não possui nenhum veículo registrado em seu nome.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {vida.veiculos.map(v => (
+                  <div key={v.id} className="p-3.5 rounded-xl bg-slate-800/50 border border-slate-700 text-xs space-y-2">
+                    <span className="font-bold text-slate-200 block text-sm">{v.nome}</span>
+                    <div className="flex justify-between text-slate-400 text-[11px]">
+                      <span>Ano de Compra: {v.anoCompra}</span>
+                      <span className="font-mono text-cyan-400 font-bold">R$ {v.valorMercadoAtual.toLocaleString('pt-BR')}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 8. SEÇÃO MORADIA */}
+      {activeSubSection === 'moradia' && (
+        <div className="space-y-6">
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
+            <h3 className="font-bold text-slate-100 flex items-center gap-2 mb-3">
+              <Home className="w-5 h-5 text-amber-400" />
+              Moradia Atual: {MORADIAS[vida.moradia]?.nome}
+            </h3>
+            <p className="text-xs text-slate-400 mb-4">
+              Situação: <strong>{vida.casaPropria ? 'Imóvel Próprio Quitado' : 'Aluguel'}</strong> • Custo Mensal: R$ {Math.round(vida.casaPropria ? MORADIAS[vida.moradia].custoMensal * 0.3 : MORADIAS[vida.moradia].custoMensal)}/mês
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PERSONALIZAR AVATAR */}
+      {modalAvatarAberto && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <h3 className="text-base font-bold text-slate-100">Personalizar Perfil & Avatar</h3>
+
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">Nome Completo</label>
+              <input
+                type="text"
+                value={nomeTemp}
+                onChange={(e) => setNomeTemp(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <label className="text-slate-400 block mb-1">Tom de Pele</label>
+                <select
+                  value={avatarTemp.pele}
+                  onChange={(e) => setAvatarTemp({ ...avatarTemp, pele: e.target.value as any })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-200"
+                >
+                  <option value="clara">Clara</option>
+                  <option value="morena">Morena</option>
+                  <option value="negra">Negra</option>
+                  <option value="oriental">Oriental</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1">Estilo de Cabelo</label>
+                <select
+                  value={avatarTemp.cabeloEstilo}
+                  onChange={(e) => setAvatarTemp({ ...avatarTemp, cabeloEstilo: e.target.value as any })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-200"
+                >
+                  <option value="curto">Curto</option>
+                  <option value="medio">Médio</option>
+                  <option value="longo">Longo</option>
+                  <option value="crespo">Crespo / Black</option>
+                  <option value="careca">Careca</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1">Cor do Cabelo</label>
+                <select
+                  value={avatarTemp.cabeloCor}
+                  onChange={(e) => setAvatarTemp({ ...avatarTemp, cabeloCor: e.target.value as any })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-200"
+                >
+                  <option value="castanho">Castanho</option>
+                  <option value="preto">Preto</option>
+                  <option value="loiro">Loiro</option>
+                  <option value="ruivo">Ruivo</option>
+                  <option value="grisalho">Grisalho</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1">Traje / Roupa</label>
+                <select
+                  value={avatarTemp.roupa}
+                  onChange={(e) => setAvatarTemp({ ...avatarTemp, roupa: e.target.value as any })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-200"
+                >
+                  <option value="casual">Casual</option>
+                  <option value="social">Social / Terno</option>
+                  <option value="trabalho">Trabalho / Campo</option>
+                  <option value="esporte">Esportivo</option>
+                  <option value="elegante">Elegante</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setModalAvatarAberto(false)}
+                className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSalvarAvatar}
+                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white"
+              >
+                Salvar Alterações
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONTRATAR EMPRÉSTIMO */}
+      {modalNovoEmprestimo && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <h3 className="text-base font-bold text-slate-100">Contratar Crédito Pessoal</h3>
+            <p className="text-xs text-slate-400">
+              Limite pré-aprovado disponível: <strong className="text-emerald-400 font-mono">R$ {(vida.limiteCreditoPreAprovado || 0).toLocaleString('pt-BR')}</strong>
+            </p>
+
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">Valor Solicitado (R$)</label>
+              <input
+                type="number"
+                value={valorEmprestimoNovo}
+                onChange={(e) => setValorEmprestimoNovo(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">Prazo de Pagamento</label>
+              <select
+                value={prazoEmprestimoNovo}
+                onChange={(e) => setPrazoEmprestimoNovo(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+              >
+                <option value="12">12 meses</option>
+                <option value="24">24 meses</option>
+                <option value="36">36 meses</option>
+                <option value="48">48 meses</option>
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setModalNovoEmprestimo(false)}
+                className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleContratarEmprestimo}
+                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white"
+              >
+                Contratar Empréstimo
+              </button>
             </div>
           </div>
         </div>

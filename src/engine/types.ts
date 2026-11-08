@@ -13,6 +13,21 @@ export type CargoPoliticoId =
 
 export type EsferaGoverno = 'municipal' | 'estadual' | 'federal' | 'nenhuma';
 
+export type DiaSemana =
+  | 'Segunda-feira'
+  | 'Terça-feira'
+  | 'Quarta-feira'
+  | 'Quinta-feira'
+  | 'Sexta-feira'
+  | 'Sábado'
+  | 'Domingo';
+
+export interface DataCalendario {
+  dia: number;
+  mes: number;
+  ano: number;
+}
+
 export interface CargoPoliticoInfo {
   id: CargoPoliticoId;
   nome: string;
@@ -69,6 +84,8 @@ export interface CarreiraOption {
   requisitoIntelecto: number;
   experienciaMinimaMeses: number; // Meses comprovados na carteira
   estresse: number;
+  horarioInicio: number; // ex: 8
+  horarioFim: number; // ex: 17
   descricao: string;
 }
 
@@ -95,27 +112,81 @@ export interface CursoOption {
   nome: string;
   tipo: 'tecnico' | 'graduacao' | 'pos' | 'certificacao';
   duracaoMeses: number;
+  totalSemestres: number;
   custoMensal: number;
   ganhoIntelectoTotal: number;
   concedeNivel?: NivelEducacao;
+  horarioInicio?: number; // ex: 19
+  horarioFim?: number; // ex: 22
 }
+
+export interface CursoMatriculado {
+  cursoId: string;
+  nome: string;
+  tipo: 'tecnico' | 'graduacao' | 'pos' | 'certificacao';
+  semestreAtual: number;
+  totalSemestres: number;
+  aulasAssistidas: number;
+  aulasRequeridas: number;
+  provasRealizadas: number;
+  provasRequeridas: number;
+  notaMedia: number; // 0 a 10
+  aprovado: boolean;
+  concluido: boolean;
+  mesesDecorridos: number;
+  mesesTotais: number;
+  concedeNivel?: NivelEducacao;
+}
+
+export type TipoRelacionamento =
+  | 'conhecido'
+  | 'amigo'
+  | 'amigo_proximo'
+  | 'flerte'
+  | 'namorado'
+  | 'noivo'
+  | 'conjuge'
+  | 'ex'
+  | 'pai'
+  | 'mae'
+  | 'irmao'
+  | 'filho'
+  | 'colega_trabalho';
 
 export interface Relacionamento {
   id: string;
   nome: string;
-  tipo: 'pai' | 'mae' | 'irmao' | 'amigo' | 'namorado' | 'conjuge' | 'filho';
+  tipo: TipoRelacionamento;
   nivelAfinidade: number; // 0 a 100
   idade: number;
   ocupacao?: string;
+  personalidade?: string;
+  mesesConvivencia?: number;
+  mesesSemContato?: number;
   custoMensalApoio?: number; // Filhos geram despesas de criação
+  filhoDetalhes?: {
+    diaNascimento: number;
+    mesNascimento: number;
+    anoNascimento: number;
+    fase: 'bebe' | 'crianca' | 'adolescente' | 'jovem_adulto';
+    escola: string;
+  };
+}
+
+export interface GestacaoOuAdocao {
+  emAndamento: boolean;
+  tipo: 'gestacao' | 'adocao';
+  mesesRestantes: number;
+  parceiroNome: string;
 }
 
 export interface FamiliaRelacionamento {
-  estadoCivil: 'solteiro' | 'namorando' | 'casado' | 'divorciado' | 'viuvo';
+  estadoCivil: 'solteiro' | 'namorando' | 'noivo' | 'casado' | 'divorciado' | 'viuvo';
   conjuge?: Relacionamento;
   filhos: Relacionamento[];
   parentes: Relacionamento[];
   amigos: Relacionamento[];
+  conhecidos: Relacionamento[];
 }
 
 export interface SetorEmpresa {
@@ -158,18 +229,83 @@ export interface Empresa {
   ativa: boolean;
 }
 
+export interface AvatarConfig {
+  pele: 'clara' | 'morena' | 'negra' | 'oriental';
+  cabeloCor: 'castanho' | 'preto' | 'loiro' | 'ruivo' | 'grisalho';
+  cabeloEstilo: 'curto' | 'medio' | 'longo' | 'crespo' | 'careca';
+  roupa: 'casual' | 'social' | 'trabalho' | 'esporte' | 'elegante';
+  acessorio: 'nenhum' | 'oculos' | 'relogio' | 'chapeu';
+}
+
+export interface ContaPagar {
+  id: string;
+  categoria: 'aluguel' | 'veiculo' | 'saude' | 'educacao' | 'filhos' | 'servico' | 'imposto';
+  descricao: string;
+  valor: number;
+  diaVencimento: number;
+  mesVencimento: number;
+  anoVencimento: number;
+  diasAtraso: number;
+  jurosMoraAcumulados: number;
+}
+
+export interface EmprestimoContratado {
+  id: string;
+  tipo: 'pessoal' | 'imobiliario' | 'veiculo' | 'capital_giro';
+  banco: string;
+  descricao: string;
+  valorOriginal: number;
+  saldoDevedor: number;
+  valorParcela: number;
+  parcelasTotais: number;
+  parcelasPagas: number;
+  taxaJurosMensal: number; // % ao mês
+  diaVencimentoParcela: number;
+  status: 'em_dia' | 'atrasado' | 'quitado';
+}
+
+export type TipoAtividadeRotina =
+  | 'dormindo'
+  | 'trabalhando'
+  | 'estudando'
+  | 'lazer'
+  | 'livre'
+  | 'cuidando_familia'
+  | 'exercicio';
+
+export interface RotinaHorarios {
+  horarioTrabalhoInicio: number; // ex: 8
+  horarioTrabalhoFim: number;    // ex: 17
+  horarioEstudoInicio: number;   // ex: 19
+  horarioEstudoFim: number;      // ex: 22
+  horarioDormir: number;         // ex: 23
+  horarioAcordar: number;        // ex: 7
+}
+
 export interface VidaPessoal {
   nome: string;
-  idade: number; // em anos
+  nomeCompleto: string;
+  dataNascimento: DataCalendario;
+  idade: number; // calculado dinamicamente ou mantido com consistência
   mesesVividos: number;
+  avatar: AvatarConfig;
+
   saldoBancario: number;
-  dividaPessoal: number;
+  dividaPessoal: number; // Dívidas vencidas acumuladas
+  contasVencidas: ContaPagar[];
+  emprestimosContratados: EmprestimoContratado[];
+  scoreCredito: number; // 0 a 1000 (Serasa/SPC)
+  limiteCreditoPreAprovado: number;
+
   saude: number; // 0 - 100
   felicidade: number; // 0 - 100
   intelecto: number; // 0 - 100
-  energia: number; // 0 - 100 (vitalidade diária/mensal)
+  energia: number; // 0 - 100 (vitalidade horária/diária)
   reputacao: number; // 0 - 100 (só mostrada quando em vida pública)
   redeContatos: number; // 0 - 100 (networking)
+
+  habilidades: Record<string, number>; // oratoria, financas, programacao, gestao, etc.
+  titulosConquistados: string[]; // diplomas, títulos públicos, honrarias permanentes
   
   moradia: TipoMoradia;
   casaPropria: boolean;
@@ -178,6 +314,7 @@ export interface VidaPessoal {
     cursoId: string;
     mesesRestantes: number;
   };
+  cursoMatriculado?: CursoMatriculado;
   
   empregoAtual?: {
     carreiraId: string;
@@ -187,7 +324,11 @@ export interface VidaPessoal {
 
   carteira: CarteiraTrabalho;
   familia: FamiliaRelacionamento;
+  gestacaoAdocao?: GestacaoOuAdocao;
   veiculos: VeiculoProprio[];
+
+  rotinaHorarios: RotinaHorarios;
+  atividadeAtual: TipoAtividadeRotina;
 
   rotina: {
     padraoAlimentacao: 'economica' | 'saudavel' | 'premium';
@@ -270,10 +411,51 @@ export interface HistoricoPonto {
   aprovacaoPolitica: number;
 }
 
+export interface OpcaoEvento {
+  id: string;
+  texto: string;
+  descricaoImpacto: string;
+  consequencias: {
+    custoFinanceiro?: number;
+    ganhoFinanceiro?: number;
+    deltaSaude?: number;
+    deltaFelicidade?: number;
+    deltaEnergia?: number;
+    deltaIntelecto?: number;
+    deltaReputacao?: number;
+    deltaAfinidadeRelId?: string;
+    deltaAfinidadeValor?: number;
+    mensagemResultado: string;
+  };
+}
+
+export interface EventoDecisao {
+  id: string;
+  categoria: 'pessoal' | 'trabalho' | 'familia' | 'empresa' | 'politica' | 'economia';
+  urgencia: 'baixa' | 'media' | 'alta';
+  titulo: string;
+  descricao: string;
+  dataOcorrencia: string;
+  opcoes: OpcaoEvento[];
+}
+
+export interface EventoHistoricoResolvido {
+  id: string;
+  titulo: string;
+  opcaoEscolhida: string;
+  data: string;
+  resultado: string;
+}
+
 export interface EstadoJogo {
+  // Tempo & Relógio Simulado
+  horaAtual: number; // 0 a 23
+  diaAtual: number; // 1 a 30
+  diaSemanaAtual: DiaSemana;
   mesAtual: number; // 1 a 12
   anoAtual: number; // ex: 2026
   mesesTotais: number; // 0, 1, 2...
+  horasTotais: number;
   
   vida: VidaPessoal;
   empresas: Empresa[]; // Permite múltiplas empresas
@@ -287,6 +469,9 @@ export interface EstadoJogo {
   historico: HistoricoPonto[];
   propostasDisponiveis: PropostaPolitica[];
   propostasAprovadas: PropostaPolitica[];
+
+  eventosPendentes: EventoDecisao[];
+  eventosResolvidos: EventoHistoricoResolvido[];
   
   ultimoResumoMes?: {
     saldoAnterior: number;

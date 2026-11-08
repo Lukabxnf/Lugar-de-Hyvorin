@@ -1,5 +1,5 @@
 import { Empresa, EstadoJogo, PerfilInicial, VidaPessoal } from './types';
-import { CARGOS_POLITICOS, PROPOSTAS_POLITICAS_INICIAIS } from './data';
+import { PROPOSTAS_POLITICAS_INICIAIS } from './data';
 
 export const PERFIS_INICIAIS: PerfilInicial[] = [
   {
@@ -9,19 +9,51 @@ export const PERFIS_INICIAIS: PerfilInicial[] = [
     descricao: 'Vive com os pais, tem pouca renda, mas tempo para estudar, trabalhar com carteira assinada e construir rede de contatos.',
     vida: {
       nome: 'Lucas Silva',
+      nomeCompleto: 'Lucas Gabriel da Silva Santos',
+      dataNascimento: { dia: 15, mes: 5, ano: 2003 },
       idade: 22,
       mesesVividos: 264,
+      avatar: {
+        pele: 'morena',
+        cabeloCor: 'castanho',
+        cabeloEstilo: 'curto',
+        roupa: 'casual',
+        acessorio: 'relogio',
+      },
       saldoBancario: 2_500,
       dividaPessoal: 0,
+      contasVencidas: [],
+      emprestimosContratados: [],
+      scoreCredito: 750,
+      limiteCreditoPreAprovado: 4_500,
       saude: 88,
       felicidade: 75,
       intelecto: 40,
       energia: 90,
       reputacao: 35,
       redeContatos: 25,
+      habilidades: { oratoria: 25, financas: 30, lideranca: 20, tecnologia: 35 },
+      titulosConquistados: ['Certificado de Ensino Médio'],
       moradia: 'pais',
       casaPropria: false,
       educacao: 'medio',
+      cursoMatriculado: {
+        cursoId: 'tecnico_ti',
+        nome: 'Curso Técnico em Desenvolvimento de Sistemas',
+        tipo: 'tecnico',
+        semestreAtual: 1,
+        totalSemestres: 2,
+        aulasAssistidas: 15,
+        aulasRequeridas: 120,
+        provasRealizadas: 0,
+        provasRequeridas: 2,
+        notaMedia: 8.0,
+        aprovado: true,
+        concluido: false,
+        mesesDecorridos: 1,
+        mesesTotais: 10,
+        concedeNivel: 'tecnico',
+      },
       empregoAtual: {
         carreiraId: 'estagiario',
         mesesNoCargo: 4,
@@ -53,6 +85,10 @@ export const PERFIS_INICIAIS: PerfilInicial[] = [
         amigos: [
           { id: 'amigo_1', nome: 'Renato Dias', tipo: 'amigo', idade: 23, nivelAfinidade: 80, ocupacao: 'Universitário' },
         ],
+        conhecidos: [
+          { id: 'conhecido_1', nome: 'Fernanda Lima', tipo: 'conhecido', idade: 22, nivelAfinidade: 45, ocupacao: 'Colega de Curso Técnico' },
+          { id: 'conhecido_2', nome: 'Matheus Costa', tipo: 'conhecido', idade: 24, nivelAfinidade: 40, ocupacao: 'Desenvolvedor Freelance' },
+        ],
       },
       veiculos: [
         {
@@ -63,6 +99,15 @@ export const PERFIS_INICIAIS: PerfilInicial[] = [
           valorMercadoAtual: 16_000,
         },
       ],
+      rotinaHorarios: {
+        horarioTrabalhoInicio: 8,
+        horarioTrabalhoFim: 14,
+        horarioEstudoInicio: 19,
+        horarioEstudoFim: 22,
+        horarioDormir: 23,
+        horarioAcordar: 7,
+      },
+      atividadeAtual: 'livre',
       rotina: {
         padraoAlimentacao: 'economica',
         horasSono: 7,
@@ -92,20 +137,34 @@ export const PERFIS_INICIAIS: PerfilInicial[] = [
     descricao: 'Fundador de uma startup SaaS de software de gestão com clientes recorrentes. Busca expandir empresas e patrimônio.',
     vida: {
       nome: 'Carolina Meireles',
+      nomeCompleto: 'Carolina Meireles Albuquerque',
+      dataNascimento: { dia: 20, mes: 8, ano: 1997 },
       idade: 28,
       mesesVividos: 336,
+      avatar: {
+        pele: 'clara',
+        cabeloCor: 'preto',
+        cabeloEstilo: 'medio',
+        roupa: 'elegante',
+        acessorio: 'oculos',
+      },
       saldoBancario: 55_000,
       dividaPessoal: 0,
+      contasVencidas: [],
+      emprestimosContratados: [],
+      scoreCredito: 850,
+      limiteCreditoPreAprovado: 45_000,
       saude: 78,
       felicidade: 82,
       intelecto: 72,
       energia: 85,
       reputacao: 60,
       redeContatos: 55,
+      habilidades: { oratoria: 55, financas: 70, lideranca: 65, tecnologia: 80 },
+      titulosConquistados: ['Bacharel em Engenharia de Software'],
       moradia: 'apartamento_padrao',
       casaPropria: false,
       educacao: 'superior',
-      empregoAtual: undefined,
       carteira: {
         numeroCtps: '934.120-SP',
         mesesTotaisContribuicao: 48,
@@ -133,6 +192,9 @@ export const PERFIS_INICIAIS: PerfilInicial[] = [
         amigos: [
           { id: 'amigo_tech', nome: 'Thiago Martins', tipo: 'amigo', idade: 29, nivelAfinidade: 85, ocupacao: 'Investidor Anjo' },
         ],
+        conhecidos: [
+          { id: 'conhecido_tech', nome: 'Juliana Prado', tipo: 'conhecido', idade: 31, nivelAfinidade: 50, ocupacao: 'Gerente de Produto' },
+        ],
       },
       veiculos: [
         {
@@ -143,6 +205,15 @@ export const PERFIS_INICIAIS: PerfilInicial[] = [
           valorMercadoAtual: 145_000,
         },
       ],
+      rotinaHorarios: {
+        horarioTrabalhoInicio: 9,
+        horarioTrabalhoFim: 18,
+        horarioEstudoInicio: 19,
+        horarioEstudoFim: 21,
+        horarioDormir: 23,
+        horarioAcordar: 7,
+      },
+      atividadeAtual: 'livre',
       rotina: {
         padraoAlimentacao: 'saudavel',
         horasSono: 7,
@@ -172,20 +243,34 @@ export const PERFIS_INICIAIS: PerfilInicial[] = [
     descricao: 'Gere uma empresa agropecuária de grãos no Centro-Oeste com faturamento ligado à balança comercial e safras.',
     vida: {
       nome: 'Rodrigo Albuquerque',
+      nomeCompleto: 'Rodrigo Barreto de Albuquerque',
+      dataNascimento: { dia: 10, mes: 3, ano: 1989 },
       idade: 36,
       mesesVividos: 432,
+      avatar: {
+        pele: 'morena',
+        cabeloCor: 'castanho',
+        cabeloEstilo: 'curto',
+        roupa: 'trabalho',
+        acessorio: 'chapeu',
+      },
       saldoBancario: 320_000,
       dividaPessoal: 0,
+      contasVencidas: [],
+      emprestimosContratados: [],
+      scoreCredito: 920,
+      limiteCreditoPreAprovado: 250_000,
       saude: 84,
       felicidade: 86,
       intelecto: 68,
       energia: 90,
       reputacao: 75,
       redeContatos: 70,
+      habilidades: { oratoria: 50, financas: 75, lideranca: 80, agro: 85 },
+      titulosConquistados: ['Engenheiro Agrônomo', 'MBA em Agronegócio & Mercados'],
       moradia: 'apartamento_luxo',
       casaPropria: true,
       educacao: 'pos_mba',
-      empregoAtual: undefined,
       carteira: {
         numeroCtps: '102.450-MT',
         mesesTotaisContribuicao: 72,
@@ -207,8 +292,36 @@ export const PERFIS_INICIAIS: PerfilInicial[] = [
         estadoCivil: 'casado',
         conjuge: { id: 'esposa_1', nome: 'Beatriz Albuquerque', tipo: 'conjuge', idade: 34, nivelAfinidade: 92, ocupacao: 'Veterinária' },
         filhos: [
-          { id: 'filho_1', nome: 'Lucas Albuquerque', tipo: 'filho', idade: 6, nivelAfinidade: 95 },
-          { id: 'filha_1', nome: 'Clara Albuquerque', tipo: 'filho', idade: 3, nivelAfinidade: 95 },
+          {
+            id: 'filho_1',
+            nome: 'Lucas Albuquerque',
+            tipo: 'filho',
+            idade: 6,
+            nivelAfinidade: 95,
+            custoMensalApoio: 1_800,
+            filhoDetalhes: {
+              diaNascimento: 12,
+              mesNascimento: 4,
+              anoNascimento: 2020,
+              fase: 'crianca',
+              escola: 'Colégio Bilíngue Integrado',
+            },
+          },
+          {
+            id: 'filha_1',
+            nome: 'Clara Albuquerque',
+            tipo: 'filho',
+            idade: 3,
+            nivelAfinidade: 95,
+            custoMensalApoio: 1_500,
+            filhoDetalhes: {
+              diaNascimento: 8,
+              mesNascimento: 9,
+              anoNascimento: 2023,
+              fase: 'bebe',
+              escola: 'Berçário Passo a Passo',
+            },
+          },
         ],
         parentes: [
           { id: 'pai_agro', nome: 'Coronel Albuquerque', tipo: 'pai', idade: 68, nivelAfinidade: 78, ocupacao: 'Pecuarista Tradicional' },
@@ -216,6 +329,7 @@ export const PERFIS_INICIAIS: PerfilInicial[] = [
         amigos: [
           { id: 'amigo_agro', nome: 'Marcos Vinicius', tipo: 'amigo', idade: 38, nivelAfinidade: 80, ocupacao: 'Presidente de Cooperativa' },
         ],
+        conhecidos: [],
       },
       veiculos: [
         {
@@ -226,6 +340,15 @@ export const PERFIS_INICIAIS: PerfilInicial[] = [
           valorMercadoAtual: 280_000,
         },
       ],
+      rotinaHorarios: {
+        horarioTrabalhoInicio: 7,
+        horarioTrabalhoFim: 17,
+        horarioEstudoInicio: 19,
+        horarioEstudoFim: 21,
+        horarioDormir: 22,
+        horarioAcordar: 6,
+      },
+      atividadeAtual: 'livre',
       rotina: {
         padraoAlimentacao: 'premium',
         horasSono: 8,
@@ -255,16 +378,31 @@ export const PERFIS_INICIAIS: PerfilInicial[] = [
     descricao: 'Atuante em movimentos sociais e bairros, pronto para concorrer a Vereador e defender demandas populares.',
     vida: {
       nome: 'Mariana Duarte',
+      nomeCompleto: 'Mariana Duarte Mendonça',
+      dataNascimento: { dia: 25, mes: 11, ano: 1994 },
       idade: 31,
       mesesVividos: 372,
+      avatar: {
+        pele: 'negra',
+        cabeloCor: 'preto',
+        cabeloEstilo: 'crespo',
+        roupa: 'social',
+        acessorio: 'relogio',
+      },
       saldoBancario: 22_000,
       dividaPessoal: 0,
+      contasVencidas: [],
+      emprestimosContratados: [],
+      scoreCredito: 780,
+      limiteCreditoPreAprovado: 12_000,
       saude: 80,
       felicidade: 78,
       intelecto: 65,
       energia: 85,
       reputacao: 80,
       redeContatos: 78,
+      habilidades: { oratoria: 85, financas: 50, lideranca: 80, articulacao: 85 },
+      titulosConquistados: ['Bacharel em Gestão Pública'],
       moradia: 'aluguel_simples',
       casaPropria: false,
       educacao: 'superior',
@@ -294,6 +432,9 @@ export const PERFIS_INICIAIS: PerfilInicial[] = [
         amigos: [
           { id: 'amigo_lider', nome: 'Carlos Eduardo', tipo: 'amigo', idade: 32, nivelAfinidade: 88, ocupacao: 'Líder Sindical' },
         ],
+        conhecidos: [
+          { id: 'conhecido_pol', nome: 'Vereador Jonas Santos', tipo: 'conhecido', idade: 48, nivelAfinidade: 55, ocupacao: 'Parlamentar Municipal' },
+        ],
       },
       veiculos: [
         {
@@ -304,6 +445,15 @@ export const PERFIS_INICIAIS: PerfilInicial[] = [
           valorMercadoAtual: 68_000,
         },
       ],
+      rotinaHorarios: {
+        horarioTrabalhoInicio: 8,
+        horarioTrabalhoFim: 17,
+        horarioEstudoInicio: 19,
+        horarioEstudoFim: 21,
+        horarioDormir: 23,
+        horarioAcordar: 7,
+      },
+      atividadeAtual: 'livre',
       rotina: {
         padraoAlimentacao: 'saudavel',
         horasSono: 7,
@@ -446,7 +596,8 @@ export function criarEstadoInicial(perfilId = 'estudante'): EstadoJogo {
       mes: 1,
       ano: 2026,
       titulo: 'GAZETA NACIONAL: Brasil inicia ano com projeção de crescimento e safra robusta',
-      corpoTexto: 'Com a normalização do regime de chuvas e investimentos expressivos em infraestrutura logística, o setor produtivo nacional inicia o ano com expectativas positivas. O Ministério da Fazenda e o Banco Central monitoram as contas públicas, enquanto analistas de mercado projetam estabilidade da moeda e geração de postos de trabalho formal.',
+      corpoTexto:
+        'Com a normalização do regime de chuvas e investimentos expressivos em infraestrutura logística, o setor produtivo nacional inicia o ano com expectativas positivas. O Ministério da Fazenda e o Banco Central monitoram as contas públicas, enquanto analistas de mercado projetam estabilidade da moeda e geração de postos de trabalho formal.',
       categoria: 'economia' as const,
       urgencia: 'normal' as const,
       impactoDescricao: 'Mercado financeiro projeta inflação próxima ao centro da meta enquanto Congresso retoma debates orçamentários.',
@@ -458,7 +609,8 @@ export function criarEstadoInicial(perfilId = 'estudante'): EstadoJogo {
       mes: 1,
       ano: 2026,
       titulo: 'POLÍTICA: Partidos começam articulações para eleições municipais e reformas prioritárias',
-      corpoTexto: 'Lideranças partidárias nas principais capitais do país deram início às convenções preliminares para formação de chapas proporcionais de vereadores e coligações majoritárias para as prefeituras. O Tribunal Superior Eleitoral divulgou o calendário oficial com prazos para desincompatibilização de servidores públicos que pretendem concorrer.',
+      corpoTexto:
+        'Lideranças partidárias nas principais capitais do país deram início às convenções preliminares para formação de chapas proporcionais de vereadores e coligações majoritárias para as prefeituras. O Tribunal Superior Eleitoral divulgou o calendário oficial com prazos para desincompatibilização de servidores públicos que pretendem concorrer.',
       categoria: 'politica' as const,
       urgencia: 'normal' as const,
       impactoDescricao: 'Lideranças articulam apoios em capitais e cidades-polo visando fortalecer bases partidárias.',
@@ -468,17 +620,32 @@ export function criarEstadoInicial(perfilId = 'estudante'): EstadoJogo {
   ];
 
   const vidaCompleta: VidaPessoal = {
-    nome: 'Cidadão Brasileiro',
-    idade: 25,
-    mesesVividos: 300,
-    saldoBancario: 5_000,
+    nome: 'Lucas Silva',
+    nomeCompleto: 'Lucas Gabriel da Silva',
+    dataNascimento: { dia: 15, mes: 5, ano: 2003 },
+    idade: 22,
+    mesesVividos: 264,
+    avatar: {
+      pele: 'morena',
+      cabeloCor: 'castanho',
+      cabeloEstilo: 'curto',
+      roupa: 'casual',
+      acessorio: 'relogio',
+    },
+    saldoBancario: 2_500,
     dividaPessoal: 0,
+    contasVencidas: [],
+    emprestimosContratados: [],
+    scoreCredito: 750,
+    limiteCreditoPreAprovado: 4_500,
     saude: 85,
     felicidade: 80,
     intelecto: 45,
     energia: 85,
     reputacao: 40,
     redeContatos: 35,
+    habilidades: { oratoria: 25, financas: 30, lideranca: 20, tecnologia: 25 },
+    titulosConquistados: ['Certificado do Ensino Médio'],
     moradia: 'aluguel_simples',
     casaPropria: false,
     educacao: 'medio',
@@ -498,8 +665,18 @@ export function criarEstadoInicial(perfilId = 'estudante'): EstadoJogo {
       amigos: [
         { id: 'amigo_def', nome: 'Felipe Santos', tipo: 'amigo', idade: 25, nivelAfinidade: 80 },
       ],
+      conhecidos: [],
     },
     veiculos: [],
+    rotinaHorarios: {
+      horarioTrabalhoInicio: 8,
+      horarioTrabalhoFim: 14,
+      horarioEstudoInicio: 19,
+      horarioEstudoFim: 22,
+      horarioDormir: 23,
+      horarioAcordar: 7,
+    },
+    atividadeAtual: 'livre',
     rotina: {
       padraoAlimentacao: 'saudavel',
       horasSono: 8,
@@ -512,9 +689,13 @@ export function criarEstadoInicial(perfilId = 'estudante'): EstadoJogo {
   };
 
   return {
+    horaAtual: 8,
+    diaAtual: 1,
+    diaSemanaAtual: 'Segunda-feira',
     mesAtual: 1,
     anoAtual: 2026,
     mesesTotais: 0,
+    horasTotais: 0,
     vida: vidaCompleta,
     empresas: empresasIniciais,
     empresaSelecionadaId: empresasIniciais[0]?.id,
@@ -536,5 +717,7 @@ export function criarEstadoInicial(perfilId = 'estudante'): EstadoJogo {
     historico: historicoInicial,
     propostasDisponiveis: [...PROPOSTAS_POLITICAS_INICIAIS],
     propostasAprovadas: [],
+    eventosPendentes: [],
+    eventosResolvidos: [],
   };
 }
