@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simularMesMacroeconomia } from './macro';
-import { calcularIdadeExata, calcularTaxaMensalEfetiva, simularHoraVida, simularMesVida } from './life';
+import { calcularIdadeExata, calcularTaxaMensalEfetiva, evoluirRelacionamentoMensal, simularHoraVida, simularMesVida } from './life';
 import { simularMesEmpresa } from './business';
 import { cargoCompativelComEleicao, isAnoEleitoral } from './politics';
 import { criarEstadoInicial } from './presets';
@@ -235,6 +235,36 @@ test('Business: large legacy inventory is preserved and production pauses until 
   assert.equal(result.ultimoMes.unidadesProduzidas, 0);
   assert.equal(result.capacidadeArmazenamento, legacyStock);
   assert.ok(result.ultimoMes.custoArmazenagem! > 0);
+});
+
+test('Relationships: time apart reduces affinity and dating duration advances monthly', () => {
+  const known: Relacionamento = {
+    id: 'known_test',
+    nome: 'Contato Teste',
+    tipo: 'conhecido',
+    nivelAfinidade: 70,
+    idade: 25,
+    mesesConvivencia: 1,
+    mesesSemContato: 2,
+    interacoesSignificativas: 3,
+  };
+  const knownNext = evoluirRelacionamentoMensal(known);
+  assert.equal(knownNext.mesesConvivencia, 2);
+  assert.equal(knownNext.mesesSemContato, 3);
+  assert.equal(knownNext.nivelAfinidade, 68);
+
+  const partner: Relacionamento = {
+    id: 'partner_test',
+    nome: 'Parceiro Teste',
+    tipo: 'namorado',
+    nivelAfinidade: 90,
+    idade: 25,
+    mesesNoRelacionamento: 5,
+    mesesSemContato: 0,
+  };
+  const partnerNext = evoluirRelacionamentoMensal(partner, 'namorando');
+  assert.equal(partnerNext.mesesNoRelacionamento, 6);
+  assert.equal(partnerNext.nivelAfinidade, 90);
 });
 
 test('Education: elapsed time alone does not complete or award a diploma', () => {
