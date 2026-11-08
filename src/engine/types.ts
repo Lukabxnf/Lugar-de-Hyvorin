@@ -370,6 +370,7 @@ export interface VidaPessoal {
   rotinaHorarios: RotinaHorarios; // legado: preservado em saves antigos
   atividadeAtual: TipoAtividadeRotina;
   horasRestantesAtividade?: number;
+  aulaFormal?: boolean;
 
   rotina: {
     padraoAlimentacao: 'economica' | 'saudavel' | 'premium';
@@ -480,6 +481,7 @@ export interface OpcaoEvento {
     deltaAfinidadeValor?: number;
     atividade?: TipoAtividadeRotina;
     duracaoAtividadeHoras?: number;
+    aulaFormal?: boolean;
     deltaFaltasTrabalho?: number;
     mensagemResultado: string;
   };
