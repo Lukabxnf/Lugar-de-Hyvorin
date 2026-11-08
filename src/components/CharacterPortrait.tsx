@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { AvatarConfig } from '../engine/types';
 
 interface CharacterPortraitProps {
@@ -30,6 +30,7 @@ const TONS_ROUPA: Record<AvatarConfig['roupa'], { jacket: string; shade: string;
 };
 
 export const CharacterPortrait: React.FC<CharacterPortraitProps> = ({ config, className = '' }) => {
+  const gradientId = useId().replace(/:/g, '');
   const skin = TONS_PELE[config.pele] || TONS_PELE.morena;
   const hair = TONS_CABELO[config.cabeloCor] || TONS_CABELO.castanho;
   const clothes = TONS_ROUPA[config.roupa] || TONS_ROUPA.casual;
@@ -42,28 +43,28 @@ export const CharacterPortrait: React.FC<CharacterPortraitProps> = ({ config, cl
     <svg viewBox="0 0 240 280" role="img" aria-label={`Retrato de personagem ${feminino ? 'feminino' : 'masculino'}`}
       className={`block w-full h-full ${className}`} xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <linearGradient id="portrait-bg" x1="0" y1="0" x2="1" y2="1">
+        <linearGradient id={`${gradientId}-portrait-bg`} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#243b59" />
           <stop offset="1" stopColor="#101827" />
         </linearGradient>
-        <linearGradient id="skin-shade" x1="0" y1="0" x2="1" y2="1">
+        <linearGradient id={`${gradientId}-skin-shade`} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor={skin.light} />
           <stop offset="1" stopColor={skin.base} />
         </linearGradient>
-        <linearGradient id="jacket-shade" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={`${gradientId}-jacket-shade`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor={clothes.jacket} />
           <stop offset="1" stopColor={clothes.shade} />
         </linearGradient>
       </defs>
-      <rect x="0" y="0" width="240" height="280" rx="18" fill="url(#portrait-bg)" />
+      <rect x="0" y="0" width="240" height="280" rx="18" fill={`url(#${gradientId}-portrait-bg)`} />
       <circle cx="120" cy="116" r="94" fill="#8eb3d2" opacity=".08" />
-      <path d="M20 280 Q26 222 75 207 L103 197 H137 L165 207 Q214 222 220 280Z" fill="url(#jacket-shade)" />
+      <path d="M20 280 Q26 222 75 207 L103 197 H137 L165 207 Q214 222 220 280Z" fill={`url(#${gradientId}-jacket-shade)`} />
       <path d="M91 202 L120 238 L149 202 L138 280 H102Z" fill={clothes.shirt} />
       <path d="M102 203 L120 224 L138 203 L129 190 H111Z" fill={clothes.shirt} />
       {config.roupa === 'social' || config.roupa === 'elegante' ? (
         <path d="M115 224 L125 224 L131 280 H109Z" fill={config.roupa === 'social' ? '#394b69' : '#4f3b78'} />
       ) : null}
-      <path d="M100 163 H140 V211 Q120 231 100 211Z" fill="url(#skin-shade)" />
+      <path d="M100 163 H140 V211 Q120 231 100 211Z" fill={`url(#${gradientId}-skin-shade)`} />
       <ellipse cx="76" cy="112" rx="13" ry="20" fill={skin.base} />
       <ellipse cx="164" cy="112" rx="13" ry="20" fill={skin.base} />
       <path d="M120 38 C82 38 61 68 64 117 C66 160 89 190 120 193 C151 190 174 160 176 117 C179 68 158 38 120 38Z" fill="url(#skin-shade)" />
