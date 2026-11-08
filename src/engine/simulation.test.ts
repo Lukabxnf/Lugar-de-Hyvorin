@@ -96,6 +96,49 @@ test('Clock: day and month rollover happen only after crossing midnight', () => 
   assert.equal(novoMes.minutoAtual, 0);
 });
 
+test('Macro: exchange rate reacts to risk and capital conditions without a fixed R$ 7.20 ceiling', () => {
+  const inicial = criarEstadoInicial('estudante').macro;
+  const pressaoCambial = simularMesMacroeconomia({
+    ...inicial,
+    cambioDolar: 7.2,
+    taxaSelic: 3.0,
+    riscoPais: 600,
+    confiancaEmpresarial: 20,
+    dividaPublicaPib: 110,
+    saldoComercialMes: -5,
+    reservasInternacionais: 350,
+  }).novaMacro;
+  assert.ok(pressaoCambial.cambioDolar > 7.2, 'The exchange rate must be able to move above R$ 7.20');
+
+  const entradaDeCapital = simularMesMacroeconomia({
+    ...inicial,
+    taxaSelic: 14,
+    riscoPais: 100,
+    confiancaEmpresarial: 80,
+    dividaPublicaPib: 60,
+    saldoComercialMes: 20,
+  }).novaMacro;
+  assert.ok(entradaDeCapital.cambioDolar < inicial.cambioDolar, 'Lower risk and stronger capital flows should be able to appreciate the real');
+  assert.ok(entradaDeCapital.reservasInternacionais! > inicial.reservasInternacionais!);
+});
+
+test('Macro: primary balance and debt react to changing revenue, spending and interest', () => {
+  const base = criarEstadoInicial('estudante').macro;
+  const cenarioBase = simularMesMacroeconomia(base).novaMacro;
+  const recessaoFiscal = simularMesMacroeconomia({
+    ...base,
+    crescimentoAnualPib: -5,
+    taxaDesemprego: 15,
+    arrecadacaoTributariaMes: 250,
+    despesaPublicaMes: 350,
+    taxaSelic: 18,
+    dividaPublicaPib: 95,
+  }).novaMacro;
+
+  assert.notEqual(cenarioBase.resultadoPrimarioMes, recessaoFiscal.resultadoPrimarioMes);
+  assert.ok(recessaoFiscal.dividaPublicaPib > cenarioBase.dividaPublicaPib);
+});
+
 test('Life Routine: sleeping recovers energy while working expends energy', () => {
   const estado = criarEstadoInicial('estudante');
   const macro = estado.macro;
