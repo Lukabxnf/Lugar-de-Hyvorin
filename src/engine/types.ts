@@ -399,6 +399,12 @@ export interface VidaPessoal {
   atividadeAtual: TipoAtividadeRotina;
   horasRestantesAtividade?: number;
   aulaFormal?: boolean;
+  controleAtividades?: {
+    data: string;
+    acoesNoDia: string[];
+    semanaInicio: string;
+    quantidadesSemana: Record<string, number>;
+  };
 
   rotina: {
     padraoAlimentacao: 'economica' | 'saudavel' | 'premium';
@@ -508,6 +514,7 @@ export interface OpcaoEvento {
     deltaReputacao?: number;
     deltaAfinidadeRelId?: string;
     deltaAfinidadeValor?: number;
+    novoContato?: Relacionamento; // adicionado somente após escolha explícita do jogador
     atividade?: TipoAtividadeRotina;
     duracaoAtividadeHoras?: number;
     aulaFormal?: boolean;

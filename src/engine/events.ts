@@ -231,6 +231,79 @@ export function sortearEventoDecisao(estado: EstadoJogo): EventoDecisao | null {
     };
   }
 
+  // Conhecer pessoas acontece em acontecimentos da vida, não por compra instantânea.
+  if (r >= 0.23 && r < 0.36 && (vida.familia?.conhecidos || []).length < 30) {
+    const candidatos = [
+      ['Juliana Prado', 'Analista de Marketing'],
+      ['Gabriel Nogueira', 'Engenheiro'],
+      ['Camila Santos', 'Professora'],
+      ['Felipe Azevedo', 'Contador'],
+      ['Larissa Ribeiro', 'Enfermeira'],
+      ['Matheus Vasconcelos', 'Técnico de Informática'],
+      ['Beatriz Castelo', 'Arquiteta'],
+      ['Thiago Moreira', 'Trabalhador Rural'],
+      ['Amanda Alencar', 'Administradora'],
+      ['Vinícius Rocha', 'Motorista'],
+      ['Mariana Valente', 'Designer'],
+      ['Diego Guimarães', 'Comerciante'],
+    ] as const;
+    const conhecidos = [
+      ...(vida.familia?.conhecidos || []),
+      ...(vida.familia?.amigos || []),
+      ...(vida.familia?.parentes || []),
+    ];
+    const disponiveis = candidatos.filter(([nome]) => !conhecidos.some(pessoa => pessoa.nome === nome));
+    if (disponiveis.length > 0) {
+      const [nome, ocupacao] = disponiveis[Math.floor(Math.random() * disponiveis.length)];
+      const contato = {
+        id: `npc_${anoAtual}_${mesAtual}_${nome.toLowerCase().replace(/[^a-z]/g, '_')}`,
+        nome,
+        tipo: 'conhecido' as const,
+        nivelAfinidade: 32,
+        idade: Math.max(18, vida.idade + Math.floor(Math.random() * 9) - 4),
+        ocupacao,
+        personalidade: 'Reservado(a), mas aberto(a) a novas amizades.',
+        mesesConvivencia: 0,
+        mesesSemContato: 0,
+        interacoesSignificativas: 0,
+      };
+      const origem = vida.empregoAtual
+        ? 'Um colega apresentou uma pessoa nova durante uma conversa após o expediente.'
+        : vida.cursoMatriculado && !vida.cursoMatriculado.concluido
+        ? 'Em uma atividade do seu curso, você teve a oportunidade de conversar com outra pessoa.'
+        : 'Durante uma atividade no seu bairro, você conheceu alguém com interesses próximos aos seus.';
+      return {
+        id: `ev_contato_${anoAtual}_${mesAtual}_${Date.now()}`,
+        categoria: 'pessoal',
+        urgencia: 'baixa',
+        titulo: `Um encontro inesperado com ${nome}`,
+        descricao: `${origem} ${nome}, ${ocupacao.toLowerCase()}, demonstrou interesse em continuar a conversa. Como você reage?`,
+        dataOcorrencia: dataFormatada,
+        opcoes: [
+          {
+            id: 'iniciar_conversa',
+            texto: 'Conversar e manter contato',
+            descricaoImpacto: 'Uma nova relação começa com afinidade moderada, sem amizade instantânea.',
+            consequencias: {
+              novoContato: contato,
+              deltaEnergia: -2,
+              deltaFelicidade: 1,
+              mensagemResultado: `Você conversou com ${nome}, que agora faz parte dos seus contatos.`,
+            },
+          },
+          {
+            id: 'cumprimentar',
+            texto: 'Cumprimentar e seguir seu caminho',
+            descricaoImpacto: 'Você preserva sua rotina, sem criar uma relação permanente.',
+            consequencias: {
+              mensagemResultado: 'Vocês trocaram algumas palavras, mas não mantiveram contato.',
+            },
+          },
+        ],
+      };
+    }
+  }
+
   // 1. Se tem empresa ativa
   const empresaAtiva = empresas?.find(e => e.ativa);
   if (empresaAtiva && r >= 0.23 && r < 0.55) {

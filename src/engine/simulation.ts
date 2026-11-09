@@ -1,5 +1,6 @@
 import { simularMesMacroeconomia } from './macro';
-import { simularHoraVida, simularMesVida } from './life';
+import { calcularIdadeExata, simularHoraVida, simularMesVida } from './life';
+import { processarDiaVida } from './habitos';
 import { simularMesEmpresa } from './business';
 import { simularMesImoveis } from './imoveis';
 import { isAnoEleitoral, simularMesPolitica } from './politics';
@@ -19,6 +20,11 @@ export const DIAS_DA_SEMANA: DiaSemana[] = [
 
 export function diasNoMes(ano: number, mes: number): number {
   return new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+}
+
+export function diaSemanaDaData(dia: number, mes: number, ano: number): DiaSemana {
+  const indice = new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay();
+  return DIAS_DA_SEMANA[(indice + 6) % 7];
 }
 
 function aplicarAgendaDoHorario(estado: EstadoJogo): EstadoJogo {
@@ -331,7 +337,7 @@ export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFec
     estado.vida,
     novaMacro,
     salarioPolitico,
-    { dia: estado.diaAtual, mes: novoMes, ano: novoAno },
+    { dia: diasNoMes(estado.anoAtual, estado.mesAtual), mes: estado.mesAtual, ano: estado.anoAtual },
     indiceAtual
   );
   destaques.push(...logsVida);
@@ -430,6 +436,7 @@ export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFec
   const atualizado: EstadoJogo = {
     ...estado,
     diaAtual: 1,
+    diaSemanaAtual: diaSemanaDaData(1, novoMes, novoAno),
     mesAtual: novoMes,
     anoAtual: novoAno,
     mesesTotais: novoMesesTotais,
@@ -505,4 +512,76 @@ export function avancarMultiplosMeses(estado: EstadoJogo, qtdMeses: number): Est
     est = avancarMesSimulacao(est);
   }
   return est;
+}
+
+/**
+ * Calendário principal. A simulação não depende de horas: cada passo representa
+ * um dia completo e os fechamentos financeiros acontecem nas viradas mensais.
+ * O relógio legado é mantido somente para compatibilidade de partidas antigas.
+ */
+export type PeriodoAvanco = 'dia' | 'semana' | 'mes' | 'semestre' | 'ano';
+
+function dataUTC(ano: number, mes: number, dia: number): Date {
+  return new Date(Date.UTC(ano, mes - 1, Math.min(Math.max(1, dia), diasNoMes(ano, mes))));
+}
+
+export function avancarDiaCalendario(estado: EstadoJogo, proposta?: PropostaFechamentoIA): EstadoJogo {
+  if (estado.eventosPendentes.length > 0) return estado;
+  const ultimoDia = diasNoMes(estado.anoAtual, estado.mesAtual);
+  let atualizado: EstadoJogo;
+  if (estado.diaAtual >= ultimoDia) {
+    atualizado = avancarMesSimulacao(estado, proposta);
+  } else {
+    const dia = estado.diaAtual + 1;
+    atualizado = {
+      ...estado,
+      diaAtual: dia,
+      diaSemanaAtual: diaSemanaDaData(dia, estado.mesAtual, estado.anoAtual),
+    };
+  }
+  const idade = calcularIdadeExata(atualizado.vida.dataNascimento, {
+    dia: atualizado.diaAtual, mes: atualizado.mesAtual, ano: atualizado.anoAtual,
+  });
+  return {
+    ...atualizado,
+    vida: processarDiaVida({ ...atualizado.vida, idade }),
+  };
+}
+
+/** Avança até a data-alvo, parando no primeiro evento pendente. */
+export function avancarPeriodoCalendario(
+  estado: EstadoJogo,
+  periodo: PeriodoAvanco,
+  proposta?: PropostaFechamentoIA
+): EstadoJogo {
+  const inicio = dataUTC(estado.anoAtual, estado.mesAtual, estado.diaAtual);
+  const destino = dataUTC(estado.anoAtual, estado.mesAtual, estado.diaAtual);
+  switch (periodo) {
+    case 'dia': destino.setUTCDate(destino.getUTCDate() + 1); break;
+    case 'semana': destino.setUTCDate(destino.getUTCDate() + 7); break;
+    case 'mes':
+    case 'semestre':
+    case 'ano': {
+      const meses = periodo === 'mes' ? 1 : periodo === 'semestre' ? 6 : 12;
+      const diaDesejado = destino.getUTCDate();
+      destino.setUTCDate(1);
+      destino.setUTCMonth(destino.getUTCMonth() + meses);
+      const anoDestino = destino.getUTCFullYear();
+      const mesDestino = destino.getUTCMonth() + 1;
+      destino.setUTCDate(Math.min(diaDesejado, diasNoMes(anoDestino, mesDestino)));
+      break;
+    }
+  }
+  const passos = Math.min(370, Math.max(0, Math.round(
+    (destino.getTime() - inicio.getTime()) / 86_400_000
+  )));
+  let atual = estado;
+  let propostaUsada = false;
+  for (let dia = 0; dia < passos; dia++) {
+    if (atual.eventosPendentes.length > 0) break;
+    const viraMes = atual.diaAtual >= diasNoMes(atual.anoAtual, atual.mesAtual);
+    atual = avancarDiaCalendario(atual, viraMes && !propostaUsada ? proposta : undefined);
+    if (viraMes) propostaUsada = true;
+  }
+  return atual;
 }

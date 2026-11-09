@@ -19,8 +19,7 @@ import { aplicarImpactoAfinidadeFamiliar } from './engine/events';
 import { registrarTransacaoFinanceira } from './engine/finance';
 import { migrarImoveisLegados } from './engine/imoveis';
 import { criarEstadoInicial } from './engine/presets';
-import { avancarMesSimulacao, avancarMultiplosMeses } from './engine/simulation';
-import { simularHoraVida } from './engine/life';
+import { avancarPeriodoCalendario, diaSemanaDaData, diasNoMes, type PeriodoAvanco } from './engine/simulation';
 import { GROQ_STORAGE_KEY, analisarFechamentoMes, montarLeituraIA, narrarFato, narrarGazeta } from './services/groq';
 
 const STORAGE_KEY = 'cidadao_sim_save_v1';
@@ -42,7 +41,7 @@ function sanitizarEstado(raw: any): EstadoJogo {
     horaAtual: raw.horaAtual ?? 8,
     minutoAtual: 0,
     diaAtual: raw.diaAtual ?? 1,
-    diaSemanaAtual: raw.diaSemanaAtual ?? 'Segunda-feira',
+    diaSemanaAtual: diaSemanaDaData(raw.diaAtual ?? 1, raw.mesAtual ?? 1, raw.anoAtual ?? 2026),
     horasTotais: raw.horasTotais ?? 0,
     empresas,
     empresa: empresas[0],
@@ -60,9 +59,9 @@ function sanitizarEstado(raw: any): EstadoJogo {
       titulosConquistados: raw.vida?.titulosConquistados || ['Certificado de Ensino Médio'],
       habilidades: raw.vida?.habilidades || base.vida.habilidades,
       rotinaHorarios: raw.vida?.rotinaHorarios || base.vida.rotinaHorarios,
-      atividadeAtual: (raw.vida?.horasRestantesAtividade || 0) > 0 ? (raw.vida?.atividadeAtual || 'livre') : 'livre',
-      horasRestantesAtividade: Math.max(0, Math.floor(raw.vida?.horasRestantesAtividade || 0)),
-      aulaFormal: (raw.vida?.horasRestantesAtividade || 0) > 0 ? !!raw.vida?.aulaFormal : false,
+      atividadeAtual: 'livre',
+      horasRestantesAtividade: 0,
+      aulaFormal: false,
       energia: raw.vida?.energia ?? 85,
       familia: raw.vida?.familia || base.vida.familia,
       veiculos: raw.vida?.veiculos || base.vida.veiculos,
@@ -259,49 +258,39 @@ export default function App() {
     showToast(`Nova jornada iniciada com sucesso!`);
   }, [showToast]);
 
-  // Uma análise contextual por avanço solicitado. Os meses adicionais são
-  // processados pelo motor, um a um, com pausa obrigatória em decisões pendentes.
-  // Se a API falhar ou esgotar a cota, o jogo continua sem bloquear a partida.
-  const handleAdvanceMonths = useCallback(async (quantidade: number) => {
-    if (![1, 6, 12].includes(quantidade) || fechamentoEmCursoRef.current) return;
+  // O calendário processa cada dia até o destino; eventos obrigatórios interrompem o avanço.
+  const handleAdvancePeriod = useCallback(async (periodo: PeriodoAvanco) => {
+    if (fechamentoEmCursoRef.current) return;
     const anterior = estadoRef.current;
     if (anterior.eventosPendentes.length > 0) {
-      setActiveTab('agenda');
-      showToast('Existe uma decisão pendente. Consulte a Agenda para continuar.');
+      setMostrarEventoModal(true);
       return;
     }
     fechamentoEmCursoRef.current = true;
     setFechandoPeriodo(true);
     try {
-      const proposta = groqKey ? await analisarFechamentoMes(groqKey, anterior) : null;
-      let proximo = avancarMesSimulacao(anterior, proposta || undefined);
-      if (quantidade > 1 && proximo.eventosPendentes.length === 0) {
-        proximo = avancarMultiplosMeses(proximo, quantidade - 1);
-      }
-      setEstado(proximo);
+      const diasParaVirada = diasNoMes(anterior.anoAtual, anterior.mesAtual) - anterior.diaAtual;
+      const cruzaFechamento = periodo === 'dia'
+        ? diasParaVirada === 0
+        : periodo === 'semana' ? diasParaVirada < 7 : true;
+      const proposta = groqKey && cruzaFechamento
+        ? await analisarFechamentoMes(groqKey, anterior)
+        : null;
+      setEstado(avancarPeriodoCalendario(anterior, periodo, proposta || undefined));
     } finally {
       fechamentoEmCursoRef.current = false;
       setFechandoPeriodo(false);
     }
-  }, [groqKey, showToast]);
-
-  // Ações opcionais de rotina são resolvidas de imediato, sem criar um relógio
-  // de cliques obrigatório para trabalhar ou estudar em um jogo mensal.
-  const handleConcluirAtividade = useCallback(() => {
-    setEstado((anterior) => {
-      let vidaAtual = anterior.vida;
-      const horas = Math.min(24, Math.max(0, Math.floor(vidaAtual.horasRestantesAtividade || 0)));
-      for (let i = 0; i < horas; i++) {
-        vidaAtual = simularHoraVida(
-          vidaAtual, anterior.macro, anterior.horaAtual, anterior.diaSemanaAtual
-        ).novaVida;
-      }
-      return { ...anterior, vida: vidaAtual };
-    });
-  }, []);
+  }, [groqKey]);
 
   // Resolução de Evento de Decisão Interativo
   const handleEscolherOpcaoEvento = useCallback((opcao: OpcaoEvento) => {
+    const atual = estadoRef.current;
+    if (!atual.eventosPendentes.length) return;
+    if ((opcao.consequencias.custoFinanceiro || 0) > atual.vida.saldoBancario) {
+      showToast('Saldo insuficiente para essa decisão. Escolha outra alternativa do evento.');
+      return;
+    }
     setMostrarEventoModal(false);
     setEstado((prev) => {
       const eventoAtual = prev.eventosPendentes[0];
@@ -325,13 +314,21 @@ export default function App() {
       const novoIntelecto = Math.min(100, prev.vida.intelecto + (c.deltaIntelecto || 0));
       const novaReputacao = Math.min(100, prev.vida.reputacao + (c.deltaReputacao || 0));
 
-      const novaFamilia = c.deltaAfinidadeRelId && c.deltaAfinidadeValor !== undefined
+      const familiaComAfinidade = c.deltaAfinidadeRelId && c.deltaAfinidadeValor !== undefined
         ? aplicarImpactoAfinidadeFamiliar(
             prev.vida.familia,
             c.deltaAfinidadeRelId,
             c.deltaAfinidadeValor
           )
         : prev.vida.familia;
+      const contatoNovo = c.novoContato;
+      const jaConhece = contatoNovo && [
+        ...(familiaComAfinidade.conhecidos || []),
+        ...(familiaComAfinidade.amigos || []),
+      ].some(pessoa => pessoa.id === contatoNovo.id);
+      const novaFamilia = contatoNovo && !jaConhece
+        ? { ...familiaComAfinidade, conhecidos: [...(familiaComAfinidade.conhecidos || []), contatoNovo] }
+        : familiaComAfinidade;
 
       const resolvido = {
         id: eventoAtual.id,
@@ -353,11 +350,10 @@ export default function App() {
           intelecto: Math.max(0, Math.min(100, prev.vida.intelecto + (c.deltaIntelecto || 0))),
           reputacao: Math.max(0, Math.min(100, novaReputacao)),
           familia: novaFamilia,
-          atividadeAtual: c.atividade || prev.vida.atividadeAtual,
-          aulaFormal: c.atividade ? !!c.aulaFormal : (prev.vida.aulaFormal || false),
-          horasRestantesAtividade: c.atividade
-            ? Math.max(1, Math.floor(c.duracaoAtividadeHoras || 1))
-            : (prev.vida.horasRestantesAtividade || 0),
+          // Eventos não iniciam mais contadores de horas. Compromissos legados são encerrados.
+          atividadeAtual: 'livre',
+          aulaFormal: false,
+          horasRestantesAtividade: 0,
           empregoAtual: c.deltaFaltasTrabalho && prev.vida.empregoAtual
             ? {
                 ...prev.vida.empregoAtual,
@@ -394,7 +390,7 @@ export default function App() {
       {/* Calendário mensal com avanço de 1, 6 ou 12 meses. */}
       <Header
         estado={estado}
-        onAdvanceMonths={handleAdvanceMonths}
+        onAdvancePeriod={handleAdvancePeriod}
         fechandoPeriodo={fechandoPeriodo}
         onOpenNewGame={() => setShowNewGameModal(true)}
         onSaveGame={handleSaveGame}
@@ -425,11 +421,11 @@ export default function App() {
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_290px] gap-5 items-start">
           <section className="min-w-0">
             {activeTab === 'vida' && (
-              <LifeView estado={estado} onUpdateEstado={setEstado} onShowMessage={showToast} onStartTime={handleConcluirAtividade} modo="vida" />
+              <LifeView estado={estado} onUpdateEstado={setEstado} onShowMessage={showToast} modo="vida" />
             )}
             {activeTab === 'trabalho' && (
               <WorkHub estado={estado} onUpdateEstado={setEstado} onShowMessage={showToast}
-                onElectionVictory={handleElectionVictory} onStartTime={handleConcluirAtividade} />
+                onElectionVictory={handleElectionVictory} />
             )}
             {activeTab === 'patrimonio' && (
               <LifeView estado={estado} onUpdateEstado={setEstado} onShowMessage={showToast} modo="patrimonio" />
@@ -447,7 +443,7 @@ export default function App() {
                 <>
                   <p className="text-sm font-semibold text-amber-300">{estado.eventosPendentes[0].titulo}</p>
                   <p className="line-clamp-4 text-xs leading-relaxed text-slate-400">{estado.eventosPendentes[0].descricao}</p>
-                  <button type="button" onClick={() => { setActiveTab('agenda'); setMostrarEventoModal(true); }}
+                  <button type="button" onClick={() => setMostrarEventoModal(true)}
                     className="w-full rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-600">
                     Abrir decisão
                   </button>
