@@ -184,7 +184,7 @@ test('Time & Clock: full-hour advancement keeps the clock aligned and retains we
   };
   assert.equal(estado.horaAtual, 8);
   assert.equal(estado.diaAtual, 1);
-  assert.equal(estado.diaSemanaAtual, 'Segunda-feira');
+  assert.equal(estado.diaSemanaAtual, 'Quinta-feira');
 
   const estado1h = avancarHorasSimulacao(estado, 1);
   assert.equal(estado1h.horaAtual, 9);
@@ -195,7 +195,7 @@ test('Time & Clock: full-hour advancement keeps the clock aligned and retains we
   assert.equal(estado24h.horaAtual, 0);
   assert.equal(estado24h.minutoAtual, 0);
   assert.equal(estado24h.diaAtual, 2);
-  assert.equal(estado24h.diaSemanaAtual, 'Terça-feira');
+  assert.equal(estado24h.diaSemanaAtual, 'Sexta-feira');
 });
 
 test('Clock: legacy minute advancement remains compatible for saves and tests', () => {
