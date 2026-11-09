@@ -5,7 +5,7 @@ import {
   avancarDiaCalendario, avancarPeriodoCalendario,
   diaSemanaDaData, diasNoMes,
 } from './simulation';
-import { progressoHabitoNaSemana, realizarAtividadeVida } from './habitos';
+import { progressoHabitoNaSemana, realizarAtividadeVida, registrarInteracaoSocial } from './habitos';
 import { sortearEventoDecisao } from './events';
 
 test('Calendário diário: respeita fevereiro bissexto e o dia da semana', () => {
@@ -120,4 +120,21 @@ test('Encontros: novas pessoas surgem por escolhas do evento, não por botão pa
   } finally {
     Math.random = original;
   }
+});
+
+test('Relações: não permite repetir encontros com a mesma pessoa no mesmo dia', () => {
+  const vida = criarEstadoInicial('estudante').vida;
+  const dia = { dia: 5, mes: 1, ano: 2026 };
+  const primeiro = registrarInteracaoSocial(vida, dia, 'amigo_1');
+  assert.equal(primeiro.permitido, true);
+  const repetido = registrarInteracaoSocial(primeiro.vida, dia, 'amigo_1');
+  assert.equal(repetido.permitido, false);
+  assert.equal(repetido.vida.controleAtividades?.quantidadesSemana['social_amigo_1'], 1);
+  let proximo = primeiro.vida;
+  for (const proximaData of [6, 7]) {
+    const encontro = registrarInteracaoSocial(proximo, { ...dia, dia: proximaData }, 'amigo_1');
+    assert.equal(encontro.permitido, true);
+    proximo = encontro.vida;
+  }
+  assert.equal(registrarInteracaoSocial(proximo, { ...dia, dia: 8 }, 'amigo_1').permitido, false);
 });
