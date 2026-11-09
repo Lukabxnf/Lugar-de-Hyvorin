@@ -43,7 +43,7 @@ import { calcularIdadeExata } from '../engine/life';
 import { CharacterPortrait } from './CharacterPortrait';
 import { NPCPortrait } from './NPCPortrait';
 import { NumericField } from './NumericField';
-import { realizarAtividadeVida, progressoHabitoNaSemana, type AcaoDiaria } from '../engine/habitos';
+import { realizarAtividadeVida, progressoHabitoNaSemana, registrarInteracaoSocial, type AcaoDiaria } from '../engine/habitos';
 import { alugarResidencia, anunciarImovel, comprarImovel, definirAluguelProprio, encerrarAnuncioOuLocacao, ocuparImovel, precoImovelAtual, responderOfertaImovel } from '../engine/imoveis';
 import { analisarCreditoPessoal, formatarMoedaCompacta, registrarTransacaoFinanceira } from '../engine/finance';
 
@@ -275,6 +275,17 @@ export const LifeView: React.FC<LifeViewProps> = ({
       onShowMessage('Saldo insuficiente para esta atividade.');
       return;
     }
+    if (vida.energia < gastoEnergia) {
+      onShowMessage('Você está cansado(a) demais para este encontro. Descanse primeiro.');
+      return;
+    }
+    const encontro = registrarInteracaoSocial(
+      vida, { dia: diaAtual, mes: mesAtual, ano: anoAtual }, rel.id
+    );
+    if (!encontro.permitido) {
+      onShowMessage(encontro.mensagem);
+      return;
+    }
 
     const atualizarContato = (contato: Relacionamento): Relacionamento => {
       if (contato.id !== rel.id) return contato;
@@ -323,7 +334,7 @@ export const LifeView: React.FC<LifeViewProps> = ({
     onUpdateEstado({
       ...estado,
       vida: {
-        ...vida,
+        ...encontro.vida,
         saldoBancario: vida.saldoBancario - custo,
         historicoFinanceiro: custo > 0
           ? registrarTransacaoFinanceira(
