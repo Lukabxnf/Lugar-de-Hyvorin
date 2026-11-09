@@ -43,6 +43,7 @@ import { calcularIdadeExata } from '../engine/life';
 import { CharacterPortrait } from './CharacterPortrait';
 import { NPCPortrait } from './NPCPortrait';
 import { NumericField } from './NumericField';
+import { realizarAtividadeVida, type AcaoDiaria } from '../engine/habitos';
 import { alugarResidencia, anunciarImovel, comprarImovel, definirAluguelProprio, encerrarAnuncioOuLocacao, ocuparImovel, precoImovelAtual, responderOfertaImovel } from '../engine/imoveis';
 import { analisarCreditoPessoal, formatarMoedaCompacta, registrarTransacaoFinanceira } from '../engine/finance';
 
@@ -50,7 +51,6 @@ interface LifeViewProps {
   estado: EstadoJogo;
   onUpdateEstado: (novoEstado: EstadoJogo) => void;
   onShowMessage: (msg: string) => void;
-  onStartTime?: () => void;
   modo?: 'vida' | 'trabalho' | 'patrimonio';
 }
 
@@ -58,7 +58,6 @@ export const LifeView: React.FC<LifeViewProps> = ({
   estado,
   onUpdateEstado,
   onShowMessage,
-  onStartTime,
   modo = 'vida',
 }) => {
   const { vida, macro, politica, diaAtual, mesAtual, anoAtual, horaAtual, diaSemanaAtual } = estado;
@@ -253,64 +252,6 @@ export const LifeView: React.FC<LifeViewProps> = ({
   };
 
   // 5. Interações Sociais Orgânicas (Conhecer Pessoas, Flertar, Namorar, Casar)
-  const handleConhecerPessoas = () => {
-    const custo = 35; // Café ou transporte
-    if (vida.saldoBancario < custo) {
-      onShowMessage('Saldo insuficiente para sair e socializar.');
-      return;
-    }
-
-    const nomesBrasileiros = [
-      'Juliana Prado', 'Gabriel Nogueira', 'Camila Santos', 'Felipe Azevedo',
-      'Larissa Ribeiro', 'Matheus Vasconcelos', 'Beatriz Castelo', 'Thiago Moreira',
-      'Amanda Alencar', 'Vinícius Rocha', 'Mariana Valente', 'Diego Guimarães'
-    ];
-    const profissoes = [
-      'Analista de Marketing', 'Advogado(a)', 'Engenheiro(a) Civil', 'Arquiteto(a)',
-      'Designer Gráfico', 'Contador(a)', 'Jornalista', 'Médico(a) Residente',
-      'Servidor(a) Público', 'Programador(a)', 'Gestor(a) Comercial'
-    ];
-
-    const nomeEscolhido = nomesBrasileiros[Math.floor(Math.random() * nomesBrasileiros.length)];
-    const profEscolhida = profissoes[Math.floor(Math.random() * profissoes.length)];
-
-    const novoConhecido: Relacionamento = {
-      id: `conhecido_${Date.now()}`,
-      nome: nomeEscolhido,
-      tipo: 'conhecido',
-      nivelAfinidade: 35 + Math.floor(Math.random() * 15),
-      idade: Math.max(18, vida.idade + Math.floor(Math.random() * 5) - 2),
-      ocupacao: profEscolhida,
-      personalidade: 'Simpático(a) e sociável',
-      mesesConvivencia: 0,
-      mesesSemContato: 0,
-      interacoesSignificativas: 0,
-    };
-
-    const conhecidosAtuais = vida.familia?.conhecidos || [];
-    onUpdateEstado({
-      ...estado,
-      vida: {
-        ...vida,
-        saldoBancario: vida.saldoBancario - custo,
-        historicoFinanceiro: registrarTransacaoFinanceira(
-          { ...vida, saldoBancario: vida.saldoBancario - custo },
-          { dia: estado.diaAtual, mes: estado.mesAtual, ano: estado.anoAtual },
-          'despesa_paga',
-          'Saída social e transporte para conhecer pessoas',
-          -custo
-        ).historicoFinanceiro,
-        energia: Math.max(0, vida.energia - 5),
-        felicidade: Math.min(100, vida.felicidade + 4),
-        familia: {
-          ...vida.familia,
-          conhecidos: [novoConhecido, ...conhecidosAtuais].slice(0, 8),
-        },
-      },
-    });
-    onShowMessage(`Você conheceu ${novoConhecido.nome} (${novoConhecido.ocupacao})! Um novo contato foi adicionado.`);
-  };
-
   // Interações graduais: cada contato fortalece o vínculo e pode mudar seu estágio.
   const handleAumentarAfinidade = (rel: Relacionamento, tipoAcao: 'conversar' | 'almoco' | 'encontro') => {
     let custo = 0;
@@ -542,58 +483,16 @@ export const LifeView: React.FC<LifeViewProps> = ({
   };
 
   // 6. Educação: Assistir aula e Estudar para provas
-  const handleAssistirAula = () => {
-    if (!vida.cursoMatriculado || vida.cursoMatriculado.concluido) {
-      onShowMessage('Você não possui matrícula ativa em nenhum curso no momento.');
-      return;
-    }
-    if (vida.energia < 8) {
-      onShowMessage('Energia muito baixa para assistir aula. Vá descansar primeiro.');
-      return;
-    }
-
-    const cm = vida.cursoMatriculado;
-    onUpdateEstado({
-      ...estado,
-      vida: {
-        ...vida,
-        energia: Math.max(0, vida.energia - 8),
-        intelecto: Math.min(100, Number((vida.intelecto + 0.3).toFixed(1))),
-        cursoMatriculado: {
-          ...cm,
-          aulasAssistidas: cm.aulasAssistidas + 1,
-        },
-      },
-    });
-    onShowMessage(`Aula assistida com presença confirmada! Frequência: ${cm.aulasAssistidas + 1}/${cm.aulasRequeridas}.`);
-  };
-
   const handleEstudarProvas = () => {
     if (!vida.cursoMatriculado || vida.cursoMatriculado.concluido) {
-      onShowMessage('Você não possui curso em andamento.');
+      onShowMessage('Você não possui um curso ativo.');
       return;
     }
-    if (vida.energia < 12) {
-      onShowMessage('Energia insuficiente para maratona de estudos.');
-      return;
-    }
-
-    const cm = vida.cursoMatriculado;
-    const novaNota = Math.min(10, Number((cm.notaMedia + 0.4).toFixed(1)));
-
-    onUpdateEstado({
-      ...estado,
-      vida: {
-        ...vida,
-        energia: Math.max(0, vida.energia - 12),
-        intelecto: Math.min(100, Number((vida.intelecto + 0.5).toFixed(1))),
-        cursoMatriculado: {
-          ...cm,
-          notaMedia: novaNota,
-        },
-      },
-    });
-    onShowMessage(`Preparação concluída. Sua média projetada agora é ${novaNota}. Ainda é necessário realizar as avaliações.`);
+    const resultado = realizarAtividadeVida(
+      vida, { dia: diaAtual, mes: mesAtual, ano: anoAtual }, 'estudo'
+    );
+    if (resultado.sucesso) onUpdateEstado({ ...estado, vida: resultado.vida });
+    onShowMessage(resultado.mensagem);
   };
 
   const handleRealizarProva = () => {
@@ -688,39 +587,12 @@ export const LifeView: React.FC<LifeViewProps> = ({
   };
 
   // Ações diárias são escolhas explícitas. Nenhuma atividade começa só por causa do relógio.
-  const handleIniciarAtividade = (
-    atividade: Exclude<TipoAtividadeRotina, 'livre' | 'trabalhando'>,
-    duracao: number,
-    descricao: string
-  ) => {
-    if ((vida.horasRestantesAtividade || 0) > 0) {
-      onShowMessage('Finalize ou interrompa a atividade atual antes de começar outra.');
-      return;
-    }
-    onUpdateEstado({
-      ...estado,
-      vida: {
-        ...vida,
-        atividadeAtual: atividade,
-        horasRestantesAtividade: duracao,
-        aulaFormal: false,
-      },
-    });
-    onShowMessage(`Você escolheu ${descricao}. O relógio continuará avançando normalmente.`);
-    onStartTime?.();
-  };
-
-  const handleInterromperAtividade = () => {
-    onUpdateEstado({
-      ...estado,
-      vida: {
-        ...vida,
-        atividadeAtual: 'livre',
-        horasRestantesAtividade: 0,
-        aulaFormal: false,
-      },
-    });
-    onShowMessage('Você interrompeu a atividade. O tempo voltou a ficar livre.');
+  const handleAtividade = (acao: AcaoDiaria) => {
+    const resultado = realizarAtividadeVida(
+      vida, { dia: diaAtual, mes: mesAtual, ano: anoAtual }, acao
+    );
+    if (resultado.sucesso) onUpdateEstado({ ...estado, vida: resultado.vida });
+    onShowMessage(resultado.mensagem);
   };
 
   // 8. Carreira e CTPS
@@ -1167,78 +1039,50 @@ export const LifeView: React.FC<LifeViewProps> = ({
         </div>
       )}
 
-      {/* 3. AÇÕES PESSOAIS: o jogador escolhe, o relógio simula */}
+      {/* A rotina diária evolui com as datas, sem relógios ou exploração de cliques. */}
       {activeSubSection === 'rotina' && (
         <div className="space-y-5">
-          <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-emerald-400" />
-                  O que você vai fazer agora?
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Seu personagem não dorme, trabalha ou estuda automaticamente. Você escolhe a atividade e o tempo simula seus efeitos.
-                </p>
-              </div>
-              <div className="text-right">
-                <div className="text-[10px] uppercase tracking-wider text-slate-500">Horário atual</div>
-                <div className="font-mono text-xl font-bold text-emerald-300">{String(horaAtual).padStart(2, '0')}:00</div>
-              </div>
-            </div>
-            {(vida.horasRestantesAtividade || 0) > 0 && vida.atividadeAtual !== 'livre' ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-                <div>
-                  <div className="text-sm font-bold text-emerald-200">
-                    {vida.atividadeAtual === 'dormindo' ? 'Você escolheu dormir' :
-                      vida.atividadeAtual === 'estudando' ? (vida.aulaFormal ? 'Você está em aula' : 'Você está estudando por conta própria') :
-                      vida.atividadeAtual === 'trabalhando' ? 'Você está trabalhando' :
-                      vida.atividadeAtual === 'exercicio' ? 'Você escolheu fazer exercício' :
-                      vida.atividadeAtual === 'cuidando_familia' ? 'Você está passando tempo com a família' : 'Você escolheu lazer'}
-                  </div>
-                  <div className="text-xs text-slate-400 mt-1">{vida.horasRestantesAtividade} hora(s) simulada(s) restante(s).</div>
-                </div>
-                <button onClick={handleInterromperAtividade} className="rounded-lg border border-slate-600 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800">
-                  Interromper atividade
-                </button>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/50 p-4 text-sm text-slate-400">
-                Nenhuma atividade escolhida. Você está com o tempo livre.
-              </div>
-            )}
-          </section>
-
-          <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
-            <div>
-              <h4 className="font-bold text-slate-100">Atividades disponíveis</h4>
-              <p className="text-xs text-slate-400 mt-1">Cada ação consome tempo do jogo e altera energia, saúde, felicidade ou aprendizado.</p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-              {[
-                { id: 'dormindo' as const, horas: 8, nome: 'Dormir', detalhe: 'Recupera energia durante 8 horas.', icone: '💤' },
-                { id: 'exercicio' as const, horas: 1, nome: 'Fazer exercício', detalhe: 'Melhora saúde e bem-estar por 1 hora.', icone: '🏋️' },
-                { id: 'estudando' as const, horas: 2, nome: 'Estudar em casa', detalhe: 'Desenvolve conhecimento por 2 horas. Não conta como presença em aula.', icone: '📚' },
-                { id: 'lazer' as const, horas: 2, nome: 'Ter um momento de lazer', detalhe: 'Ajuda a recuperar o equilíbrio emocional por 2 horas.', icone: '🎮' },
-                { id: 'cuidando_familia' as const, horas: 1, nome: 'Passar tempo com a família', detalhe: 'Dedica uma hora à convivência familiar.', icone: '❤️' },
-              ].map((acao) => (
-                <button
-                  key={acao.id}
-                  type="button"
-                  disabled={(vida.horasRestantesAtividade || 0) > 0}
-                  onClick={() => handleIniciarAtividade(acao.id, acao.horas, acao.nome.toLowerCase())}
-                  className="rounded-xl border border-slate-700 bg-slate-950/60 p-4 text-left transition hover:border-emerald-500/60 hover:bg-slate-800/70 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <div className="text-2xl">{acao.icone}</div>
-                  <div className="mt-2 text-sm font-bold text-slate-100">{acao.nome}</div>
-                  <div className="mt-1 text-xs text-slate-400">{acao.detalhe}</div>
-                  <div className="mt-3 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">{acao.horas} hora(s) de jogo</div>
-                </button>
-              ))}
-            </div>
-            <p className="text-[11px] text-slate-500">
-              O trabalho e as aulas com horário marcado aparecem como eventos próprios. Você decide se comparece ou falta; o jogo registra as consequências.
+          <section className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-950 p-6">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-400">Hábitos e bem-estar</p>
+            <h3 className="mt-2 text-xl font-bold text-slate-100">Sua rotina se desenvolve com o calendário</h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-400">
+              Sono, trabalho e aulas acontecem normalmente durante os dias. Atividades opcionais têm limite diário e semanal, para que escolhas tenham consequência sem exigir centenas de cliques.
             </p>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-300">
+              <span className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2">Energia: {Math.round(vida.energia)}%</span>
+              <span className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2">Saúde: {Math.round(vida.saude)}%</span>
+              <span className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2">Sono habitual: {vida.rotina.horasSono} h/noite, automático</span>
+            </div>
+          </section>
+          <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+            <h4 className="font-bold text-slate-100">Atividades opcionais</h4>
+            <p className="mt-1 text-xs text-slate-400">Cada atividade pode ser feita uma vez por dia, respeitando os limites da semana.</p>
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              {([
+                { id: 'exercicio', nome: 'Treinar', detalhe: 'Melhora saúde e condicionamento com descanso entre os treinos.', limite: 4 },
+                { id: 'estudo', nome: 'Revisar conteúdo', detalhe: 'Melhora preparo e aprendizado sem criar presenças artificiais.', limite: 6 },
+                { id: 'descanso', nome: 'Descansar', detalhe: 'Recuperação extra, com benefício limitado.', limite: 3 },
+                { id: 'lazer', nome: 'Lazer', detalhe: 'Ajuda na felicidade sem permitir ganhos infinitos.', limite: 4 },
+                { id: 'familia', nome: 'Estar com a família', detalhe: 'Participa da convivência familiar sem criar contatos instantâneos.', limite: 5 },
+              ] as { id: AcaoDiaria; nome: string; detalhe: string; limite: number }[]).map(acao => {
+                const controle = vida.controleAtividades;
+                const dataChave = `${anoAtual}-${String(mesAtual).padStart(2, '0')}-${String(diaAtual).padStart(2, '0')}`;
+                const jaFezHoje = controle?.data === dataChave && controle.acoesNoDia.includes(acao.id);
+                const feitasSemana = controle?.quantidadesSemana[acao.id] || 0;
+                const indisponivel = jaFezHoje || feitasSemana >= acao.limite;
+                return (
+                  <div key={acao.id} className="rounded-xl border border-slate-700 bg-slate-950/70 p-4">
+                    <h5 className="text-sm font-semibold text-slate-100">{acao.nome}</h5>
+                    <p className="mt-2 min-h-10 text-xs leading-relaxed text-slate-400">{acao.detalhe}</p>
+                    <p className="mt-2 text-[11px] text-slate-500">Até {acao.limite} vezes por semana</p>
+                    <button type="button" disabled={!!indisponivel} onClick={() => handleAtividade(acao.id)}
+                      className="mt-3 w-full rounded-lg border border-emerald-700/70 bg-emerald-900/40 px-3 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-800/50 disabled:cursor-not-allowed disabled:opacity-40">
+                      {jaFezHoje ? 'Feita hoje' : 'Realizar atividade'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </section>
         </div>
       )}
@@ -1246,23 +1090,14 @@ export const LifeView: React.FC<LifeViewProps> = ({
       {/* 4. SEÇÃO RELAÇÕES & FAMÍLIA */}
       {activeSubSection === 'familia' && (
         <div className="space-y-6">
-          {/* Header de Família & Botão Conhecer Pessoas */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-5 rounded-2xl">
-            <div>
-              <h3 className="font-bold text-slate-100 flex items-center gap-2">
-                <Users className="w-5 h-5 text-emerald-400" />
-                Círculo Social, Romance & Família
-              </h3>
-              <p className="text-xs text-slate-400">
-                Construa afinidade naturalmente. Conheça pessoas, desenvolva amizades, namore e case no civil.
-              </p>
-            </div>
-            <button
-              onClick={handleConhecerPessoas}
-              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-lg shadow-emerald-950/40 flex items-center gap-1.5"
-            >
-              <Plus className="w-4 h-4" /> Conhecer Novas Pessoas (R$ 35)
-            </button>
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+            <h3 className="flex items-center gap-2 font-bold text-slate-100">
+              <Users className="h-5 w-5 text-emerald-400" />
+              Círculo social, romance e família
+            </h3>
+            <p className="mt-2 text-sm text-slate-400">
+              Novos contatos surgem por oportunidades e acontecimentos da vida. Você escolhe se deseja se aproximar, sem pagar para gerar pessoas.
+            </p>
           </div>
 
           {/* Relacionamento Amoroso / Cônjuge */}
@@ -1468,16 +1303,10 @@ export const LifeView: React.FC<LifeViewProps> = ({
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={handleAssistirAula}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white transition"
-                    >
-                      Assistir Aula (+Presença)
-                    </button>
-                    <button
                       onClick={handleEstudarProvas}
                       className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-purple-300 border border-purple-700 transition"
                     >
-                      Estudar p/ Provas
+                      Revisar matéria (limitado por semana)
                     </button>
                     <button
                       onClick={handleRealizarProva}
@@ -1489,6 +1318,7 @@ export const LifeView: React.FC<LifeViewProps> = ({
                   </div>
                 </div>
 
+                <p className="text-xs text-purple-300/80">As presenças avançam automaticamente com os meses. Provas e dedicação continuam influenciando a aprovação.</p>
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs text-purple-300">
                     <span>Frequência no Semestre: {vida.cursoMatriculado.aulasAssistidas} / {vida.cursoMatriculado.aulasRequeridas} aulas</span>
