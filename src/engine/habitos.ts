@@ -111,6 +111,45 @@ export function realizarAtividadeVida(
   };
 }
 
+/** Relações não evoluem por cliques ilimitados na mesma pessoa. */
+export function registrarInteracaoSocial(
+  vida: VidaPessoal,
+  data: DataCalendario,
+  contatoId: string
+): { permitido: boolean; vida: VidaPessoal; mensagem: string } {
+  const hoje = chaveData(data);
+  const semana = chaveSemana(data);
+  const controle = vida.controleAtividades;
+  const acoesNoDia = controle?.data === hoje ? [...controle.acoesNoDia] : [];
+  const quantidadesSemana = controle?.semanaInicio === semana
+    ? { ...controle.quantidadesSemana } : {};
+  const chaveContato = `social_${contatoId}`;
+  const totalDia = acoesNoDia.filter(chave => chave.startsWith('social_')).length;
+  if (acoesNoDia.includes(chaveContato)) {
+    return { permitido: false, vida, mensagem: 'Vocês já passaram um tempo juntos hoje. A relação precisa evoluir com os dias.' };
+  }
+  if ((quantidadesSemana[chaveContato] || 0) >= 3 || (quantidadesSemana.social_total || 0) >= 12 || totalDia >= 3) {
+    return { permitido: false, vida, mensagem: 'Você já dedicou bastante tempo a encontros nesta semana. Avance o calendário.' };
+  }
+  return {
+    permitido: true,
+    mensagem: '',
+    vida: {
+      ...vida,
+      controleAtividades: {
+        data: hoje,
+        semanaInicio: semana,
+        acoesNoDia: [...acoesNoDia, chaveContato],
+        quantidadesSemana: {
+          ...quantidadesSemana,
+          [chaveContato]: (quantidadesSemana[chaveContato] || 0) + 1,
+          social_total: (quantidadesSemana.social_total || 0) + 1,
+        },
+      },
+    },
+  };
+}
+
 /** Sono e recuperação diários acontecem com a passagem de datas, sem exigir clique. */
 export function processarDiaVida(vida: VidaPessoal): VidaPessoal {
   const sono = Math.max(4, Math.min(10, vida.rotina?.horasSono ?? 8));
