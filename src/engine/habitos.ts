@@ -23,6 +23,13 @@ function chaveSemana(data: DataCalendario): string {
   return calendario.toISOString().slice(0, 10);
 }
 
+export function progressoHabitoNaSemana(vida: VidaPessoal, data: DataCalendario, acao: AcaoDiaria) {
+  const semana = chaveSemana(data);
+  const feitas = vida.controleAtividades?.semanaInicio === semana
+    ? (vida.controleAtividades.quantidadesSemana[acao] || 0) : 0;
+  return { feitas, limite: limitesSemana[acao] };
+}
+
 /** Ações têm custo, limites por dia e por semana; não criam horas artificiais. */
 export function realizarAtividadeVida(
   vida: VidaPessoal,
