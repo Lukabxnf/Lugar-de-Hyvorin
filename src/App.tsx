@@ -285,6 +285,13 @@ export default function App() {
 
   // Resolução de Evento de Decisão Interativo
   const handleEscolherOpcaoEvento = useCallback((opcao: OpcaoEvento) => {
+    const atual = estadoRef.current;
+    if (!atual.eventosPendentes.length) return;
+    if ((opcao.consequencias.custoFinanceiro || 0) > atual.vida.saldoBancario) {
+      showToast('Saldo insuficiente para essa decisão. Escolha outra alternativa do evento.');
+      return;
+    }
+    setMostrarEventoModal(false);
     setEstado((prev) => {
       const eventoAtual = prev.eventosPendentes[0];
       if (!eventoAtual) return prev;
@@ -332,7 +339,6 @@ export default function App() {
       };
 
       showToast(c.mensagemResultado);
-      setMostrarEventoModal(false);
 
       const vidaComRegistro = registrarTransacaoFinanceira(
         {
@@ -344,11 +350,10 @@ export default function App() {
           intelecto: Math.max(0, Math.min(100, prev.vida.intelecto + (c.deltaIntelecto || 0))),
           reputacao: Math.max(0, Math.min(100, novaReputacao)),
           familia: novaFamilia,
-          atividadeAtual: c.atividade || prev.vida.atividadeAtual,
-          aulaFormal: c.atividade ? !!c.aulaFormal : (prev.vida.aulaFormal || false),
-          horasRestantesAtividade: c.atividade
-            ? Math.max(1, Math.floor(c.duracaoAtividadeHoras || 1))
-            : (prev.vida.horasRestantesAtividade || 0),
+          // Eventos não iniciam mais contadores de horas. Compromissos legados são encerrados.
+          atividadeAtual: 'livre',
+          aulaFormal: false,
+          horasRestantesAtividade: 0,
           empregoAtual: c.deltaFaltasTrabalho && prev.vida.empregoAtual
             ? {
                 ...prev.vida.empregoAtual,
