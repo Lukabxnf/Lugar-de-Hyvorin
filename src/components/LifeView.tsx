@@ -43,7 +43,7 @@ import { calcularIdadeExata } from '../engine/life';
 import { CharacterPortrait } from './CharacterPortrait';
 import { NPCPortrait } from './NPCPortrait';
 import { NumericField } from './NumericField';
-import { realizarAtividadeVida, type AcaoDiaria } from '../engine/habitos';
+import { realizarAtividadeVida, progressoHabitoNaSemana, type AcaoDiaria } from '../engine/habitos';
 import { alugarResidencia, anunciarImovel, comprarImovel, definirAluguelProprio, encerrarAnuncioOuLocacao, ocuparImovel, precoImovelAtual, responderOfertaImovel } from '../engine/imoveis';
 import { analisarCreditoPessoal, formatarMoedaCompacta, registrarTransacaoFinanceira } from '../engine/finance';
 
@@ -1068,13 +1068,13 @@ export const LifeView: React.FC<LifeViewProps> = ({
                 const controle = vida.controleAtividades;
                 const dataChave = `${anoAtual}-${String(mesAtual).padStart(2, '0')}-${String(diaAtual).padStart(2, '0')}`;
                 const jaFezHoje = controle?.data === dataChave && controle.acoesNoDia.includes(acao.id);
-                const feitasSemana = controle?.quantidadesSemana[acao.id] || 0;
+                const feitasSemana = progressoHabitoNaSemana(vida, { dia: diaAtual, mes: mesAtual, ano: anoAtual }, acao.id).feitas;
                 const indisponivel = jaFezHoje || feitasSemana >= acao.limite;
                 return (
                   <div key={acao.id} className="rounded-xl border border-slate-700 bg-slate-950/70 p-4">
                     <h5 className="text-sm font-semibold text-slate-100">{acao.nome}</h5>
                     <p className="mt-2 min-h-10 text-xs leading-relaxed text-slate-400">{acao.detalhe}</p>
-                    <p className="mt-2 text-[11px] text-slate-500">Até {acao.limite} vezes por semana</p>
+                    <p className="mt-2 text-[11px] text-slate-500">{feitasSemana}/{acao.limite} vezes nesta semana</p>
                     <button type="button" disabled={!!indisponivel} onClick={() => handleAtividade(acao.id)}
                       className="mt-3 w-full rounded-lg border border-emerald-700/70 bg-emerald-900/40 px-3 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-800/50 disabled:cursor-not-allowed disabled:opacity-40">
                       {jaFezHoje ? 'Feita hoje' : 'Realizar atividade'}
