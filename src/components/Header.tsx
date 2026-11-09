@@ -19,10 +19,11 @@ import { EstadoJogo } from '../engine/types';
 import { CARGOS_POLITICOS } from '../engine/data';
 import { calcularPatrimonioLiquido, formatarMoedaCompacta } from '../engine/finance';
 import { isAnoEleitoral } from '../engine/politics';
+import type { PeriodoAvanco } from '../engine/simulation';
 
 interface HeaderProps {
   estado: EstadoJogo;
-  onAdvanceMonths: (months: number) => void;
+  onAdvancePeriod: (periodo: PeriodoAvanco) => void;
   fechandoPeriodo: boolean;
   onOpenNewGame: () => void;
   onSaveGame: () => void;
@@ -40,7 +41,7 @@ const NOMES_MESES = [
 
 export const Header: React.FC<HeaderProps> = ({
   estado,
-  onAdvanceMonths,
+  onAdvancePeriod,
   fechandoPeriodo,
   onOpenNewGame,
   onSaveGame,
@@ -129,7 +130,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/90 border border-slate-700/80 shadow-inner">
             <Calendar className="w-4 h-4 text-emerald-400" />
             <span className="font-mono font-bold text-emerald-300 text-sm">
-              {mesNome} de {estado.anoAtual}
+              {estado.diaSemanaAtual}, {estado.diaAtual} de {mesNome} de {estado.anoAtual}
             </span>
           </div>
 
@@ -202,17 +203,20 @@ export const Header: React.FC<HeaderProps> = ({
 
                 {/* Time Step & Controls (Right) */}
         <div className="flex items-center gap-2 w-full xl:w-auto justify-end">
-          <div className="flex items-center gap-1.5" aria-label="Avanço do calendário">
-            {([1, 6, 12] as const).map((months) => (
+          <div className="flex flex-wrap items-center gap-1" aria-label="Avanço do calendário">
+            {([
+              ['dia', '+1 dia'], ['semana', '+7 dias'], ['mes', '+1 mês'],
+              ['semestre', '+6 meses'], ['ano', '+1 ano'],
+            ] as [PeriodoAvanco, string][]).map(([periodo, rotulo]) => (
               <button
-                key={months}
+                key={periodo}
                 type="button"
-                onClick={() => onAdvanceMonths(months)}
+                onClick={() => onAdvancePeriod(periodo)}
                 disabled={fechandoPeriodo || estado.eventosPendentes.length > 0}
-                className="px-3 py-2 rounded-lg text-xs font-bold border bg-emerald-700/80 hover:bg-emerald-600 text-white border-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed"
-                title={`Processar ${months} ${months === 1 ? 'mês' : 'meses'}, parando em decisões pendentes`}
+                className="rounded-lg border border-emerald-700/70 bg-emerald-800/70 px-2.5 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                title="Avançar o calendário, processando cada dia e interrompendo em decisões pendentes"
               >
-                +{months === 12 ? '1 ano' : months === 1 ? '1 mês' : '6 meses'}
+                {rotulo}
               </button>
             ))}
           </div>
@@ -223,7 +227,6 @@ export const Header: React.FC<HeaderProps> = ({
             title="Configurações gerais"
           >
             <Settings className="w-4 h-4" />
-            <span className="hidden sm:inline">Configurações</span>
             <span className={`w-1.5 h-1.5 rounded-full ${groqKey ? 'bg-emerald-400' : 'bg-slate-500'}`} />
           </button>
 
