@@ -659,7 +659,7 @@ export function criarEstadoInicial(perfilId = 'estudante'): EstadoJogo {
     horaAtual: 8,
     minutoAtual: 0,
     diaAtual: 1,
-    diaSemanaAtual: 'Segunda-feira',
+    diaSemanaAtual: 'Quinta-feira', // 1º de janeiro de 2026
     mesAtual: 1,
     anoAtual: 2026,
     mesesTotais: 0,
