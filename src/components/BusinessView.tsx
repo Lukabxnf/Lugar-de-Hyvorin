@@ -20,6 +20,7 @@ import { SETORES_EMPRESA } from '../engine/data';
 import { avaliarContratacaoEmpresa } from '../engine/business';
 import { formatarMoedaCompacta, registrarTransacaoFinanceira } from '../engine/finance';
 import { NumericField } from './NumericField';
+import { VisualIllustration } from './VisualIllustration';
 
 interface BusinessViewProps {
   estado: EstadoJogo;
@@ -411,18 +412,21 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
                   <div
                     key={setor.id}
                     onClick={() => setSetorSelecionado(setor.id)}
-                    className={`p-4 rounded-xl border cursor-pointer transition flex flex-col justify-between ${
+                    className={`rounded-xl border cursor-pointer transition overflow-hidden flex flex-col justify-between ${
                       isSelected
                         ? 'bg-slate-800 border-emerald-500 ring-2 ring-emerald-500/20'
                         : 'bg-slate-950 border-slate-800 hover:border-slate-700'
                     }`}
                   >
                     <div>
-                      <div className="font-bold text-slate-200 text-sm">{setor.nome}</div>
-                      <p className="text-xs text-slate-400 mt-1">{setor.descricao}</p>
+                      <VisualIllustration tipo={setor.id} className="w-full h-24 rounded-none border-0 border-b border-slate-800" />
+                      <div className="p-4">
+                        <div className="font-bold text-slate-200 text-sm">{setor.nome}</div>
+                        <p className="text-xs text-slate-400 mt-1">{setor.descricao}</p>
+                      </div>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-slate-800/80 text-xs space-y-1">
+                    <div className="px-4 pb-4 pt-3 border-t border-slate-800/80 text-xs space-y-1">
                       <div className="flex justify-between">
                         <span className="text-slate-400">Capital Mínimo:</span>
                         <span className="font-mono font-bold text-amber-400">
@@ -502,61 +506,64 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
         </button>
       </div>
 
-      {/* Active Company Banner */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold text-2xl">
-            🏢
+      {/* Active Company Banner with Visual Sector Illustration */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+        <VisualIllustration tipo={currentEmpresa.setorId} className="w-full h-32 rounded-none border-0 border-b border-slate-800" />
+        <div className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold text-xl">
+              🏢
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-black text-slate-100">{currentEmpresa.nome}</h2>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                  {currentEmpresa.porte}
+                </span>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                    currentEmpresa.ativa
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  }`}
+                >
+                  {currentEmpresa.ativa ? 'Operação Ativa' : 'Em Crise'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Setor: <strong className="text-slate-300">{setor.nome}</strong> • Patrimônio Físico:{' '}
+                R$ {currentEmpresa.patrimonioMaquinas.toLocaleString('pt-BR')}
+              </p>
+            </div>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-black text-slate-100">{currentEmpresa.nome}</h2>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                {currentEmpresa.porte}
-              </span>
-              <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                  currentEmpresa.ativa
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    : 'bg-red-500/20 text-red-400 border border-red-500/30'
+
+          {/* Cash & Debt */}
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-right">
+              <div className="text-[10px] text-slate-400 uppercase font-semibold">Caixa PJ</div>
+              <div
+                className={`text-lg font-mono font-bold ${
+                  currentEmpresa.caixaPJ >= 0 ? 'text-emerald-400' : 'text-red-400'
                 }`}
               >
-                {currentEmpresa.ativa ? 'Operação Ativa' : 'Em Crise'}
-              </span>
+                R$ {currentEmpresa.caixaPJ.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+              </div>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Setor: <strong className="text-slate-300">{setor.nome}</strong> • Patrimônio Físico:{' '}
-              R$ {currentEmpresa.patrimonioMaquinas.toLocaleString('pt-BR')}
-            </p>
-          </div>
-        </div>
-
-        {/* Cash & Debt */}
-        <div className="flex items-center gap-3">
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-right">
-            <div className="text-[10px] text-slate-400 uppercase font-semibold">Caixa PJ</div>
-            <div
-              className={`text-lg font-mono font-bold ${
-                currentEmpresa.caixaPJ >= 0 ? 'text-emerald-400' : 'text-red-400'
-              }`}
+            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-right">
+              <div className="text-[10px] text-slate-400 uppercase font-semibold">Dívida Bancária PJ</div>
+              <div className="text-lg font-mono font-bold text-slate-300">
+                R$ {currentEmpresa.dividaPJ.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+              </div>
+            </div>
+            <button
+              onClick={handleVenderEmpresa}
+              className="p-3 rounded-xl bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-rose-300 text-xs font-semibold flex flex-col items-center justify-center transition"
+              title="Vender ou Liquidar esta empresa"
             >
-              R$ {currentEmpresa.caixaPJ.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
-            </div>
+              <Trash2 className="w-4 h-4 mb-0.5" />
+              <span>Liquidar</span>
+            </button>
           </div>
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-right">
-            <div className="text-[10px] text-slate-400 uppercase font-semibold">Dívida Bancária PJ</div>
-            <div className="text-lg font-mono font-bold text-slate-300">
-              R$ {currentEmpresa.dividaPJ.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
-            </div>
-          </div>
-          <button
-            onClick={handleVenderEmpresa}
-            className="p-3 rounded-xl bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-rose-300 text-xs font-semibold flex flex-col items-center justify-center transition"
-            title="Vender ou Liquidar esta empresa"
-          >
-            <Trash2 className="w-4 h-4 mb-0.5" />
-            <span>Liquidar</span>
-          </button>
         </div>
       </div>
 
@@ -737,20 +744,44 @@ export const BusinessView: React.FC<BusinessViewProps> = ({
               </label>
             </div>
 
-            {/* Expand machinery */}
-            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
-              <div>
-                <div className="text-xs font-semibold text-slate-300">Capacidade de Maquinário / Servidores</div>
-                <div className="text-[11px] text-slate-400">
-                  Teto físico: {currentEmpresa.capacidadeMaquinas} un./mês
+            {/* Expand machinery & Warehouse Objects with Visual Illustrations */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="rounded-xl bg-slate-950 border border-slate-800 overflow-hidden flex flex-col justify-between">
+                <div>
+                  <VisualIllustration tipo="maquinas" compact className="rounded-none border-0 border-b border-slate-800" />
+                  <div className="p-3">
+                    <div className="text-xs font-semibold text-slate-200">Maquinário & Produção</div>
+                    <div className="text-[11px] text-slate-400">
+                      Teto físico: {currentEmpresa.capacidadeMaquinas} un./mês
+                    </div>
+                  </div>
+                </div>
+                <div className="px-3 pb-3">
+                  <button
+                    onClick={() => handleComprarMaquinas(30_000, 300)}
+                    className="w-full py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition flex items-center justify-center gap-1"
+                  >
+                    <Wrench className="w-3.5 h-3.5" /> Expandir +300 un. (R$ 30k)
+                  </button>
                 </div>
               </div>
-              <button
-                onClick={() => handleComprarMaquinas(30_000, 300)}
-                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition flex items-center gap-1"
-              >
-                <Wrench className="w-3.5 h-3.5" /> +300 un. (R$ 30k)
-              </button>
+
+              <div className="rounded-xl bg-slate-950 border border-slate-800 overflow-hidden flex flex-col justify-between">
+                <div>
+                  <VisualIllustration tipo="armazem" compact className="rounded-none border-0 border-b border-slate-800" />
+                  <div className="p-3">
+                    <div className="text-xs font-semibold text-slate-200">Galpão & Estoque Físico</div>
+                    <div className="text-[11px] text-slate-400">
+                      Em estoque: {currentEmpresa.estoque} / {currentEmpresa.capacidadeArmazenamento || 1000} un.
+                    </div>
+                  </div>
+                </div>
+                <div className="px-3 pb-3">
+                  <span className="block text-[10px] text-slate-500 text-center py-1">
+                    Patrimônio instalado: {formatarMoedaCompacta(currentEmpresa.patrimonioMaquinas)}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 

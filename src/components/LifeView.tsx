@@ -43,7 +43,8 @@ import { calcularIdadeExata } from '../engine/life';
 import { CharacterPortrait } from './CharacterPortrait';
 import { NPCPortrait } from './NPCPortrait';
 import { NumericField } from './NumericField';
-import { realizarAtividadeVida, progressoHabitoNaSemana, registrarInteracaoSocial, type AcaoDiaria } from '../engine/habitos';
+import { VisualIllustration } from './VisualIllustration';
+import { ACOES_VIDA_PESSOAL, executarAcaoVidaPessoal } from '../engine/events';
 import { alugarResidencia, anunciarImovel, comprarImovel, definirAluguelProprio, encerrarAnuncioOuLocacao, ocuparImovel, precoImovelAtual, responderOfertaImovel } from '../engine/imoveis';
 import { analisarCreditoPessoal, formatarMoedaCompacta, registrarTransacaoFinanceira } from '../engine/finance';
 
@@ -51,14 +52,18 @@ interface LifeViewProps {
   estado: EstadoJogo;
   onUpdateEstado: (novoEstado: EstadoJogo) => void;
   onShowMessage: (msg: string) => void;
+  onStartTime?: () => void;
   modo?: 'vida' | 'trabalho' | 'patrimonio';
+  onOpenDecision?: () => void;
 }
 
 export const LifeView: React.FC<LifeViewProps> = ({
   estado,
   onUpdateEstado,
   onShowMessage,
+  onStartTime,
   modo = 'vida',
+  onOpenDecision,
 }) => {
   const { vida, macro, politica, diaAtual, mesAtual, anoAtual, horaAtual, diaSemanaAtual } = estado;
   const [activeSubSection, setActiveSubSection] = useState<
@@ -69,8 +74,10 @@ export const LifeView: React.FC<LifeViewProps> = ({
     setActiveSubSection(modo === 'trabalho' ? 'carreira' : modo === 'patrimonio' ? 'moradia' : 'perfil');
   }, [modo]);
 
-  // Estado local para personalização do Avatar
+  // Estado local para personalização do Avatar e gestão de imóveis
   const [modalAvatarAberto, setModalAvatarAberto] = useState(false);
+  const [abaEditorAvatar, setAbaEditorAvatar] = useState<'rosto' | 'cabelo' | 'estilo'>('rosto');
+  const [imovelGerenciandoId, setImovelGerenciandoId] = useState<string | null>(null);
   const [avatarTemp, setAvatarTemp] = useState<AvatarConfig>({
     sexo: vida.avatar?.sexo || 'masculino',
     formatoRosto: vida.avatar?.formatoRosto || 'oval',
@@ -92,6 +99,9 @@ export const LifeView: React.FC<LifeViewProps> = ({
   const [valorEmprestimoNovo, setValorEmprestimoNovo] = useState('5000');
   const [prazoEmprestimoNovo, setPrazoEmprestimoNovo] = useState('24');
   const [modalNovoEmprestimo, setModalNovoEmprestimo] = useState(false);
+  const [filtroCategoriaVida, setFiltroCategoriaVida] = useState<
+    'todas' | 'descanso' | 'saude' | 'lazer' | 'cidadania'
+  >('todas');
 
   // 1. Salvar alterações no Avatar e Identidade
   const handleSalvarAvatar = () => {
@@ -251,9 +261,14 @@ export const LifeView: React.FC<LifeViewProps> = ({
     onShowMessage(`Empréstimo de R$ ${valor.toLocaleString('pt-BR')} aprovado a ${(taxaMensal * 100).toFixed(2)}% ao mês, com parcela de R$ ${valorParcela.toLocaleString('pt-BR')}.`);
   };
 
-  // 5. Interações Sociais Orgânicas (Conhecer Pessoas, Flertar, Namorar, Casar)
-  // Interações graduais: cada contato fortalece o vínculo e pode mudar seu estágio.
+  // 5. Interações Sociais Graduais com Limite Mensal por Contato
   const handleAumentarAfinidade = (rel: Relacionamento, tipoAcao: 'conversar' | 'almoco' | 'encontro') => {
+    const interacoesMes = rel.interacoesNoMes ?? 0;
+    if (interacoesMes >= 2) {
+      onShowMessage(`Você já interagiu 2 vezes com ${rel.nome} neste mês. Avance o calendário para continuar cultivando a relação.`);
+      return;
+    }
+
     let custo = 0;
     let ganho = 5;
     let gastoEnergia = 3;
@@ -273,17 +288,6 @@ export const LifeView: React.FC<LifeViewProps> = ({
 
     if (vida.saldoBancario < custo) {
       onShowMessage('Saldo insuficiente para esta atividade.');
-      return;
-    }
-    if (vida.energia < gastoEnergia) {
-      onShowMessage('Você está cansado(a) demais para este encontro. Descanse primeiro.');
-      return;
-    }
-    const encontro = registrarInteracaoSocial(
-      vida, { dia: diaAtual, mes: mesAtual, ano: anoAtual }, rel.id
-    );
-    if (!encontro.permitido) {
-      onShowMessage(encontro.mensagem);
       return;
     }
 
@@ -311,6 +315,7 @@ export const LifeView: React.FC<LifeViewProps> = ({
         tipo,
         nivelAfinidade: afinidade,
         interacoesSignificativas: interacoes,
+        interacoesNoMes: (contato.interacoesNoMes ?? 0) + 1,
         mesesSemContato: 0,
       };
     };
@@ -329,12 +334,13 @@ export const LifeView: React.FC<LifeViewProps> = ({
     };
     const contatoAtualizado = contatos.find(contato => contato.id === rel.id)
       || novaFamilia.conjuge
+      || novaFamilia.filhos.find(f => f.id === rel.id)
       || rel;
 
     onUpdateEstado({
       ...estado,
       vida: {
-        ...encontro.vida,
+        ...vida,
         saldoBancario: vida.saldoBancario - custo,
         historicoFinanceiro: custo > 0
           ? registrarTransacaoFinanceira(
@@ -358,7 +364,7 @@ export const LifeView: React.FC<LifeViewProps> = ({
       : contatoAtualizado.tipo === 'amigo'
       ? 'A relação evoluiu para amizade.'
       : 'O contato foi fortalecido.';
-    onShowMessage(`Você passou um tempo com ${rel.nome}. Afinidade: ${contatoAtualizado.nivelAfinidade}%. ${etapa}`);
+    onShowMessage(`Você passou um tempo com ${rel.nome} (${contatoAtualizado.interacoesNoMes ?? 1}/2 no mês). Afinidade: ${contatoAtualizado.nivelAfinidade}%. ${etapa}`);
   };
 
   // Pedir em Namoro (necessita afinidade >= 65 e ser conhecido/amigo/flerte)
@@ -494,16 +500,58 @@ export const LifeView: React.FC<LifeViewProps> = ({
   };
 
   // 6. Educação: Assistir aula e Estudar para provas
-  const handleEstudarProvas = () => {
+  const handleAssistirAula = () => {
     if (!vida.cursoMatriculado || vida.cursoMatriculado.concluido) {
-      onShowMessage('Você não possui um curso ativo.');
+      onShowMessage('Você não possui matrícula ativa em nenhum curso no momento.');
       return;
     }
-    const resultado = realizarAtividadeVida(
-      vida, { dia: diaAtual, mes: mesAtual, ano: anoAtual }, 'estudo'
-    );
-    if (resultado.sucesso) onUpdateEstado({ ...estado, vida: resultado.vida });
-    onShowMessage(resultado.mensagem);
+    if (vida.energia < 8) {
+      onShowMessage('Energia muito baixa para assistir aula. Vá descansar primeiro.');
+      return;
+    }
+
+    const cm = vida.cursoMatriculado;
+    onUpdateEstado({
+      ...estado,
+      vida: {
+        ...vida,
+        energia: Math.max(0, vida.energia - 8),
+        intelecto: Math.min(100, Number((vida.intelecto + 0.3).toFixed(1))),
+        cursoMatriculado: {
+          ...cm,
+          aulasAssistidas: cm.aulasAssistidas + 1,
+        },
+      },
+    });
+    onShowMessage(`Aula assistida com presença confirmada! Frequência: ${cm.aulasAssistidas + 1}/${cm.aulasRequeridas}.`);
+  };
+
+  const handleEstudarProvas = () => {
+    if (!vida.cursoMatriculado || vida.cursoMatriculado.concluido) {
+      onShowMessage('Você não possui curso em andamento.');
+      return;
+    }
+    if (vida.energia < 12) {
+      onShowMessage('Energia insuficiente para maratona de estudos.');
+      return;
+    }
+
+    const cm = vida.cursoMatriculado;
+    const novaNota = Math.min(10, Number((cm.notaMedia + 0.4).toFixed(1)));
+
+    onUpdateEstado({
+      ...estado,
+      vida: {
+        ...vida,
+        energia: Math.max(0, vida.energia - 12),
+        intelecto: Math.min(100, Number((vida.intelecto + 0.5).toFixed(1))),
+        cursoMatriculado: {
+          ...cm,
+          notaMedia: novaNota,
+        },
+      },
+    });
+    onShowMessage(`Preparação concluída. Sua média projetada agora é ${novaNota}. Ainda é necessário realizar as avaliações.`);
   };
 
   const handleRealizarProva = () => {
@@ -598,12 +646,39 @@ export const LifeView: React.FC<LifeViewProps> = ({
   };
 
   // Ações diárias são escolhas explícitas. Nenhuma atividade começa só por causa do relógio.
-  const handleAtividade = (acao: AcaoDiaria) => {
-    const resultado = realizarAtividadeVida(
-      vida, { dia: diaAtual, mes: mesAtual, ano: anoAtual }, acao
-    );
-    if (resultado.sucesso) onUpdateEstado({ ...estado, vida: resultado.vida });
-    onShowMessage(resultado.mensagem);
+  const handleIniciarAtividade = (
+    atividade: Exclude<TipoAtividadeRotina, 'livre' | 'trabalhando'>,
+    duracao: number,
+    descricao: string
+  ) => {
+    if ((vida.horasRestantesAtividade || 0) > 0) {
+      onShowMessage('Finalize ou interrompa a atividade atual antes de começar outra.');
+      return;
+    }
+    onUpdateEstado({
+      ...estado,
+      vida: {
+        ...vida,
+        atividadeAtual: atividade,
+        horasRestantesAtividade: duracao,
+        aulaFormal: false,
+      },
+    });
+    onShowMessage(`Você escolheu ${descricao}. O relógio continuará avançando normalmente.`);
+    onStartTime?.();
+  };
+
+  const handleInterromperAtividade = () => {
+    onUpdateEstado({
+      ...estado,
+      vida: {
+        ...vida,
+        atividadeAtual: 'livre',
+        horasRestantesAtividade: 0,
+        aulaFormal: false,
+      },
+    });
+    onShowMessage('Você interrompeu a atividade. O tempo voltou a ficar livre.');
   };
 
   // 8. Carreira e CTPS
@@ -829,26 +904,34 @@ export const LifeView: React.FC<LifeViewProps> = ({
         </section>
       )}
 
-      {/* 1. SEÇÃO PERFIL & AVATAR */}
+      {/* 1. SEÇÃO PERFIL & AVATAR (Protótipo 2: Cartão Principal do Cidadão + Barras Vitais + Atividades com Limite) */}
       {activeSubSection === 'perfil' && (
         <div className="space-y-6">
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl">
-            <div className="flex flex-col md:flex-row items-center gap-6">
-              {/* Retrato principal do personagem */}
-              <div className="relative group shrink-0 w-36 sm:w-44">
-                <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 shadow-xl shadow-black/30">
+          <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-6 shadow-xl">
+            <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
+              {/* Retrato principal em destaque com envelhecimento gradual */}
+              <div className="relative group shrink-0 w-40 sm:w-48">
+                <div className="overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-950 shadow-2xl shadow-black/50">
                   <div className="aspect-[6/7] w-full">
-                    <CharacterPortrait config={vida.avatar} />
+                    <CharacterPortrait config={vida.avatar} idade={idadeAtual} />
                   </div>
-                  <div className="px-3 py-2 border-t border-slate-800">
-                    <div className="text-[10px] uppercase tracking-wider text-slate-500">Seu personagem</div>
-                    <div className="text-xs font-semibold text-slate-200">{vida.avatar?.sexo === 'feminino' ? 'Feminino' : 'Masculino'} • {vida.avatar?.roupa || 'Casual'}</div>
+                  <div className="px-3.5 py-2.5 border-t border-slate-800 bg-slate-950/90 flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Fase de Vida</div>
+                      <div className="text-xs font-bold text-slate-200">
+                        {idadeAtual >= 64 ? 'Sênior' : idadeAtual >= 38 ? 'Adulto Maduro' : 'Jovem Adulto'} • {idadeAtual} anos
+                      </div>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-emerald-300 font-semibold capitalize">
+                      {vida.avatar?.roupa || 'casual'}
+                    </span>
                   </div>
                 </div>
                 <button
                   onClick={() => {
                     setAvatarTemp({
                       sexo: vida.avatar?.sexo || 'masculino',
+                      formatoRosto: vida.avatar?.formatoRosto || 'oval',
                       pele: vida.avatar?.pele || 'morena',
                       cabeloCor: vida.avatar?.cabeloCor || 'castanho',
                       cabeloEstilo: vida.avatar?.cabeloEstilo || 'curto',
@@ -860,59 +943,114 @@ export const LifeView: React.FC<LifeViewProps> = ({
                       alturaCm: vida.avatar?.alturaCm || 170,
                     });
                     setNomeTemp(vida.nomeCompleto || vida.nome);
+                    setAbaEditorAvatar('rosto');
                     setModalAvatarAberto(true);
                   }}
-                  className="mt-3 w-full text-center text-xs font-semibold py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition"
+                  className="mt-3 w-full text-center text-xs font-bold py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-lg shadow-emerald-950/50"
                 >
                   Personalizar aparência
                 </button>
               </div>
 
-              {/* Informações Civis e Pessoais */}
-              <div className="flex-1 space-y-3 w-full">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              {/* Informações Civis, Barras Vitais e Resumo de Situação */}
+              <div className="flex-1 space-y-4 w-full">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3.5">
                   <div>
-                    <h2 className="text-xl font-extrabold text-slate-100">{vida.nomeCompleto || vida.nome}</h2>
-                    <p className="text-xs text-slate-400">
-                      Nascido em: {vida.dataNascimento?.dia}/{vida.dataNascimento?.mes}/{vida.dataNascimento?.ano} • {idadeAtual} anos
+                    <h2 className="text-2xl font-extrabold text-slate-100 tracking-tight">{vida.nomeCompleto || vida.nome}</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Nascimento: {String(vida.dataNascimento?.dia || 15).padStart(2, '0')}/{String(vida.dataNascimento?.mes || 6).padStart(2, '0')}/{vida.dataNascimento?.ano} • {idadeAtual} anos • {vida.avatar?.sexo === 'feminino' ? 'Mulher' : 'Homem'}
                     </p>
                   </div>
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                    Estado Civil: {vida.familia?.estadoCivil?.toUpperCase() || 'SOLTEIRO'}
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-emerald-300 border border-slate-700">
+                    {vida.familia?.estadoCivil?.toUpperCase() || 'SOLTEIRO'}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-2">
-                  <div className="bg-slate-800/50 p-2.5 rounded-lg border border-slate-700/50">
-                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">CTPS Oficial</span>
-                    <span className="font-mono font-bold text-slate-200">{vida.carteira?.numeroCtps || 'Não emitida'}</span>
+                {/* 4 Barras de Progresso Vital integradas ao Cartão Principal */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="rounded-xl bg-slate-950/70 border border-slate-800/90 p-3 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                        <Heart className="w-3.5 h-3.5 text-rose-400" /> Saúde Física
+                      </span>
+                      <span className="font-mono font-bold text-rose-300">{Math.round(vida.saude)}%</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                      <div className="bg-rose-500 h-full rounded-full transition-all duration-300" style={{ width: `${Math.min(100, Math.max(0, vida.saude))}%` }} />
+                    </div>
                   </div>
-                  <div className="bg-slate-800/50 p-2.5 rounded-lg border border-slate-700/50">
-                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Escolaridade</span>
-                    <span className="font-bold text-slate-200 capitalize">{vida.educacao}</span>
+
+                  <div className="rounded-xl bg-slate-950/70 border border-slate-800/90 p-3 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                        <Smile className="w-3.5 h-3.5 text-amber-400" /> Felicidade
+                      </span>
+                      <span className="font-mono font-bold text-amber-300">{Math.round(vida.felicidade)}%</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                      <div className="bg-amber-400 h-full rounded-full transition-all duration-300" style={{ width: `${Math.min(100, Math.max(0, vida.felicidade))}%` }} />
+                    </div>
                   </div>
-                  <div className="bg-slate-800/50 p-2.5 rounded-lg border border-slate-700/50">
-                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Score Serasa</span>
-                    <span className={`font-mono font-bold ${scoreInfo.cor}`}>{vida.scoreCredito || 750} pts</span>
+
+                  <div className="rounded-xl bg-slate-950/70 border border-slate-800/90 p-3 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 text-yellow-400" /> Energia Vital
+                      </span>
+                      <span className="font-mono font-bold text-yellow-300">{Math.round(vida.energia ?? 85)}%</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                      <div className="bg-yellow-400 h-full rounded-full transition-all duration-300" style={{ width: `${Math.min(100, Math.max(0, vida.energia ?? 85))}%` }} />
+                    </div>
                   </div>
-                  <div className="bg-slate-800/50 p-2.5 rounded-lg border border-slate-700/50">
-                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Cargo / Atuação</span>
-                    <span className="font-bold text-slate-200 truncate block">
+
+                  <div className="rounded-xl bg-slate-950/70 border border-slate-800/90 p-3 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                        <Brain className="w-3.5 h-3.5 text-indigo-400" /> Intelecto & Preparo
+                      </span>
+                      <span className="font-mono font-bold text-indigo-300">{Math.round(vida.intelecto)} pts</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                      <div className="bg-indigo-500 h-full rounded-full transition-all duration-300" style={{ width: `${Math.min(100, Math.max(0, vida.intelecto))}%` }} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Indicadores de Contexto de Vida */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                  <div className="bg-slate-800/50 p-2.5 rounded-xl border border-slate-700/50">
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Ocupação Atual</span>
+                    <span className="font-bold text-slate-200 truncate block mt-0.5">
                       {vida.empregoAtual
                         ? CARREIRAS.find(c => c.id === vida.empregoAtual?.carreiraId)?.titulo || 'Empregado'
-                        : 'Profissional Autônomo'}
+                        : 'Autônomo / Sem vínculo'}
                     </span>
+                  </div>
+                  <div className="bg-slate-800/50 p-2.5 rounded-xl border border-slate-700/50">
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Moradia Atual</span>
+                    <span className="font-bold text-slate-200 truncate block mt-0.5">
+                      {MORADIAS[vida.moradia]?.nome || 'Casa dos Pais'}
+                    </span>
+                  </div>
+                  <div className="bg-slate-800/50 p-2.5 rounded-xl border border-slate-700/50">
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Escolaridade</span>
+                    <span className="font-bold text-slate-200 capitalize block mt-0.5">{vida.educacao}</span>
+                  </div>
+                  <div className="bg-slate-800/50 p-2.5 rounded-xl border border-slate-700/50">
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Score Serasa</span>
+                    <span className={`font-mono font-bold block mt-0.5 ${scoreInfo.cor}`}>{vida.scoreCredito || 750} pts</span>
                   </div>
                 </div>
 
                 {/* Títulos e Honrarias */}
-                <div className="pt-2">
-                  <span className="text-xs font-semibold text-slate-300 block mb-1.5">Diplomas & Títulos Conquistados:</span>
+                <div className="pt-1">
+                  <span className="text-xs font-semibold text-slate-300 block mb-1.5">Diplomas, Habilitações & Títulos:</span>
                   <div className="flex flex-wrap gap-1.5">
                     {(vida.titulosConquistados || ['Certificado de Ensino Médio']).map((tit, idx) => (
                       <span
                         key={idx}
-                        className="px-2 py-0.5 rounded-md bg-indigo-950/60 border border-indigo-700/50 text-indigo-300 text-[11px] font-medium"
+                        className="px-2.5 py-0.5 rounded-md bg-indigo-950/60 border border-indigo-700/50 text-indigo-300 text-[11px] font-medium"
                       >
                         🎓 {tit}
                       </span>
@@ -922,10 +1060,152 @@ export const LifeView: React.FC<LifeViewProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Painel Visual: Atividades e Escolhas do Período com Limite Mensal */}
+          <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-emerald-400" />
+                  Atividades e Escolhas da Vida Pessoal
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Descanse, cuide da saúde no SUS ou clínica, faça viagens, aposte na loteria, tire sua CNH ou realize trabalhos extras. Limite de 4 atividades extras por mês para manter realismo.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="text-xs font-mono bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 text-slate-300">
+                  No mês: <strong className={(vida.acoesRealizadasNoMes || 0) >= 4 ? 'text-amber-400' : 'text-emerald-400'}>{vida.acoesRealizadasNoMes || 0}/4</strong>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs font-mono bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
+                  <Zap className="w-3.5 h-3.5 text-yellow-400" />
+                  <span className="text-slate-300"><strong className="text-yellow-300">{Math.round(vida.energia ?? 85)}%</strong></span>
+                </div>
+              </div>
+            </div>
+
+            {/* Filtros por Categoria da Vida Real */}
+            <div className="flex flex-wrap gap-2">
+              {([
+                { id: 'todas', label: 'Todas as Atividades (18)' },
+                { id: 'descanso', label: '🏖️ Descanso & Viagens' },
+                { id: 'saude', label: '🏥 Médico, SUS & Estética' },
+                { id: 'lazer', label: '🎉 Noitada, Pets & Loteria' },
+                { id: 'cidadania', label: '🪪 CNH, Bicos & Cursos' },
+              ] as const).map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setFiltroCategoriaVida(cat.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                    filtroCategoriaVida === cat.id
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/60'
+                      : 'bg-slate-950/70 text-slate-400 border-slate-800 hover:text-slate-200'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {ACOES_VIDA_PESSOAL.filter(
+                (a) => filtroCategoriaVida === 'todas' || a.categoria === filtroCategoriaVida
+              ).map((acao) => {
+                const custoExibido =
+                  acao.id === 'checkup_vitaminas' && vida.rotina.planoSaude === 'completo'
+                    ? 0
+                    : acao.id === 'checkup_vitaminas' && vida.rotina.planoSaude === 'basico'
+                      ? 110
+                      : acao.custo;
+                const jaPossuiCnh =
+                  acao.id === 'tirar_cnh_detran' &&
+                  (vida.titulosConquistados || []).some((t) => t.includes('CNH Definitiva'));
+                const limiteAtingido = (vida.acoesRealizadasNoMes || 0) >= 4;
+
+                return (
+                  <div
+                    key={acao.id}
+                    className="rounded-xl border border-slate-800 bg-slate-950/70 overflow-hidden flex flex-col justify-between hover:border-slate-700 transition"
+                  >
+                    <div>
+                      <VisualIllustration tipo={acao.ilustracao} className="w-full h-24 rounded-none border-0 border-b border-slate-800" />
+                      <div className="p-3.5 space-y-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="font-bold text-slate-100 text-xs sm:text-sm">{acao.titulo}</span>
+                          <span className="font-mono text-xs font-bold text-emerald-400 shrink-0">
+                            {acao.ganhoEstimado
+                              ? acao.ganhoEstimado
+                              : custoExibido === 0
+                                ? 'Grátis'
+                                : `R$ ${custoExibido.toLocaleString('pt-BR')}`}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">{acao.subtitulo}</p>
+                        <div className="flex flex-wrap gap-1.5 pt-1 text-[10px] font-semibold">
+                          {acao.deltaEnergia !== 0 && (
+                            <span
+                              className={`px-2 py-0.5 rounded border ${
+                                acao.deltaEnergia > 0
+                                  ? 'bg-yellow-950/60 text-yellow-300 border-yellow-700/40'
+                                  : 'bg-slate-900 text-slate-300 border-slate-700'
+                              }`}
+                            >
+                              {acao.deltaEnergia > 0 ? `+${acao.deltaEnergia}%` : `${acao.deltaEnergia}%`} Energia
+                            </span>
+                          )}
+                          {acao.deltaFelicidade !== 0 && (
+                            <span className="px-2 py-0.5 rounded bg-amber-950/60 text-amber-300 border border-amber-700/40">
+                              +{acao.deltaFelicidade}% Felicidade
+                            </span>
+                          )}
+                          {acao.deltaSaude > 0 && (
+                            <span className="px-2 py-0.5 rounded bg-rose-950/60 text-rose-300 border border-rose-700/40">
+                              +{acao.deltaSaude}% Saúde
+                            </span>
+                          )}
+                          {acao.deltaIntelecto && acao.deltaIntelecto > 0 && (
+                            <span className="px-2 py-0.5 rounded bg-indigo-950/60 text-indigo-300 border border-indigo-700/40">
+                              +{acao.deltaIntelecto} Intelecto
+                            </span>
+                          )}
+                          {acao.deltaReputacao && acao.deltaReputacao > 0 && (
+                            <span className="px-2 py-0.5 rounded bg-cyan-950/60 text-cyan-300 border border-cyan-700/40">
+                              +{acao.deltaReputacao} Reputação
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="px-3.5 pb-3.5">
+                      <button
+                        type="button"
+                        disabled={vida.saldoBancario < custoExibido || jaPossuiCnh || limiteAtingido}
+                        onClick={() => {
+                          const { novoEstado, mensagem } = executarAcaoVidaPessoal(estado, acao.id);
+                          onUpdateEstado(novoEstado);
+                          onShowMessage(mensagem);
+                        }}
+                        className="w-full py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white transition"
+                      >
+                        {jaPossuiCnh
+                          ? 'CNH já conquistada'
+                          : limiteAtingido
+                            ? 'Limite do mês atingido (4/4)'
+                            : vida.saldoBancario < custoExibido
+                              ? 'Saldo insuficiente'
+                              : 'Realizar atividade'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         </div>
       )}
 
-      {/* 2. SEÇÃO FINANÇAS & DÍVIDAS */}
+      {/* 2. SEÇÃO FINANÇAS, SCORE SERASA & DÍVIDAS */}
       {activeSubSection === 'geral' && (
         <div className="space-y-6">
           {/* Card Score Serasa / SPC */}
@@ -1050,49 +1330,268 @@ export const LifeView: React.FC<LifeViewProps> = ({
         </div>
       )}
 
-      {/* A rotina diária evolui com as datas, sem relógios ou exploração de cliques. */}
+      {/* 3. SAÚDE, HÁBITOS E ESTILO DE VIDA SUSTENTADO */}
       {activeSubSection === 'rotina' && (
-        <div className="space-y-5">
-          <section className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-950 p-6">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-400">Hábitos e bem-estar</p>
-            <h3 className="mt-2 text-xl font-bold text-slate-100">Sua rotina se desenvolve com o calendário</h3>
-            <p className="mt-2 text-sm leading-relaxed text-slate-400">
-              Sono, trabalho e aulas acontecem normalmente durante os dias. Atividades opcionais têm limite diário e semanal, para que escolhas tenham consequência sem exigir centenas de cliques.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-300">
-              <span className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2">Energia: {Math.round(vida.energia)}%</span>
-              <span className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2">Saúde: {Math.round(vida.saude)}%</span>
-              <span className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2">Sono habitual: {vida.rotina.horasSono} h/noite, automático</span>
+        <div className="space-y-6">
+          {/* Painel de Vitalidade Biológica */}
+          <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                  <Heart className="w-5 h-5 text-rose-400" />
+                  Saúde e Vitalidade Diária
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Seu descanso noturno e rotina são simulados naturalmente na passagem dos dias. Não é necessário clicar repetidamente para dormir ou comer.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300">
+                <span>Sono: <strong>{vida.rotina.horasSono || 8}h por noite</strong></span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <div className="rounded-xl border border-rose-900/40 bg-slate-950/60 p-4 space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400 flex items-center gap-1.5 font-semibold">
+                    <Heart className="w-4 h-4 text-rose-400" /> Saúde Geral
+                  </span>
+                  <span className="font-bold text-rose-300">{Math.round(vida.saude)}%</span>
+                </div>
+                <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                  <div className="bg-rose-500 h-full rounded-full transition-all" style={{ width: `${Math.min(100, Math.max(0, vida.saude))}%` }} />
+                </div>
+                <span className="text-[10px] text-slate-400 block pt-1">
+                  {vida.saude >= 80 ? 'Excelente imunidade e vigor' : vida.saude >= 50 ? 'Condição estável' : 'Atenção: consulte um médico'}
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-amber-900/40 bg-slate-950/60 p-4 space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400 flex items-center gap-1.5 font-semibold">
+                    <Smile className="w-4 h-4 text-amber-400" /> Felicidade & Bem-estar
+                  </span>
+                  <span className="font-bold text-amber-300">{Math.round(vida.felicidade)}%</span>
+                </div>
+                <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                  <div className="bg-amber-400 h-full rounded-full transition-all" style={{ width: `${Math.min(100, Math.max(0, vida.felicidade))}%` }} />
+                </div>
+                <span className="text-[10px] text-slate-400 block pt-1">
+                  {vida.felicidade >= 75 ? 'Vida equilibrada e realizada' : vida.felicidade >= 45 ? 'Rotina equilibrada' : 'Sob estresse ou preocupação'}
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-yellow-900/40 bg-slate-950/60 p-4 space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400 flex items-center gap-1.5 font-semibold">
+                    <Zap className="w-4 h-4 text-yellow-400" /> Energia Vital
+                  </span>
+                  <span className="font-bold text-yellow-300">{Math.round(vida.energia ?? 85)}%</span>
+                </div>
+                <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                  <div className="bg-yellow-400 h-full rounded-full transition-all" style={{ width: `${Math.min(100, Math.max(0, vida.energia ?? 85))}%` }} />
+                </div>
+                <span className="text-[10px] text-slate-400 block pt-1">
+                  Recomposta no descanso de cada noite
+                </span>
+              </div>
             </div>
           </section>
-          <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-            <h4 className="font-bold text-slate-100">Atividades opcionais</h4>
-            <p className="mt-1 text-xs text-slate-400">Cada atividade pode ser feita uma vez por dia, respeitando os limites da semana.</p>
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-              {([
-                { id: 'exercicio', nome: 'Treinar', detalhe: 'Melhora saúde e condicionamento com descanso entre os treinos.', limite: 4 },
-                { id: 'estudo', nome: 'Revisar conteúdo', detalhe: 'Melhora preparo e aprendizado sem criar presenças artificiais.', limite: 6 },
-                { id: 'descanso', nome: 'Descansar', detalhe: 'Recuperação extra, com benefício limitado.', limite: 3 },
-                { id: 'lazer', nome: 'Lazer', detalhe: 'Ajuda na felicidade sem permitir ganhos infinitos.', limite: 4 },
-                { id: 'familia', nome: 'Estar com a família', detalhe: 'Participa da convivência familiar sem criar contatos instantâneos.', limite: 5 },
-              ] as { id: AcaoDiaria; nome: string; detalhe: string; limite: number }[]).map(acao => {
-                const controle = vida.controleAtividades;
-                const dataChave = `${anoAtual}-${String(mesAtual).padStart(2, '0')}-${String(diaAtual).padStart(2, '0')}`;
-                const jaFezHoje = controle?.data === dataChave && controle.acoesNoDia.includes(acao.id);
-                const feitasSemana = progressoHabitoNaSemana(vida, { dia: diaAtual, mes: mesAtual, ano: anoAtual }, acao.id).feitas;
-                const indisponivel = jaFezHoje || feitasSemana >= acao.limite;
-                return (
-                  <div key={acao.id} className="rounded-xl border border-slate-700 bg-slate-950/70 p-4">
-                    <h5 className="text-sm font-semibold text-slate-100">{acao.nome}</h5>
-                    <p className="mt-2 min-h-10 text-xs leading-relaxed text-slate-400">{acao.detalhe}</p>
-                    <p className="mt-2 text-[11px] text-slate-500">{feitasSemana}/{acao.limite} vezes nesta semana</p>
-                    <button type="button" disabled={!!indisponivel} onClick={() => handleAtividade(acao.id)}
-                      className="mt-3 w-full rounded-lg border border-emerald-700/70 bg-emerald-900/40 px-3 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-800/50 disabled:cursor-not-allowed disabled:opacity-40">
-                      {jaFezHoje ? 'Feita hoje' : 'Realizar atividade'}
+
+          {/* Configuração de Hábitos e Estilo de Vida */}
+          <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-5">
+            <div>
+              <h4 className="font-bold text-slate-100 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-400" />
+                Estilo de Vida & Hábitos Pessoais
+              </h4>
+              <p className="text-xs text-slate-400 mt-1">
+                Suas escolhas definem despesas mensais fixas e geram benefícios orgânicos contínuos na sua saúde física e mental.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Plano de Saúde */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-200">Plano de Saúde</span>
+                  <span className="text-[11px] font-mono text-emerald-400">
+                    {vida.rotina.planoSaude === 'completo' ? 'R$ 1.400/mês' : vida.rotina.planoSaude === 'basico' ? 'R$ 450/mês' : 'Gratuito (SUS)'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'nenhum' as const, label: 'SUS (Público)' },
+                    { id: 'basico' as const, label: 'Básico' },
+                    { id: 'completo' as const, label: 'Completo' },
+                  ].map((opcao) => (
+                    <button
+                      key={opcao.id}
+                      type="button"
+                      onClick={() => {
+                        onUpdateEstado({
+                          ...estado,
+                          vida: { ...vida, rotina: { ...vida.rotina, planoSaude: opcao.id } },
+                        });
+                        onShowMessage(`Plano de saúde definido para ${opcao.label}.`);
+                      }}
+                      className={`py-2 px-2 text-xs font-semibold rounded-lg border transition ${
+                        vida.rotina.planoSaude === opcao.id
+                          ? 'border-emerald-500 bg-emerald-950/40 text-emerald-300'
+                          : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {opcao.label}
                     </button>
-                  </div>
-                );
-              })}
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  {vida.rotina.planoSaude === 'completo' ? 'Proteção hospitalar completa com bônus máximo de saúde.' : vida.rotina.planoSaude === 'basico' ? 'Cobertura ambulatorial contra imprevistos leves.' : 'Atendimento pela rede pública municipal e estadual.'}
+                </p>
+              </div>
+
+              {/* Padrão Alimentar */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-200">Padrão Alimentar</span>
+                  <span className="text-[11px] font-mono text-emerald-400">
+                    {vida.rotina.padraoAlimentacao === 'premium' ? 'R$ 2.800/mês' : vida.rotina.padraoAlimentacao === 'saudavel' ? 'R$ 1.400/mês' : 'R$ 750/mês'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'economica' as const, label: 'Básico' },
+                    { id: 'saudavel' as const, label: 'Saudável' },
+                    { id: 'premium' as const, label: 'Premium' },
+                  ].map((opcao) => (
+                    <button
+                      key={opcao.id}
+                      type="button"
+                      onClick={() => {
+                        onUpdateEstado({
+                          ...estado,
+                          vida: { ...vida, rotina: { ...vida.rotina, padraoAlimentacao: opcao.id } },
+                        });
+                        onShowMessage(`Padrão alimentar definido para ${opcao.label}.`);
+                      }}
+                      className={`py-2 px-2 text-xs font-semibold rounded-lg border transition ${
+                        vida.rotina.padraoAlimentacao === opcao.id
+                          ? 'border-emerald-500 bg-emerald-950/40 text-emerald-300'
+                          : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {opcao.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Nutrição balanceada confere imunidade contra fadiga crônica e melhora sua disposição diária.
+                </p>
+              </div>
+
+              {/* Academia & Exercício Físico */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                    <Dumbbell className="w-4 h-4 text-emerald-400" /> Academia & Musculação
+                  </span>
+                  <span className="text-[11px] font-mono text-emerald-400">
+                    {vida.rotina.academia ? 'R$ 160/mês' : 'Inativo'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onUpdateEstado({
+                        ...estado,
+                        vida: { ...vida, rotina: { ...vida.rotina, academia: !vida.rotina.academia } },
+                      });
+                      onShowMessage(vida.rotina.academia ? 'Matrícula na academia cancelada.' : 'Matrícula na academia confirmada!');
+                    }}
+                    className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition ${
+                      vida.rotina.academia
+                        ? 'border-emerald-500 bg-emerald-950/40 text-emerald-300'
+                        : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {vida.rotina.academia ? 'Matriculado(a) na Academia' : 'Não Frequenta Academia'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Exercícios regulares aplicam bônus automático e permanente na saúde cardiovascular e no condicionamento físico.
+                </p>
+              </div>
+
+              {/* Terapia e Saúde Mental */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                    <Brain className="w-4 h-4 text-indigo-400" /> Acompanhamento Psicológico
+                  </span>
+                  <span className="text-[11px] font-mono text-emerald-400">
+                    {vida.rotina.terapia ? 'R$ 600/mês' : 'Inativo'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onUpdateEstado({
+                        ...estado,
+                        vida: { ...vida, rotina: { ...vida.rotina, terapia: !vida.rotina.terapia } },
+                      });
+                      onShowMessage(vida.rotina.terapia ? 'Sessões de terapia suspensas.' : 'Acompanhamento psicológico iniciado!');
+                    }}
+                    className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition ${
+                      vida.rotina.terapia
+                        ? 'border-indigo-500 bg-indigo-950/40 text-indigo-300'
+                        : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {vida.rotina.terapia ? 'Sessões Semanais Ativas' : 'Não Realiza Terapia'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Auxilia na regulação emocional, alivia estresse profissional e protege a estabilidade da felicidade.
+                </p>
+              </div>
+
+              {/* Padrão de Lazer */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-2.5 md:col-span-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-200">Padrão de Lazer & Vida Social</span>
+                  <span className="text-[11px] font-mono text-emerald-400">
+                    {vida.rotina.lazerNivel === 'ostentacao' ? 'R$ 7.500/mês' : vida.rotina.lazerNivel === 'moderado' ? 'R$ 1.600/mês' : 'R$ 400/mês'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'economico' as const, label: 'Econômico (Passeios simples)' },
+                    { id: 'moderado' as const, label: 'Moderado (Restaurantes e eventos)' },
+                    { id: 'ostentacao' as const, label: 'Alto Padrão (Viagens e luxo)' },
+                  ].map((opcao) => (
+                    <button
+                      key={opcao.id}
+                      type="button"
+                      onClick={() => {
+                        onUpdateEstado({
+                          ...estado,
+                          vida: { ...vida, rotina: { ...vida.rotina, lazerNivel: opcao.id } },
+                        });
+                        onShowMessage(`Padrão de lazer definido para ${opcao.label}.`);
+                      }}
+                      className={`py-2 px-2 text-xs font-semibold rounded-lg border transition ${
+                        vida.rotina.lazerNivel === opcao.id
+                          ? 'border-emerald-500 bg-emerald-950/40 text-emerald-300'
+                          : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {opcao.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </section>
         </div>
@@ -1101,14 +1600,20 @@ export const LifeView: React.FC<LifeViewProps> = ({
       {/* 4. SEÇÃO RELAÇÕES & FAMÍLIA */}
       {activeSubSection === 'familia' && (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-            <h3 className="flex items-center gap-2 font-bold text-slate-100">
-              <Users className="h-5 w-5 text-emerald-400" />
-              Círculo social, romance e família
-            </h3>
-            <p className="mt-2 text-sm text-slate-400">
-              Novos contatos surgem por oportunidades e acontecimentos da vida. Você escolhe se deseja se aproximar, sem pagar para gerar pessoas.
-            </p>
+          {/* Header de Família & Encontros Orgânicos */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-5 rounded-2xl">
+            <div>
+              <h3 className="font-bold text-slate-100 flex items-center gap-2">
+                <Users className="w-5 h-5 text-emerald-400" />
+                Círculo Social, Relações & Família
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Novos contatos surgem organicamente no trabalho, estudos, vizinhança e acontecimentos da vida. Cada vínculo permite até 2 interações diretas por mês.
+              </p>
+            </div>
+            <span className="px-3 py-1.5 rounded-xl text-[11px] font-semibold bg-slate-950 text-emerald-300 border border-slate-800 shrink-0">
+              Contatos orgânicos via rotina e eventos
+            </span>
           </div>
 
           {/* Relacionamento Amoroso / Cônjuge */}
@@ -1244,32 +1749,38 @@ export const LifeView: React.FC<LifeViewProps> = ({
               Amigos & Contatos ({((vida.familia?.amigos?.length || 0) + (vida.familia?.conhecidos?.length || 0))})
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {[...(vida.familia?.amigos || []), ...(vida.familia?.conhecidos || [])].map(rel => (
+              {[...(vida.familia?.amigos || []), ...(vida.familia?.conhecidos || [])].map(rel => {
+                const esgotouMes = (rel.interacoesNoMes ?? 0) >= 2;
+                return (
                 <div key={rel.id} className="p-3 rounded-xl bg-slate-800/40 border border-slate-700/60 flex items-center justify-between gap-3 text-xs">
                   <div className="flex min-w-0 items-center gap-3">
                     <NPCPortrait pessoa={rel} className="h-14 w-11" />
                     <div className="min-w-0">
-                    <span className="font-bold text-slate-200 block">{rel.nome}</span>
-                    <span className="text-[11px] text-slate-400">{rel.ocupacao || 'Contato'} • {rel.tipo.replace('_', ' ')} • Afinidade: {rel.nivelAfinidade}%</span>
+                    <span className="font-bold text-slate-200 block">{rel.nome} <span className="text-[10px] font-normal text-slate-400">({rel.idade} anos)</span></span>
+                    <span className="text-[11px] text-slate-400 block">{rel.ocupacao || 'Contato'} • {rel.tipo.replace('_', ' ')}</span>
+                    <span className="text-[10px] text-emerald-400 font-semibold">Afinidade: {rel.nivelAfinidade}% • No mês: {rel.interacoesNoMes ?? 0}/2</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
+                      disabled={esgotouMes}
                       onClick={() => handleAumentarAfinidade(rel, 'conversar')}
-                      className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 text-[11px] font-semibold"
+                      className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-200 text-[11px] font-semibold"
                     >
                       Conversar
                     </button>
                     <button
+                      disabled={esgotouMes}
                       onClick={() => handleAumentarAfinidade(rel, 'almoco')}
-                      className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 text-[11px] font-semibold"
+                      className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-200 text-[11px] font-semibold"
                     >
                       Almoçar
                     </button>
                     {['amigo_proximo', 'flerte'].includes(rel.tipo) && !vida.familia?.conjuge && (
                       <button
+                        disabled={esgotouMes}
                         onClick={() => handleAumentarAfinidade(rel, 'encontro')}
-                        className="px-2 py-1 rounded bg-indigo-700 hover:bg-indigo-600 text-white text-[11px] font-semibold"
+                        className="px-2 py-1 rounded bg-indigo-700 hover:bg-indigo-600 disabled:opacity-40 text-white text-[11px] font-semibold"
                       >
                         Encontro
                       </button>
@@ -1288,7 +1799,8 @@ export const LifeView: React.FC<LifeViewProps> = ({
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1304,43 +1816,48 @@ export const LifeView: React.FC<LifeViewProps> = ({
             </h3>
 
             {vida.cursoMatriculado && !vida.cursoMatriculado.concluido ? (
-              <div className="p-4 rounded-xl bg-purple-950/30 border border-purple-800/50 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="p-4 rounded-xl bg-purple-950/30 border border-purple-800/50 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <span className="text-base font-extrabold text-purple-200">{vida.cursoMatriculado.nome}</span>
-                    <span className="text-xs text-purple-400 block">
-                      Semestre {vida.cursoMatriculado.semestreAtual} de {vida.cursoMatriculado.totalSemestres} • Média: {vida.cursoMatriculado.notaMedia} • Provas: {vida.cursoMatriculado.provasRealizadas}/{vida.cursoMatriculado.provasRequeridas}
+                    <span className="text-xs text-purple-300 block mt-0.5">
+                      Semestre {vida.cursoMatriculado.semestreAtual} de {vida.cursoMatriculado.totalSemestres} • Média Atual: <strong>{vida.cursoMatriculado.notaMedia}</strong> • Avaliações: {vida.cursoMatriculado.provasRealizadas}/{vida.cursoMatriculado.provasRequeridas}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={handleEstudarProvas}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-purple-300 border border-purple-700 transition"
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-800/60 hover:bg-purple-700 text-purple-200 border border-purple-600/60 transition"
+                      title="Dedicar período de estudo complementar para reforçar a nota média"
                     >
-                      Revisar matéria (limitado por semana)
+                      Dedicar Estudo Extra
                     </button>
                     <button
                       onClick={handleRealizarProva}
                       disabled={!vida.cursoMatriculado || vida.cursoMatriculado.provasRealizadas >= vida.cursoMatriculado.provasRequeridas}
                       className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white transition"
                     >
-                      Fazer Avaliação
+                      Realizar Avaliação
                     </button>
                   </div>
                 </div>
 
-                <p className="text-xs text-purple-300/80">As presenças avançam automaticamente com os meses. Provas e dedicação continuam influenciando a aprovação.</p>
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs text-purple-300">
-                    <span>Frequência no Semestre: {vida.cursoMatriculado.aulasAssistidas} / {vida.cursoMatriculado.aulasRequeridas} aulas</span>
-                    <span>{Math.round((vida.cursoMatriculado.aulasAssistidas / vida.cursoMatriculado.aulasRequeridas) * 100)}%</span>
+                <div className="rounded-lg bg-slate-900/60 p-3 border border-purple-900/40 text-xs text-purple-300 space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span>Progresso e Frequência do Semestre</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {Math.round((vida.cursoMatriculado.aulasAssistidas / Math.max(1, vida.cursoMatriculado.aulasRequeridas)) * 100)}%
+                    </span>
                   </div>
-                  <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                  <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-purple-500 transition-all duration-300"
-                      style={{ width: `${Math.min(100, (vida.cursoMatriculado.aulasAssistidas / vida.cursoMatriculado.aulasRequeridas) * 100)}%` }}
+                      className="h-full bg-gradient-to-r from-purple-500 to-emerald-400 transition-all duration-300"
+                      style={{ width: `${Math.min(100, Math.round((vida.cursoMatriculado.aulasAssistidas / Math.max(1, vida.cursoMatriculado.aulasRequeridas)) * 100))}%` }}
                     />
                   </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Aulas e frequência avançam automaticamente na passagem dos dias e meses. Ao final de cada semestre, se mantida frequência acima de 65% e média mínima de 6.0, o semestre é aprovado.
+                  </p>
                 </div>
               </div>
             ) : (
@@ -1404,48 +1921,58 @@ export const LifeView: React.FC<LifeViewProps> = ({
             </div>
 
             {vida.empregoAtual ? (
-              <div className="p-4 rounded-xl bg-slate-800/60 border border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-                <div>
-                  <span className="font-bold text-slate-200 text-sm block">
-                    {CARREIRAS.find(c => c.id === vida.empregoAtual?.carreiraId)?.titulo}
-                  </span>
-                  <span className="text-slate-400">
-                    Salário Formal: <strong className="text-emerald-400 font-mono">R$ {vida.empregoAtual.salarioAcordado?.toLocaleString('pt-BR')}</strong> • Tempo no Cargo: {vida.empregoAtual.mesesNoCargo} meses
+              <div className="rounded-xl bg-slate-800/60 border border-slate-700 overflow-hidden">
+                <VisualIllustration tipo={vida.empregoAtual.carreiraId} className="w-full h-28 rounded-none border-0 border-b border-slate-700" />
+                <div className="p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                  <div>
+                    <span className="font-bold text-slate-200 text-sm block">
+                      {CARREIRAS.find(c => c.id === vida.empregoAtual?.carreiraId)?.titulo}
+                    </span>
+                    <span className="text-slate-400">
+                      Salário Formal: <strong className="text-emerald-400 font-mono">R$ {vida.empregoAtual.salarioAcordado?.toLocaleString('pt-BR')}</strong> • Tempo no Cargo: {vida.empregoAtual.mesesNoCargo} meses
+                    </span>
+                  </div>
+                  <span className="px-3 py-1 rounded-md bg-emerald-950 text-emerald-400 font-bold uppercase text-[10px]">
+                    Contrato Ativo
                   </span>
                 </div>
-                <span className="px-3 py-1 rounded-full bg-emerald-950 text-emerald-400 font-bold uppercase text-[10px]">
-                  Contrato Ativo
-                </span>
               </div>
             ) : (
               <p className="text-xs text-slate-400">Você não possui emprego formal de carteira assinada no momento.</p>
             )}
           </div>
 
-          {/* Vagas Abertas no Mercado */}
+          {/* Vagas Abertas no Mercado com Ilustrações Visuais */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
             <h4 className="font-bold text-slate-100 mb-3 text-xs uppercase tracking-wider text-emerald-400">
               Vagas Abertas & Requisitos Legais
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {CARREIRAS.map(car => (
-                <div key={car.id} className="p-3.5 rounded-xl bg-slate-800/40 border border-slate-700 text-xs space-y-2">
-                  <div className="flex justify-between items-start">
-                    <span className="font-bold text-slate-200">{car.titulo}</span>
-                    <span className="font-mono text-emerald-400 font-bold">R$ {car.salario.toLocaleString('pt-BR')}</span>
+                <div key={car.id} className="rounded-xl bg-slate-800/40 border border-slate-700 overflow-hidden flex flex-col justify-between text-xs">
+                  <div>
+                    <VisualIllustration tipo={car.id} className="w-full h-24 rounded-none border-0 border-b border-slate-700/80" />
+                    <div className="p-3.5 space-y-2">
+                      <div className="flex justify-between items-start gap-2">
+                        <span className="font-bold text-slate-100 text-sm">{car.titulo}</span>
+                        <span className="font-mono text-emerald-400 font-bold shrink-0">R$ {car.salario.toLocaleString('pt-BR')}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400">{car.descricao}</p>
+                      <div className="text-[10px] text-slate-400 space-y-0.5">
+                        <div>Requisito: {car.requisitoEducacao.toUpperCase()} • Intelecto mín: {car.requisitoIntelecto}</div>
+                        <div>Horário: {car.horarioInicio}:00 às {car.horarioFim}:00 • Estresse: {car.estresse}/10</div>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-[11px] text-slate-400">{car.descricao}</p>
-                  <div className="text-[10px] text-slate-400 space-y-0.5">
-                    <div>Requisito: {car.requisitoEducacao.toUpperCase()} • Intelecto mín: {car.requisitoIntelecto}</div>
-                    <div>Horário: {car.horarioInicio}:00 às {car.horarioFim}:00 • Estresse: {car.estresse}/10</div>
+                  <div className="px-3.5 pb-3.5">
+                    <button
+                      onClick={() => handleCandidatarCarreira(car.id)}
+                      disabled={vida.empregoAtual?.carreiraId === car.id}
+                      className="w-full py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white transition"
+                    >
+                      {vida.empregoAtual?.carreiraId === car.id ? 'Cargo Atual' : 'Candidatar-se'}
+                    </button>
                   </div>
-                  <button
-                    onClick={() => handleCandidatarCarreira(car.id)}
-                    disabled={vida.empregoAtual?.carreiraId === car.id}
-                    className="w-full py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white transition"
-                  >
-                    {vida.empregoAtual?.carreiraId === car.id ? 'Cargo Atual' : 'Candidatar-se'}
-                  </button>
                 </div>
               ))}
             </div>
@@ -1453,7 +1980,7 @@ export const LifeView: React.FC<LifeViewProps> = ({
         </div>
       )}
 
-      {/* 7. VEÍCULOS: garagem e concessionária */}
+      {/* 7. VEÍCULOS: garagem e concessionária com ilustrações */}
       {activeSubSection === 'bens' && (
         <div className="space-y-6">
           <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
@@ -1467,14 +1994,17 @@ export const LifeView: React.FC<LifeViewProps> = ({
             {(!vida.veiculos || vida.veiculos.length === 0) ? (
               <p className="rounded-xl border border-dashed border-slate-700 p-4 text-sm text-slate-400">Sua garagem está vazia. Veja os modelos disponíveis abaixo.</p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {vida.veiculos.map(v => {
                   const modelo = VEICULOS_CATALOGO[v.modeloId];
                   return (
-                    <div key={v.id} className="p-4 rounded-xl bg-slate-800/50 border border-slate-700 space-y-2">
-                      <div className="font-bold text-slate-100">{v.nome}</div>
-                      <div className="flex justify-between text-xs text-slate-400"><span>Ano de compra: {v.anoCompra}</span><span className="font-mono text-cyan-300">{formatarMoedaCompacta(v.valorMercadoAtual)}</span></div>
-                      <div className="text-xs text-slate-500">Manutenção estimada: {formatarMoedaCompacta(modelo?.custoMensalManutencao || 0)}/mês</div>
+                    <div key={v.id} className="rounded-xl bg-slate-800/50 border border-slate-700 overflow-hidden">
+                      <VisualIllustration tipo={v.modeloId} className="w-full h-28 rounded-none border-0 border-b border-slate-700" />
+                      <div className="p-4 space-y-2">
+                        <div className="font-bold text-slate-100">{v.nome}</div>
+                        <div className="flex justify-between text-xs text-slate-400"><span>Ano de compra: {v.anoCompra}</span><span className="font-mono text-cyan-300">{formatarMoedaCompacta(v.valorMercadoAtual)}</span></div>
+                        <div className="text-xs text-slate-500">Manutenção estimada: {formatarMoedaCompacta(modelo?.custoMensalManutencao || 0)}/mês</div>
+                      </div>
                     </div>
                   );
                 })}
@@ -1483,18 +2013,25 @@ export const LifeView: React.FC<LifeViewProps> = ({
           </section>
           <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
             <div><h3 className="font-bold text-slate-100">Concessionária</h3><p className="text-xs text-slate-400 mt-1">A compra reduz seu saldo imediatamente e cria despesas recorrentes de manutenção.</p></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {Object.values(VEICULOS_CATALOGO).map(modelo => {
                 const precoAtual = Math.round(modelo.precoCompra * (estado.indicePrecosAcumulado || 1));
                 return (
-                  <div key={modelo.id} className="rounded-xl border border-slate-700 bg-slate-950/60 p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-2"><span className="font-semibold text-sm text-slate-100">{modelo.nome}</span><span className="text-[10px] uppercase text-slate-500">{modelo.categoria}</span></div>
-                    <div className="text-lg font-bold font-mono text-cyan-300">{formatarMoedaCompacta(precoAtual)}</div>
-                    <div className="text-xs text-slate-400">Manutenção: {formatarMoedaCompacta(modelo.custoMensalManutencao)}/mês</div>
-                    <div className="text-xs text-slate-500">Conforto {modelo.conforto}/100 • Prestígio {modelo.prestígio}/100</div>
-                    <button type="button" disabled={vida.saldoBancario < precoAtual} onClick={() => handleComprarVeiculo(modelo.id)} className="w-full rounded-lg py-2 text-xs font-bold bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-500 text-white transition">
-                      {vida.saldoBancario < precoAtual ? 'Saldo insuficiente' : 'Comprar veículo'}
-                    </button>
+                  <div key={modelo.id} className="rounded-xl border border-slate-700 bg-slate-950/60 overflow-hidden flex flex-col justify-between">
+                    <div>
+                      <VisualIllustration tipo={modelo.id} className="w-full h-28 rounded-none border-0 border-b border-slate-800" />
+                      <div className="p-4 space-y-2">
+                        <div className="flex items-start justify-between gap-2"><span className="font-semibold text-sm text-slate-100">{modelo.nome}</span><span className="text-[10px] uppercase text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">{modelo.categoria}</span></div>
+                        <div className="text-lg font-bold font-mono text-cyan-300">{formatarMoedaCompacta(precoAtual)}</div>
+                        <div className="text-xs text-slate-400">Manutenção: {formatarMoedaCompacta(modelo.custoMensalManutencao)}/mês</div>
+                        <div className="text-xs text-slate-500">Conforto {modelo.conforto}/100 • Prestígio {modelo.prestígio}/100</div>
+                      </div>
+                    </div>
+                    <div className="px-4 pb-4">
+                      <button type="button" disabled={vida.saldoBancario < precoAtual} onClick={() => handleComprarVeiculo(modelo.id)} className="w-full rounded-lg py-2 text-xs font-bold bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-500 text-white transition">
+                        {vida.saldoBancario < precoAtual ? 'Saldo insuficiente' : 'Comprar veículo'}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -1503,147 +2040,611 @@ export const LifeView: React.FC<LifeViewProps> = ({
         </div>
       )}
 
-      {/* Patrimônio imobiliário individual: comprar não vende o bem anterior. */}
-      {activeSubSection === 'moradia' && (
-        <div className="space-y-5">
-          <section className="rounded-2xl border border-slate-700 bg-slate-900 p-5">
-            <div className="flex items-center gap-2"><Home className="w-5 h-5 text-emerald-400" /><h3 className="text-base font-bold text-slate-100">Minha residência</h3></div>
-            <p className="mt-2 text-lg font-semibold text-slate-100">{MORADIAS[vida.moradia]?.nome || 'Moradia não definida'}</p>
-            <p className="text-xs text-slate-400">{vida.casaPropria ? 'Você mora em um imóvel próprio.' : 'Moradia alugada ou cedida. Outros imóveis próprios continuam no patrimônio.'}</p>
-          </section>
+      {/* PROPRIEDADES & MERCADO IMOBILIÁRIO (Protótipo 3: Ilustração Arquitetônica, Ficha Técnica e Gaveta de Negociação) */}
+      {activeSubSection === 'moradia' && (() => {
+        const SPECS_IMOVEIS: Record<TipoMoradia, { bairro: string; metragem: string; quartos: string; perfil: string }> = {
+          pais: { bairro: 'Bairro Residencial Tradicional', metragem: '88 m²', quartos: '2 quartos • quintal', perfil: 'Casa Térrea Familiar' },
+          aluguel_simples: { bairro: 'Região Central / Eixo de Transporte', metragem: '32 m²', quartos: 'Studio • 1 vaga moto', perfil: 'Kitnet & Studio Urbano' },
+          apartamento_padrao: { bairro: 'Bairro Arborizado de Classe Média', metragem: '74 m²', quartos: '2 quartos (1 suíte) • varanda', perfil: 'Condomínio Residencial' },
+          apartamento_luxo: { bairro: 'Zona Nobre / Vista Panorâmica', metragem: '185 m²', quartos: '3 suítes • varanda gourmet', perfil: 'Torre de Alto Padrão' },
+          mansao: { bairro: 'Condomínio Fechado de Alto Luxo', metragem: '620 m²', quartos: '5 suítes • piscina & segurança 24h', perfil: 'Mansão Arquitetônica' },
+        };
+        const specAtual = SPECS_IMOVEIS[vida.moradia] || SPECS_IMOVEIS.pais;
 
-          <section className="rounded-2xl border border-slate-700 bg-slate-900 p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-100">Meus imóveis</h3>
-              <span className="text-xs text-emerald-400">{(vida.imoveis || []).length} propriedade(s)</span>
+        return (
+          <div className="space-y-6">
+            {/* Destaque da Residência Atual */}
+            <section className="rounded-2xl border border-slate-800 bg-slate-900/95 overflow-hidden shadow-xl">
+              <div className="grid grid-cols-1 md:grid-cols-[320px_1fr]">
+                <VisualIllustration tipo={vida.moradia} className="w-full h-44 md:h-full rounded-none border-0 border-b md:border-b-0 md:border-r border-slate-800" />
+                <div className="p-5 flex flex-col justify-between gap-4">
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-400">
+                        <Home className="w-4 h-4" /> Minha Residência Atual
+                      </span>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${vida.casaPropria ? 'bg-emerald-950/70 text-emerald-300 border-emerald-700/60' : 'bg-slate-800 text-slate-300 border-slate-700'}`}>
+                        {vida.casaPropria ? 'Imóvel Próprio Quitado' : 'Moradia Alugada / Cedida'}
+                      </span>
+                    </div>
+                    <h3 className="text-xl font-extrabold text-slate-100">{MORADIAS[vida.moradia]?.nome || 'Moradia'}</h3>
+                    <p className="text-xs text-slate-400">{specAtual.bairro} • {specAtual.perfil}</p>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2.5 text-xs">
+                    <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-2.5">
+                      <span className="text-[10px] uppercase text-slate-500 block font-semibold">Área Útil</span>
+                      <span className="font-bold text-slate-200">{specAtual.metragem}</span>
+                    </div>
+                    <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-2.5">
+                      <span className="text-[10px] uppercase text-slate-500 block font-semibold">Planta</span>
+                      <span className="font-bold text-slate-200 truncate block">{specAtual.quartos}</span>
+                    </div>
+                    <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-2.5">
+                      <span className="text-[10px] uppercase text-slate-500 block font-semibold">Conforto</span>
+                      <span className="font-bold text-emerald-400">+{MORADIAS[vida.moradia]?.conforto || 40} pts</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Portfólio de Imóveis Próprios */}
+            <section className="rounded-2xl border border-slate-800 bg-slate-900/95 p-5 space-y-4 shadow-xl">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-base font-bold text-slate-100">Meu Portfólio de Imóveis</h3>
+                  <p className="text-xs text-slate-400">Múltiplas propriedades permanecem no seu patrimônio. Clique em "Gerenciar Imóvel" para alugar, vender ou responder propostas.</p>
+                </div>
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-950/70 text-emerald-300 border border-emerald-800">
+                  {(vida.imoveis || []).length} propriedade(s) na escritura
+                </span>
+              </div>
+
+              {(vida.imoveis || []).length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-400">
+                  Você ainda não possui escrituras registradas em seu nome. Explore o Mercado Imobiliário abaixo para adquirir seu primeiro imóvel.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  {(vida.imoveis || []).map(imovel => {
+                    const reside = vida.imovelResidenciaId === imovel.id;
+                    const spec = SPECS_IMOVEIS[imovel.tipo] || SPECS_IMOVEIS.apartamento_padrao;
+                    const precoAnuncio = precosVendaImovel[imovel.id] ?? imovel.anuncio?.precoPedido ?? Math.round(imovel.valorMercadoAtual);
+                    const precoAluguel = precosAluguelImovel[imovel.id] ?? Math.round(MORADIAS[imovel.tipo].custoMensal * indiceImovel);
+                    const valorizacaoPct = imovel.valorCompra > 0
+                      ? (((imovel.valorMercadoAtual - imovel.valorCompra) / imovel.valorCompra) * 100).toFixed(1)
+                      : '0.0';
+                    const aberto = imovelGerenciandoId === imovel.id || Boolean(imovel.anuncio?.ofertaPendente);
+
+                    const statusBadge = reside
+                      ? { label: 'Residência Atual', cls: 'bg-emerald-950/90 text-emerald-300 border-emerald-700' }
+                      : imovel.alugadoParaTerceiros
+                        ? { label: `Alugado (${formatarMoedaCompacta(imovel.aluguelMensal || precoAluguel)}/mês)`, cls: 'bg-cyan-950/90 text-cyan-300 border-cyan-700' }
+                        : imovel.anuncio
+                          ? { label: `À Venda (${imovel.anuncio.mesesAnunciado}m)`, cls: 'bg-amber-950/90 text-amber-300 border-amber-700' }
+                          : imovel.aluguelAnunciado
+                            ? { label: 'Buscando Inquilino', cls: 'bg-indigo-950/90 text-indigo-300 border-indigo-700' }
+                            : { label: 'Desocupado / Disponível', cls: 'bg-slate-900/90 text-slate-300 border-slate-700' };
+
+                    return (
+                      <div key={imovel.id} className="rounded-2xl border border-slate-800 bg-slate-950/80 overflow-hidden flex flex-col justify-between shadow-lg">
+                        <div>
+                          <div className="relative">
+                            <VisualIllustration tipo={imovel.tipo} className="w-full h-36 rounded-none border-0 border-b border-slate-800" />
+                            <span className={`absolute top-3 right-3 px-2.5 py-1 rounded-full text-[11px] font-bold border shadow ${statusBadge.cls}`}>
+                              {statusBadge.label}
+                            </span>
+                          </div>
+
+                          <div className="p-4 space-y-3">
+                            <div>
+                              <div className="text-[11px] font-semibold text-emerald-400">{spec.bairro}</div>
+                              <h4 className="text-base font-extrabold text-slate-100">{imovel.nome}</h4>
+                              <p className="text-xs text-slate-400 mt-0.5">{spec.metragem} • {spec.quartos} • Adquirido em {String(imovel.mesCompra).padStart(2, '0')}/{imovel.anoCompra}</p>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2 rounded-xl bg-slate-900/80 border border-slate-800/80 p-3 text-xs">
+                              <div>
+                                <span className="text-[10px] uppercase text-slate-500 block">Valor Pago</span>
+                                <span className="font-mono font-semibold text-slate-300">{formatarMoedaCompacta(imovel.valorCompra)}</span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] uppercase text-slate-500 block">Avaliação Atual</span>
+                                <span className="font-mono font-bold text-emerald-300">{formatarMoedaCompacta(imovel.valorMercadoAtual)}</span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] uppercase text-slate-500 block">Valorização</span>
+                                <span className={`font-mono font-bold ${Number(valorizacaoPct) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                  {Number(valorizacaoPct) >= 0 ? `+${valorizacaoPct}%` : `${valorizacaoPct}%`}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Alerta imediato se houver proposta de compra na mesa */}
+                            {imovel.anuncio?.ofertaPendente && (
+                              <div className="rounded-xl border border-amber-500/80 bg-amber-950/30 p-3.5 space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs uppercase font-bold text-amber-300">Proposta de Compra Recebida</span>
+                                  <span className="font-mono text-sm font-extrabold text-amber-200">
+                                    {formatarMoedaCompacta(imovel.anuncio.ofertaPendente.valor)}
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <button type="button" onClick={() => handleResponderOferta(imovel.id, 'aceitar')} className="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-xs font-bold text-white transition">Aceitar Proposta</button>
+                                  <button type="button" onClick={() => handleResponderOferta(imovel.id, 'contraproposta', precoAnuncio)} className="flex-1 rounded-lg bg-amber-600 hover:bg-amber-500 px-3 py-2 text-xs font-bold text-white transition">Contrapropor</button>
+                                  <button type="button" onClick={() => handleResponderOferta(imovel.id, 'recusar')} className="rounded-lg border border-slate-600 hover:bg-slate-800 px-3 py-2 text-xs text-slate-200 transition">Recusar</button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Botões principais enxutos */}
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                              {!reside && !imovel.alugadoParaTerceiros && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOcuparImovel(imovel.id)}
+                                  className="flex-1 rounded-xl px-3 py-2 text-xs font-bold border border-emerald-700/80 text-emerald-300 hover:bg-emerald-950/50 transition"
+                                >
+                                  Mudar para este Imóvel
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setImovelGerenciandoId(imovelGerenciandoId === imovel.id ? null : imovel.id)}
+                                className="flex-1 rounded-xl px-3 py-2 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+                              >
+                                {aberto ? 'Ocultar Mesa de Negociação' : 'Gerenciar Locação / Venda'}
+                              </button>
+                            </div>
+
+                            {/* Gaveta recolhível de negociação imobiliária */}
+                            {aberto && (
+                              <div className="mt-2 pt-3 border-t border-slate-800 space-y-3 bg-slate-900/60 p-3 rounded-xl">
+                                {!imovel.alugadoParaTerceiros && !imovel.aluguelAnunciado && (
+                                  <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-slate-300 block">Valor Pedido para Venda (R$)</label>
+                                    <NumericField ariaLabel={`Preço de venda de ${imovel.nome}`} value={precoAnuncio} min={1} step={1000} onCommit={n => setPrecosVendaImovel(p => ({ ...p, [imovel.id]: n }))} />
+                                    <button type="button" onClick={() => handleAnunciarImovel(imovel.id, precoAnuncio)} className="w-full rounded-lg bg-amber-600/20 border border-amber-600/60 py-2 text-xs font-bold text-amber-300 hover:bg-amber-950/50 transition">
+                                      {imovel.anuncio ? 'Atualizar Valor do Anúncio' : 'Colocar Imóvel à Venda'}
+                                    </button>
+                                  </div>
+                                )}
+
+                                {!reside && !imovel.anuncio && !imovel.alugadoParaTerceiros && (
+                                  <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-slate-300 block">Valor de Aluguel Mensal (R$)</label>
+                                    <NumericField ariaLabel={`Aluguel de ${imovel.nome}`} value={precoAluguel} min={1} step={100} onCommit={n => setPrecosAluguelImovel(p => ({ ...p, [imovel.id]: n }))} />
+                                    <button type="button" onClick={() => handleOfertarAluguel(imovel.id, precoAluguel)} className="w-full rounded-lg bg-cyan-600/20 border border-cyan-600/60 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-950/50 transition">
+                                      {imovel.aluguelAnunciado ? 'Atualizar Aluguel Pedido' : 'Anunciar para Locação'}
+                                    </button>
+                                  </div>
+                                )}
+
+                                {(imovel.anuncio || imovel.aluguelAnunciado || imovel.alugadoParaTerceiros) && (
+                                  <button type="button" onClick={() => handleEncerrarAnuncio(imovel.id)} className="w-full rounded-lg border border-rose-800/70 bg-rose-950/30 py-2 text-xs font-bold text-rose-300 hover:bg-rose-950/60 transition">
+                                    Retirar Anúncio / Encerrar Contrato de Locação
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {/* Catálogo do Mercado Imobiliário */}
+            <section className="rounded-2xl border border-slate-800 bg-slate-900/95 p-5 space-y-4 shadow-xl">
+              <div>
+                <h3 className="text-base font-bold text-slate-100">Mercado Imobiliário & Lançamentos</h3>
+                <p className="text-xs text-slate-400">
+                  Preços reagem à inflação, juros (Selic) e aquecimento do PIB. Comprar adiciona a escritura ao seu portfólio sem vender seus imóveis atuais.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {Object.values(MORADIAS).filter(m => m.id !== 'pais').map(modelo => {
+                  const preco = precoImovelAtual(modelo.id, indiceImovel);
+                  const aluguelMes = Math.round(modelo.custoMensal * indiceImovel);
+                  const spec = SPECS_IMOVEIS[modelo.id] || SPECS_IMOVEIS.apartamento_padrao;
+                  return (
+                    <div key={modelo.id} className="rounded-2xl bg-slate-950/90 border border-slate-800 overflow-hidden flex flex-col justify-between shadow-lg hover:border-slate-700 transition">
+                      <div>
+                        <div className="relative">
+                          <VisualIllustration tipo={modelo.id} className="w-full h-36 rounded-none border-0 border-b border-slate-800" />
+                          <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-950/85 text-emerald-300 border border-slate-700">
+                            {spec.perfil}
+                          </span>
+                        </div>
+                        <div className="p-4 space-y-3">
+                          <div>
+                            <div className="text-[11px] font-semibold text-slate-400">{spec.bairro}</div>
+                            <h4 className="text-base font-extrabold text-slate-100">{modelo.nome}</h4>
+                            <p className="text-xs text-slate-400 mt-0.5">{spec.metragem} • {spec.quartos} • Conforto +{modelo.conforto}</p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2.5 rounded-xl bg-slate-900/80 border border-slate-800/80 p-3 text-xs">
+                            <div>
+                              <span className="text-[10px] uppercase text-slate-500 block">Valor de Compra</span>
+                              <p className="font-mono text-sm font-extrabold text-emerald-300">{formatarMoedaCompacta(preco)}</p>
+                            </div>
+                            <div>
+                              <span className="text-[10px] uppercase text-slate-500 block">Locação Mensal</span>
+                              <p className="font-mono text-sm font-bold text-slate-200">{formatarMoedaCompacta(aluguelMes)}/mês</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="px-4 pb-4 flex gap-2.5">
+                        <button
+                          type="button"
+                          disabled={vida.saldoBancario < preco}
+                          onClick={() => handleComprarMoradia(modelo.id)}
+                          className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3 py-2.5 text-xs font-bold text-white disabled:opacity-40 transition"
+                        >
+                          {vida.saldoBancario < preco ? 'Saldo Insuficiente' : 'Comprar Escritura'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAlugarMoradia(modelo.id)}
+                          className="flex-1 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 px-3 py-2.5 text-xs font-semibold text-slate-200 transition"
+                        >
+                          Alugar para Morar
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
+        );
+      })()}
+
+      {/* EDITOR DE IDENTIDADE E APARÊNCIA LADO A LADO (Protótipo 1: Retrato Grande + Abas Visuais sem <select>) */}
+      {modalAvatarAberto && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 sm:p-6 max-w-4xl w-full max-h-[92vh] overflow-y-auto shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3.5">
+              <div>
+                <h3 className="text-lg font-extrabold text-slate-100">Estúdio de Identidade & Aparência</h3>
+                <p className="text-xs text-slate-400">Personalize seu retrato 2D em tempo real. As feições refletem sua idade atual ({idadeAtual} anos).</p>
+              </div>
+              <button onClick={() => setModalAvatarAberto(false)} className="text-slate-400 hover:text-white px-2.5 py-1 rounded-lg bg-slate-800/70">✕</button>
             </div>
-            {(vida.imoveis || []).length === 0 && <p className="text-sm text-slate-400">Você ainda não possui imóveis. Compre um abaixo para começar o portfólio.</p>}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {(vida.imoveis || []).map(imovel => {
-                const reside = vida.imovelResidenciaId === imovel.id;
-                const precoAnuncio = precosVendaImovel[imovel.id] ?? imovel.anuncio?.precoPedido ?? Math.round(imovel.valorMercadoAtual);
-                const precoAluguel = precosAluguelImovel[imovel.id] ?? Math.round(MORADIAS[imovel.tipo].custoMensal * indiceImovel);
-                return (
-                  <div key={imovel.id} className="rounded-xl border border-slate-700 bg-slate-950 p-4 space-y-3">
-                    <div className="flex justify-between gap-3">
-                      <div><h4 className="font-semibold text-slate-100">{imovel.nome}</h4><p className="text-xs text-slate-500">Comprado em {imovel.mesCompra}/{imovel.anoCompra}</p></div>
-                      {reside && <span className="text-xs text-emerald-300">Residência atual</span>}
+
+            <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6 items-start">
+              {/* Coluna Esquerda Fixa: Retrato Grande + Nome */}
+              <div className="space-y-3 bg-slate-950/70 border border-slate-800 rounded-2xl p-4">
+                <div className="w-full overflow-hidden rounded-xl border border-slate-700 shadow-2xl">
+                  <div className="aspect-[6/7]">
+                    <CharacterPortrait config={avatarTemp} idade={idadeAtual} />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Nome civil completo</label>
+                  <input
+                    type="text"
+                    value={nomeTemp}
+                    onChange={e => setNomeTemp(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm font-semibold text-slate-100 focus:border-emerald-500 outline-none"
+                  />
+                </div>
+                <div className="text-[11px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-800/80">
+                  <span>Idade: <strong className="text-slate-200">{idadeAtual} anos</strong></span>
+                  <span>Altura: <strong className="text-slate-200">{avatarTemp.alturaCm || 170} cm</strong></span>
+                </div>
+              </div>
+
+              {/* Coluna Direita: Abas Visuais de Personalização */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+                  {([
+                    { id: 'rosto', label: '1. Rosto & Pele' },
+                    { id: 'cabelo', label: '2. Cabelo & Barba' },
+                    { id: 'estilo', label: '3. Roupas & Físico' },
+                  ] as const).map(aba => (
+                    <button
+                      key={aba.id}
+                      type="button"
+                      onClick={() => setAbaEditorAvatar(aba.id)}
+                      className={`py-2 px-3 rounded-lg text-xs font-bold transition ${
+                        abaEditorAvatar === aba.id
+                          ? 'bg-emerald-600 text-white shadow'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {aba.label}
+                    </button>
+                  ))}
+                </div>
+
+                {abaEditorAvatar === 'rosto' && (
+                  <div className="space-y-4 bg-slate-950/50 border border-slate-800/80 rounded-2xl p-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-emerald-400 block">Expressão de Gênero</label>
+                      <div className="grid grid-cols-2 gap-2.5">
+                        {(['masculino', 'feminino'] as const).map(sexo => (
+                          <button
+                            key={sexo}
+                            type="button"
+                            onClick={() =>
+                              setAvatarTemp({
+                                ...avatarTemp,
+                                sexo,
+                                barba: sexo === 'feminino' ? 'nenhuma' : avatarTemp.barba,
+                                bigode: sexo === 'feminino' ? false : avatarTemp.bigode,
+                                cabeloEstilo:
+                                  sexo === 'feminino' && (avatarTemp.cabeloEstilo === 'curto' || avatarTemp.cabeloEstilo === 'careca')
+                                    ? 'longo'
+                                    : avatarTemp.cabeloEstilo,
+                              })
+                            }
+                            className={`rounded-xl border px-3 py-2.5 text-xs font-bold transition ${
+                              avatarTemp.sexo === sexo
+                                ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300'
+                                : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600'
+                            }`}
+                          >
+                            {sexo === 'masculino' ? '♂ Masculino (Homem)' : '♀ Feminino (Mulher)'}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div><span className="text-slate-500">Compra</span><p className="font-mono text-slate-200">{formatarMoedaCompacta(imovel.valorCompra)}</p></div>
-                      <div><span className="text-slate-500">Valor estimado</span><p className="font-mono text-emerald-300">{formatarMoedaCompacta(imovel.valorMercadoAtual)}</p></div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-emerald-400 block">Tom de Pele</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        {([
+                          { id: 'clara', label: 'Clara', swatch: '#f2c6a6' },
+                          { id: 'oriental', label: 'Dourada / Oriental', swatch: '#ebb990' },
+                          { id: 'morena', label: 'Morena / Parda', swatch: '#c58457' },
+                          { id: 'negra', label: 'Negra / Retinta', swatch: '#704127' },
+                        ] as const).map(item => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => setAvatarTemp({ ...avatarTemp, pele: item.id })}
+                            className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${
+                              avatarTemp.pele === item.id
+                                ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300'
+                                : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600'
+                            }`}
+                          >
+                            <span className="w-4 h-4 rounded-full border border-white/20 shrink-0" style={{ backgroundColor: item.swatch }} />
+                            <span className="truncate">{item.label}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <p className="text-xs text-slate-400">{imovel.alugadoParaTerceiros ? 'Alugado para terceiros' : imovel.aluguelAnunciado ? 'Procurando inquilino' : imovel.anuncio ? `À venda há ${imovel.anuncio.mesesAnunciado} mês(es)` : 'Disponível para gestão'}</p>
-                    {!reside && !imovel.alugadoParaTerceiros && (
-                      <button type="button" onClick={() => handleOcuparImovel(imovel.id)} className="text-xs rounded-lg px-3 py-2 border border-emerald-700 text-emerald-300 hover:bg-emerald-950/40">Morar neste imóvel</button>
-                    )}
-                    {imovel.anuncio?.ofertaPendente && (
-                      <div className="rounded-lg border border-amber-600 bg-amber-950/25 p-3 space-y-2">
-                        <p className="text-sm font-bold text-amber-300">Oferta recebida: {formatarMoedaCompacta(imovel.anuncio.ofertaPendente.valor)}</p>
-                        <div className="flex flex-wrap gap-2">
-                          <button type="button" onClick={() => handleResponderOferta(imovel.id, 'aceitar')} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">Aceitar</button>
-                          <button type="button" onClick={() => handleResponderOferta(imovel.id, 'recusar')} className="rounded-lg border border-slate-600 px-3 py-2 text-xs text-slate-200">Recusar</button>
-                          <button type="button" onClick={() => handleResponderOferta(imovel.id, 'contraproposta', precoAnuncio)} className="rounded-lg bg-amber-700 px-3 py-2 text-xs text-white">Enviar contraproposta</button>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-emerald-400 block">Estrutura Facial</label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {([
+                          { id: 'oval', label: 'Oval Harmônico' },
+                          { id: 'fino', label: 'Angular / Fino' },
+                          { id: 'largo', label: 'Maxilar Forte' },
+                          { id: 'redondo', label: 'Suave / Redondo' },
+                        ] as const).map(formato => (
+                          <button
+                            key={formato.id}
+                            type="button"
+                            onClick={() => setAvatarTemp({ ...avatarTemp, formatoRosto: formato.id })}
+                            className={`rounded-xl border px-2.5 py-2.5 text-xs font-semibold transition ${
+                              (avatarTemp.formatoRosto || 'oval') === formato.id
+                                ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300'
+                                : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600'
+                            }`}
+                          >
+                            {formato.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {abaEditorAvatar === 'cabelo' && (
+                  <div className="space-y-4 bg-slate-950/50 border border-slate-800/80 rounded-2xl p-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-emerald-400 block">Corte & Volume de Cabelo</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {([
+                          { id: 'curto' as const, label: avatarTemp.sexo === 'feminino' ? 'Chanel / Pixie' : 'Social Curto' },
+                          { id: 'medio' as const, label: 'Médio / Ondulado' },
+                          { id: 'longo' as const, label: 'Longo em Camadas' },
+                          { id: 'crespo' as const, label: 'Crespo / Cacheado' },
+                          ...(avatarTemp.sexo !== 'feminino' ? [{ id: 'careca' as const, label: 'Raspado / Careca' }] : []),
+                        ]).map(estilo => (
+                          <button
+                            key={estilo.id}
+                            type="button"
+                            onClick={() => setAvatarTemp({ ...avatarTemp, cabeloEstilo: estilo.id })}
+                            className={`rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${
+                              avatarTemp.cabeloEstilo === estilo.id
+                                ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300'
+                                : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600'
+                            }`}
+                          >
+                            {estilo.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-emerald-400 block">Coloração dos Fios</label>
+                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                        {([
+                          { id: 'preto', label: 'Preto', swatch: '#141720' },
+                          { id: 'castanho', label: 'Castanho', swatch: '#4a2e1b' },
+                          { id: 'loiro', label: 'Loiro', swatch: '#cfa246' },
+                          { id: 'ruivo', label: 'Ruivo', swatch: '#99371e' },
+                          { id: 'grisalho', label: 'Grisalho', swatch: '#929ba8' },
+                        ] as const).map(cor => (
+                          <button
+                            key={cor.id}
+                            type="button"
+                            onClick={() => setAvatarTemp({ ...avatarTemp, cabeloCor: cor.id })}
+                            className={`flex items-center justify-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs font-semibold transition ${
+                              avatarTemp.cabeloCor === cor.id
+                                ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300'
+                                : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600'
+                            }`}
+                          >
+                            <span className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0" style={{ backgroundColor: cor.swatch }} />
+                            <span>{cor.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {avatarTemp.sexo !== 'feminino' && (
+                      <div className="space-y-2 pt-1 border-t border-slate-800/80">
+                        <label className="text-xs font-bold uppercase tracking-wider text-emerald-400 block">Barba & Bigode</label>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {([
+                            { id: 'nenhuma', label: 'Rosto Limpo' },
+                            { id: 'curta', label: 'Barba Serrada' },
+                            { id: 'cheia', label: 'Barba Cheia' },
+                          ] as const).map(b => (
+                            <button
+                              key={b.id}
+                              type="button"
+                              onClick={() => setAvatarTemp({ ...avatarTemp, barba: b.id })}
+                              className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                                (avatarTemp.barba || 'nenhuma') === b.id
+                                  ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300'
+                                  : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600'
+                              }`}
+                            >
+                              {b.label}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setAvatarTemp({ ...avatarTemp, bigode: !avatarTemp.bigode })}
+                            className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                              avatarTemp.bigode
+                                ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300'
+                                : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600'
+                            }`}
+                          >
+                            {avatarTemp.bigode ? '✓ Com Bigode' : '+ Usar Bigode'}
+                          </button>
                         </div>
                       </div>
                     )}
-                    {!imovel.alugadoParaTerceiros && !imovel.aluguelAnunciado && (
-                      <div className="space-y-1">
-                        <label className="text-xs text-slate-400">Preço de venda desejado (R$)</label>
-                        <NumericField ariaLabel={`Preço de venda de ${imovel.nome}`} value={precoAnuncio} min={1} step={1000} onCommit={n => setPrecosVendaImovel(p => ({ ...p, [imovel.id]: n }))} />
-                        <button type="button" onClick={() => handleAnunciarImovel(imovel.id, precoAnuncio)} className="w-full rounded-lg border border-amber-700/70 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-950/40">Anunciar venda / atualizar preço</button>
-                      </div>
-                    )}
-                    {!reside && !imovel.anuncio && !imovel.alugadoParaTerceiros && (
-                      <div className="space-y-1">
-                        <label className="text-xs text-slate-400">Aluguel desejado (R$/mês)</label>
-                        <NumericField ariaLabel={`Aluguel de ${imovel.nome}`} value={precoAluguel} min={1} step={100} onCommit={n => setPrecosAluguelImovel(p => ({ ...p, [imovel.id]: n }))} />
-                        <button type="button" onClick={() => handleOfertarAluguel(imovel.id, precoAluguel)} className="w-full rounded-lg border border-cyan-700/70 py-2 text-xs font-semibold text-cyan-300 hover:bg-cyan-950/40">{imovel.aluguelAnunciado ? 'Atualizar aluguel' : 'Procurar inquilino'}</button>
-                      </div>
-                    )}
-                    {(imovel.anuncio || imovel.aluguelAnunciado || imovel.alugadoParaTerceiros) && (
-                      <button type="button" onClick={() => handleEncerrarAnuncio(imovel.id)} className="text-xs text-rose-300 hover:text-rose-200 underline">Retirar anúncio / encerrar contrato</button>
-                    )}
                   </div>
-                );
-              })}
-            </div>
-          </section>
+                )}
 
-          <section className="rounded-2xl border border-slate-700 bg-slate-900 p-5 space-y-4">
-            <div><h3 className="text-base font-bold text-slate-100">Mercado imobiliário</h3><p className="text-xs text-slate-400">Comprar aumenta seu patrimônio sem vender nada automaticamente. Os preços nominais se ajustam à inflação do mundo simulado.</p></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {Object.values(MORADIAS).filter(m => m.id !== 'pais').map(modelo => {
-                const preco = precoImovelAtual(modelo.id, indiceImovel);
-                return (
-                  <div key={modelo.id} className="rounded-xl bg-slate-950 border border-slate-800 p-4 space-y-3">
-                    <h4 className="text-sm font-bold text-slate-100">{modelo.nome}</h4>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div><span className="text-slate-500">Comprar</span><p className="font-mono font-bold text-emerald-300">{formatarMoedaCompacta(preco)}</p></div>
-                      <div><span className="text-slate-500">Alugar/mês</span><p className="font-mono font-bold text-slate-200">{formatarMoedaCompacta(modelo.custoMensal * indiceImovel)}</p></div>
+                {abaEditorAvatar === 'estilo' && (
+                  <div className="space-y-4 bg-slate-950/50 border border-slate-800/80 rounded-2xl p-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-emerald-400 block">Vestuário & Traje</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {([
+                          { id: 'casual', label: 'Casual Urbano' },
+                          { id: 'social', label: 'Executivo / Social' },
+                          { id: 'trabalho', label: 'Operacional / Campo' },
+                          { id: 'esporte', label: 'Esportivo / Treino' },
+                          { id: 'elegante', label: 'Gala / Alta Costura' },
+                        ] as const).map(r => (
+                          <button
+                            key={r.id}
+                            type="button"
+                            onClick={() => setAvatarTemp({ ...avatarTemp, roupa: r.id })}
+                            className={`rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${
+                              avatarTemp.roupa === r.id
+                                ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300'
+                                : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600'
+                            }`}
+                          >
+                            {r.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button type="button" disabled={vida.saldoBancario < preco} onClick={() => handleComprarMoradia(modelo.id)} className="flex-1 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">Comprar</button>
-                      <button type="button" onClick={() => handleAlugarMoradia(modelo.id)} className="flex-1 rounded-lg border border-slate-600 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800">Morar de aluguel</button>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-emerald-400 block">Acessório Principal</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {([
+                          { id: 'nenhum', label: 'Sem Acessório' },
+                          { id: 'oculos', label: 'Óculos de Grau' },
+                          { id: 'relogio', label: 'Relógio Clássico' },
+                          { id: 'chapeu', label: 'Chapéu / Boné' },
+                        ] as const).map(ac => (
+                          <button
+                            key={ac.id}
+                            type="button"
+                            onClick={() => setAvatarTemp({ ...avatarTemp, acessorio: ac.id })}
+                            className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                              avatarTemp.acessorio === ac.id
+                                ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300'
+                                : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600'
+                            }`}
+                          >
+                            {ac.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-800/80">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase tracking-wider text-emerald-400 block">Porte Físico</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {([
+                            { id: 'magro', label: 'Esguio' },
+                            { id: 'medio', label: 'Médio' },
+                            { id: 'forte', label: 'Atlético' },
+                            { id: 'robusto', label: 'Robusto' },
+                          ] as const).map(tf => (
+                            <button
+                              key={tf.id}
+                              type="button"
+                              onClick={() => setAvatarTemp({ ...avatarTemp, tipoFisico: tf.id })}
+                              className={`rounded-xl border px-2.5 py-2 text-xs font-semibold transition ${
+                                (avatarTemp.tipoFisico || 'medio') === tf.id
+                                  ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300'
+                                  : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600'
+                              }`}
+                            >
+                              {tf.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase tracking-wider text-emerald-400 block">Estatura (cm)</label>
+                        <NumericField
+                          ariaLabel="Altura do personagem em centímetros"
+                          min={100}
+                          max={250}
+                          integer
+                          step={1}
+                          value={avatarTemp.alturaCm || 170}
+                          onCommit={valor => setAvatarTemp({ ...avatarTemp, alturaCm: valor })}
+                        />
+                      </div>
                     </div>
                   </div>
-                );
-              })}
+                )}
+              </div>
             </div>
-          </section>
-        </div>
-      )}
 
-      {/* EDITOR DE IDENTIDADE DO PERSONAGEM */}
-      {modalAvatarAberto && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 sm:p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div><h3 className="text-lg font-bold text-slate-100">Personalizar personagem</h3><p className="text-xs text-slate-400">Defina sua identidade e aparência.</p></div>
-              <button onClick={() => setModalAvatarAberto(false)} className="text-slate-400 hover:text-white px-2 py-1">✕</button>
+            <div className="flex justify-end gap-2.5 border-t border-slate-800 pt-4">
+              <button onClick={() => setModalAvatarAberto(false)} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white">
+                Cancelar
+              </button>
+              <button onClick={handleSalvarAvatar} className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-950/50">
+                Salvar Identidade & Aparência
+              </button>
             </div>
-            <div><label className="text-xs text-slate-400 block mb-1">Nome completo</label><input type="text" value={nomeTemp} onChange={e => setNomeTemp(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100" /></div>
-            <div className="grid grid-cols-1 sm:grid-cols-[190px_1fr] gap-4 items-center rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-              <div className="w-full max-w-[190px] mx-auto overflow-hidden rounded-lg border border-slate-700 shadow-lg">
-                <div className="aspect-[6/7]"><CharacterPortrait config={avatarTemp} /></div>
-              </div>
-              <div className="space-y-1">
-                <div className="text-sm font-bold text-slate-100">Prévia em tempo real</div>
-                <p className="text-xs text-slate-400">Escolha contorno facial, pele, cabelo, barba, roupas e acessórios. Cada alteração aparece no retrato em tempo real.</p>
-              </div>
-            </div>
-            <section className="space-y-2"><h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400">Identidade</h4>
-              <div className="grid grid-cols-2 gap-2">
-                {(['masculino','feminino'] as const).map(sexo => <button key={sexo} type="button" onClick={() => setAvatarTemp({...avatarTemp,sexo, barba: sexo === 'feminino' ? 'nenhuma' : avatarTemp.barba})} className={`rounded-lg border px-3 py-3 text-sm font-semibold capitalize ${avatarTemp.sexo === sexo ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300' : 'border-slate-700 bg-slate-800 text-slate-300'}`}>{sexo === 'masculino' ? '♂ Masculino' : '♀ Feminino'}</button>)}
-              </div>
-              <label className="text-xs text-slate-400 block">Formato do rosto</label>
-              <div className="grid grid-cols-4 gap-2">
-                {(['oval','fino','largo','redondo'] as const).map(formato => (
-                  <button key={formato} type="button" onClick={() => setAvatarTemp({...avatarTemp,formatoRosto:formato})}
-                    className={`rounded-lg border px-2 py-2 text-xs capitalize ${(avatarTemp.formatoRosto || 'oval') === formato ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300' : 'border-slate-700 bg-slate-800 text-slate-300'}`}>
-                    {formato}
-                  </button>
-                ))}
-              </div>
-              <label className="text-xs text-slate-400 block">Tom de pele</label><div className="grid grid-cols-4 gap-2">{(['clara','morena','negra','oriental'] as const).map(pele => <button key={pele} onClick={() => setAvatarTemp({...avatarTemp,pele})} className={`rounded-lg border px-2 py-2 text-xs capitalize ${avatarTemp.pele===pele?'border-emerald-400 bg-emerald-500/15 text-emerald-300':'border-slate-700 bg-slate-800 text-slate-300'}`}>{pele}</button>)}</div>
-            </section>
-            <section className="space-y-3"><h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400">Cabelo e pelos faciais</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <label className="text-xs text-slate-400">Estilo de cabelo<select value={avatarTemp.cabeloEstilo} onChange={e=>setAvatarTemp({...avatarTemp,cabeloEstilo:e.target.value as AvatarConfig['cabeloEstilo']})} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-100"><option value="curto">Curto</option><option value="medio">Médio</option><option value="longo">Longo</option><option value="crespo">Crespo</option><option value="careca">Careca</option></select></label>
-                <label className="text-xs text-slate-400">Cor do cabelo<select value={avatarTemp.cabeloCor} onChange={e=>setAvatarTemp({...avatarTemp,cabeloCor:e.target.value as AvatarConfig['cabeloCor']})} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-100"><option value="preto">Preto</option><option value="castanho">Castanho</option><option value="loiro">Loiro</option><option value="ruivo">Ruivo</option><option value="grisalho">Grisalho</option></select></label>
-                <label className="text-xs text-slate-400">Barba<select value={avatarTemp.barba || 'nenhuma'} onChange={e=>setAvatarTemp({...avatarTemp,barba:e.target.value as AvatarConfig['barba']})} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-100"><option value="nenhuma">Sem barba</option><option value="curta">Barba curta</option><option value="cheia">Barba cheia</option></select></label>
-                <label className="text-xs text-slate-400 flex items-center gap-2"><input type="checkbox" checked={!!avatarTemp.bigode} onChange={e=>setAvatarTemp({...avatarTemp,bigode:e.target.checked})} /> Usar bigode</label>
-                <label className="text-xs text-slate-400">Roupa<select value={avatarTemp.roupa} onChange={e=>setAvatarTemp({...avatarTemp,roupa:e.target.value as AvatarConfig['roupa']})} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-100"><option value="casual">Casual</option><option value="social">Social / terno</option><option value="trabalho">Trabalho / campo</option><option value="esporte">Esportivo</option><option value="elegante">Elegante</option></select></label>
-                <label className="text-xs text-slate-400">Acessório<select value={avatarTemp.acessorio} onChange={e=>setAvatarTemp({...avatarTemp,acessorio:e.target.value as AvatarConfig['acessorio']})} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-100"><option value="nenhum">Nenhum</option><option value="oculos">Óculos</option><option value="relogio">Relógio</option><option value="chapeu">Chapéu</option></select></label>
-              </div>
-            </section>
-            <section className="space-y-3"><h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400">Características físicas</h4><p className="text-xs text-slate-500">Esses atributos fazem parte da ficha do personagem. Não alteram o desenho do avatar.</p>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="text-xs text-slate-400">Tipo físico<select value={avatarTemp.tipoFisico || 'medio'} onChange={e=>setAvatarTemp({...avatarTemp,tipoFisico:e.target.value as AvatarConfig['tipoFisico']})} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-100"><option value="magro">Magro</option><option value="medio">Médio</option><option value="forte">Forte</option><option value="robusto">Robusto</option></select></label>
-                <label className="text-xs text-slate-400">Altura (cm)<NumericField ariaLabel="Altura do personagem em centímetros" min={100} max={250} integer step={1} value={avatarTemp.alturaCm || 170} onCommit={valor=>setAvatarTemp({...avatarTemp,alturaCm:valor})} /></label>
-              </div>
-            </section>
-            <div className="flex justify-end gap-2 border-t border-slate-800 pt-4"><button onClick={()=>setModalAvatarAberto(false)} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white">Cancelar</button><button onClick={handleSalvarAvatar} className="px-5 py-2 rounded-lg text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white">Salvar alterações</button></div>
           </div>
         </div>
       )}

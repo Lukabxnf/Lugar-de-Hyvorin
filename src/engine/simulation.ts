@@ -1,12 +1,11 @@
 import { simularMesMacroeconomia } from './macro';
 import { calcularIdadeExata, simularHoraVida, simularMesVida } from './life';
-import { processarDiaVida } from './habitos';
 import { simularMesEmpresa } from './business';
 import { simularMesImoveis } from './imoveis';
 import { isAnoEleitoral, simularMesPolitica } from './politics';
-import { sortearEventoDecisao, sortearEventoMensal } from './events';
-import { CARREIRAS, CARGOS_POLITICOS, CURSOS } from './data';
-import { DiaSemana, Empresa, EstadoJogo, EventoDecisao, HistoricoPonto, NoticiaGazeta, PropostaFechamentoIA } from './types';
+import { sortearEventoDecisao, sortearEventoMensal, sortearMultiplosEventosPeriodo } from './events';
+import { CARREIRAS, CARGOS_POLITICOS, CURSOS, MORADIAS } from './data';
+import { AcontecimentoPropostoIA, AvatarConfig, DiaSemana, Empresa, EstadoJogo, EventoDecisao, HistoricoPonto, NoticiaGazeta, PropostaFechamentoIA, Relacionamento } from './types';
 
 export const DIAS_DA_SEMANA: DiaSemana[] = [
   'Segunda-feira',
@@ -18,13 +17,54 @@ export const DIAS_DA_SEMANA: DiaSemana[] = [
   'Domingo',
 ];
 
+const DIAS_CALENDARIO_UTC: DiaSemana[] = [
+  'Domingo',
+  'Segunda-feira',
+  'Terça-feira',
+  'Quarta-feira',
+  'Quinta-feira',
+  'Sexta-feira',
+  'Sábado',
+];
+
 export function diasNoMes(ano: number, mes: number): number {
   return new Date(Date.UTC(ano, mes, 0)).getUTCDate();
 }
 
-export function diaSemanaDaData(dia: number, mes: number, ano: number): DiaSemana {
+export function calcularDiaSemanaCalendario(ano: number, mes: number, dia: number): DiaSemana {
   const indice = new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay();
-  return DIAS_DA_SEMANA[(indice + 6) % 7];
+  return DIAS_CALENDARIO_UTC[indice] || 'Segunda-feira';
+}
+
+export function sortearDiaVariadoDoMes(
+  ano: number,
+  mes: number,
+  diaAnterior: number,
+  semente: number,
+  diaSemanaAnterior?: DiaSemana
+): number {
+  const maxDias = diasNoMes(ano, mes);
+  const r = Math.random();
+  let candidato: number;
+  // ~10% de chance de cair no dia 1; ~90% de cair em datas variadas ao longo do mês
+  if (r < 0.10 && diaAnterior !== 1) {
+    candidato = 1;
+  } else {
+    const base = Math.floor(r * (maxDias - 1)) + 2;
+    const deslocamento = (semente * 7 + diaAnterior * 5) % (maxDias - 1);
+    candidato = ((base + deslocamento - 2) % (maxDias - 1)) + 2;
+  }
+  if (candidato === diaAnterior && maxDias > 2) {
+    candidato = ((candidato + 6) % maxDias) + 1;
+  }
+  // Garante também que o dia da semana mude na virada para não parecer travado
+  if (diaSemanaAnterior && calcularDiaSemanaCalendario(ano, mes, candidato) === diaSemanaAnterior) {
+    candidato = (candidato % maxDias) + 1;
+    if (candidato === diaAnterior) {
+      candidato = ((candidato + 1) % maxDias) + 1;
+    }
+  }
+  return Math.max(1, Math.min(maxDias, candidato));
 }
 
 function aplicarAgendaDoHorario(estado: EstadoJogo): EstadoJogo {
@@ -196,7 +236,7 @@ export function avancarMinutosSimulacao(estado: EstadoJogo, qtdMinutos = 1): Est
     if (virouDia) {
       if (novoDia > diasNoMes(novoEstado.anoAtual, novoEstado.mesAtual)) {
         // O fechamento usa o número real de dias do mês, incluindo fevereiro bissexto.
-        novoEstado = avancarMesSimulacao({ ...novoEstado, diaAtual: 1 });
+        novoEstado = avancarMesSimulacao({ ...novoEstado, diaAtual: 1 }, undefined, true);
       } else if (
         Math.random() < 0.10 &&
         (!novoEstado.eventosPendentes || novoEstado.eventosPendentes.length === 0)
@@ -243,6 +283,218 @@ export function avancarHorasSimulacao(estado: EstadoJogo, qtdHoras = 1): EstadoJ
   return avancarMinutosSimulacao(estadoAlinhado, horas * 60);
 }
 
+/**
+ * Sorteia um novo contato orgânico (trabalho, estudos ou vizinhança/comunidade).
+ * Cria avatar persistente e perfil autêntico brasileiro.
+ */
+export function sortearEncontroOrganico(estado: EstadoJogo): Relacionamento {
+  const nomesFemininos = [
+    'Juliana Prado', 'Camila Santos', 'Larissa Ribeiro', 'Beatriz Castelo',
+    'Amanda Alencar', 'Mariana Valente', 'Carla Fernandes', 'Priscila Duarte',
+    'Fernanda Vasconcelos', 'Vanessa Silveira', 'Natália Diniz', 'Isabela Correa',
+    'Letícia Farias', 'Débora Guimarães', 'Renata Queiroz', 'Aline Meireles'
+  ];
+  const nomesMasculinos = [
+    'Lucas Mendonça', 'Gabriel Nogueira', 'Felipe Azevedo', 'Matheus Vasconcelos',
+    'Thiago Moreira', 'Vinícius Rocha', 'Diego Guimarães', 'Rodrigo Farias',
+    'Eduardo Siqueira', 'Bruno Cerqueira', 'Gustavo Pires', 'Leonardo Brandão',
+    'Rafael Antunes', 'André Tavares', 'Marcelo Fontes', 'Guilherme Toledo'
+  ];
+  const feminino = Math.random() < 0.5;
+  const lista = feminino ? nomesFemininos : nomesMasculinos;
+  const nome = lista[Math.floor(Math.random() * lista.length)];
+
+  let ocupacao = 'Profissional Autônomo';
+  if (estado.vida.empregoAtual) {
+    const car = CARREIRAS.find(c => c.id === estado.vida.empregoAtual?.carreiraId);
+    if (car && Math.random() < 0.65) {
+      ocupacao = `Colega de trabalho (${car.titulo})`;
+    }
+  } else if (estado.vida.cursoMatriculado && !estado.vida.cursoMatriculado.concluido) {
+    if (Math.random() < 0.65) {
+      ocupacao = `Colega de turma (${estado.vida.cursoMatriculado.nome})`;
+    }
+  }
+
+  const personalidades = [
+    'Sociável e bem-humorado(a)',
+    'Trabalhador(a) e focado(a)',
+    'Espontâneo(a) e prestativo(a)',
+    'Inteligente e comunicativo(a)',
+    'Calmo(a) e reflexivo(a)',
+  ];
+
+  const peles: AvatarConfig['pele'][] = ['clara', 'morena', 'negra', 'oriental'];
+  const cabelos: AvatarConfig['cabeloCor'][] = ['preto', 'castanho', 'loiro', 'ruivo'];
+  const estilosFemininos: AvatarConfig['cabeloEstilo'][] = ['longo', 'medio', 'crespo'];
+  const estilosMasculinos: AvatarConfig['cabeloEstilo'][] = ['curto', 'medio', 'crespo'];
+  const roupas: AvatarConfig['roupa'][] = ['casual', 'social', 'trabalho', 'esporte', 'elegante'];
+
+  const avatar: AvatarConfig = {
+    sexo: feminino ? 'feminino' : 'masculino',
+    formatoRosto: feminino
+      ? (['oval', 'fino'] as const)[Math.floor(Math.random() * 2)]
+      : (['oval', 'largo', 'redondo'] as const)[Math.floor(Math.random() * 3)],
+    pele: peles[Math.floor(Math.random() * peles.length)],
+    cabeloCor: cabelos[Math.floor(Math.random() * cabelos.length)],
+    cabeloEstilo: feminino
+      ? estilosFemininos[Math.floor(Math.random() * estilosFemininos.length)]
+      : estilosMasculinos[Math.floor(Math.random() * estilosMasculinos.length)],
+    roupa: roupas[Math.floor(Math.random() * roupas.length)],
+    acessorio: Math.random() < 0.25 ? 'oculos' : 'nenhum',
+    barba: !feminino && Math.random() < 0.35 ? 'curta' : 'nenhuma',
+    bigode: !feminino && Math.random() < 0.15,
+  };
+
+  return {
+    id: `contato_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    nome,
+    tipo: 'conhecido',
+    nivelAfinidade: 35 + Math.floor(Math.random() * 20),
+    idade: Math.max(18, estado.vida.idade + Math.floor(Math.random() * 6) - 3),
+    ocupacao,
+    personalidade: personalidades[Math.floor(Math.random() * personalidades.length)],
+    mesesConvivencia: 0,
+    mesesSemContato: 0,
+    interacoesSignificativas: 0,
+    avatar,
+  };
+}
+
+/**
+ * Avança o calendário em dias simulados (+1 Dia ou +1 Semana = 7 Dias):
+ * - Avança dia a dia cronologicamente.
+ * - Aniversário exato: ao chegar na data de nascimento, o personagem envelhece de forma estrita.
+ * - Rotina diária sustentada: sono noturno recompõe a energia vital automaticamente;
+ *   hábitos (plano de saúde, academia, alimentação, terapia) garantem manutenção do bem-estar;
+ *   inadimplência ou contas vencidas geram desgaste financeiro e ansiedade.
+ * - Encontros sociais orgânicos (colegas de trabalho, faculdade ou comunidade).
+ * - Ao ultrapassar o total de dias do mês corrente, processa o fechamento mensal completo.
+ * - Pausa imediatamente caso um evento de decisão pendente seja gerado.
+ */
+export function avancarDiasSimulacao(estado: EstadoJogo, qtdDias = 1): EstadoJogo {
+  const totalDias = Number.isFinite(qtdDias) ? Math.max(0, Math.floor(qtdDias)) : 0;
+  if (totalDias === 0) return estado;
+  if (estado.eventosPendentes.length > 0) return estado;
+
+  let atual: EstadoJogo = { ...estado };
+
+  for (let d = 0; d < totalDias; d++) {
+    if (atual.eventosPendentes.length > 0) break;
+
+    const proximoDia = atual.diaAtual + 1;
+    const indiceDia = DIAS_DA_SEMANA.indexOf(atual.diaSemanaAtual);
+    const proximoDiaSemana = DIAS_DA_SEMANA[(indiceDia + 1) % DIAS_DA_SEMANA.length];
+    const diasLimite = diasNoMes(atual.anoAtual, atual.mesAtual);
+
+    if (proximoDia > diasLimite) {
+      // Virada do mês: executa a apuração contábil, salarial, Copom e empresarial
+      atual = avancarMesSimulacao(
+        {
+          ...atual,
+          diaAtual: 1,
+          diaSemanaAtual: proximoDiaSemana,
+        },
+        undefined,
+        true
+      );
+      if (atual.eventosPendentes.length > 0) break;
+      continue;
+    }
+
+    let novaVida = { ...atual.vida };
+
+    // 1. Sono noturno diário recupera energia vital
+    const baseEnergia = 88;
+    const bonusConforto = (MORADIAS[novaVida.moradia]?.conforto || 0) * 0.1;
+    novaVida.energia = Math.min(100, Math.max(baseEnergia + bonusConforto, novaVida.energia));
+
+    // 2. Efeitos diários dos hábitos de estilo de vida
+    let deltaSaudeDia = 0;
+    let deltaFelicidadeDia = 0;
+
+    if (novaVida.rotina.academia) {
+      deltaSaudeDia += 0.08;
+      deltaFelicidadeDia += 0.05;
+    }
+    if (novaVida.rotina.planoSaude === 'completo') {
+      deltaSaudeDia += 0.06;
+    }
+    if (novaVida.rotina.padraoAlimentacao === 'saudavel') {
+      deltaSaudeDia += 0.05;
+    } else if (novaVida.rotina.padraoAlimentacao === 'premium') {
+      deltaSaudeDia += 0.08;
+      deltaFelicidadeDia += 0.05;
+    }
+    if (novaVida.rotina.terapia) {
+      deltaFelicidadeDia += 0.1;
+    }
+    if (novaVida.rotina.lazerNivel === 'moderado') {
+      deltaFelicidadeDia += 0.06;
+    } else if (novaVida.rotina.lazerNivel === 'ostentacao') {
+      deltaFelicidadeDia += 0.15;
+    }
+
+    if (novaVida.contasVencidas && novaVida.contasVencidas.length > 0) {
+      deltaSaudeDia -= novaVida.contasVencidas.length * 0.04;
+      deltaFelicidadeDia -= novaVida.contasVencidas.length * 0.1;
+    }
+
+    novaVida.saude = Math.max(10, Math.min(100, Number((novaVida.saude + deltaSaudeDia).toFixed(2))));
+    novaVida.felicidade = Math.max(5, Math.min(100, Number((novaVida.felicidade + deltaFelicidadeDia).toFixed(2))));
+
+    // 3. Aniversário no dia exato
+    if (
+      proximoDia === novaVida.dataNascimento.dia &&
+      atual.mesAtual === novaVida.dataNascimento.mes
+    ) {
+      const novaIdade = calcularIdadeExata(novaVida.dataNascimento, {
+        dia: proximoDia,
+        mes: atual.mesAtual,
+        ano: atual.anoAtual,
+      });
+      if (novaIdade > novaVida.idade) {
+        novaVida.idade = novaIdade;
+        novaVida.felicidade = Math.min(100, novaVida.felicidade + 8);
+      }
+    }
+
+    // 4. Encontros orgânicos (chance de ~6% por dia se houver espaço)
+    const contatosAtuais = novaVida.familia?.conhecidos || [];
+    if (contatosAtuais.length < 12 && Math.random() < 0.06) {
+      const novoContato = sortearEncontroOrganico(atual);
+      novaVida.familia = {
+        ...novaVida.familia,
+        conhecidos: [novoContato, ...contatosAtuais],
+      };
+    }
+
+    // 5. Chance de evento de decisão espontâneo diário (~3%)
+    let eventosNovos: EventoDecisao[] = [];
+    if (Math.random() < 0.035) {
+      const sorteado = sortearEventoDecisao({
+        ...atual,
+        diaAtual: proximoDia,
+        diaSemanaAtual: proximoDiaSemana,
+        vida: novaVida,
+      });
+      if (sorteado) {
+        eventosNovos = [sorteado];
+      }
+    }
+
+    atual = {
+      ...atual,
+      diaAtual: proximoDia,
+      diaSemanaAtual: proximoDiaSemana,
+      vida: novaVida,
+      eventosPendentes: eventosNovos,
+    };
+  }
+
+  return atual;
+}
+
 function impactoContextualSeguro(valor: number | undefined, limite: number): number {
   return typeof valor === 'number' && Number.isFinite(valor) && Math.abs(valor) <= limite ? valor : 0;
 }
@@ -256,7 +508,11 @@ function impactoContextualSeguro(valor: number | undefined, limite: number): num
  * - Mandatos, aprovação popular e calendário eleitoral do TSE.
  * - Notícias da Gazeta do Brasil.
  */
-export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFechamentoIA): EstadoJogo {
+export function avancarMesSimulacao(
+  estado: EstadoJogo,
+  propostaIA?: PropostaFechamentoIA,
+  manterDiaUm = false
+): EstadoJogo {
   // Decisões importantes precisam ser resolvidas antes do próximo fechamento.
   if (estado.eventosPendentes.length > 0) return estado;
   const novoMesesTotais = estado.mesesTotais + 1;
@@ -267,6 +523,11 @@ export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFec
     novoMes = 1;
     novoAno += 1;
   }
+
+  const novoDia = manterDiaUm
+    ? 1
+    : sortearDiaVariadoDoMes(novoAno, novoMes, estado.diaAtual || 1, novoMesesTotais, estado.diaSemanaAtual);
+  const novoDiaSemana = calcularDiaSemanaCalendario(novoAno, novoMes, novoDia);
 
   const destaques: string[] = [];
   const saldoAnterior = estado.vida.saldoBancario;
@@ -337,7 +598,7 @@ export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFec
     estado.vida,
     novaMacro,
     salarioPolitico,
-    { dia: diasNoMes(estado.anoAtual, estado.mesAtual), mes: estado.mesAtual, ano: estado.anoAtual },
+    { dia: estado.diaAtual, mes: novoMes, ano: novoAno },
     indiceAtual
   );
   destaques.push(...logsVida);
@@ -435,8 +696,8 @@ export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFec
   };
   const atualizado: EstadoJogo = {
     ...estado,
-    diaAtual: 1,
-    diaSemanaAtual: diaSemanaDaData(1, novoMes, novoAno),
+    diaAtual: novoDia,
+    diaSemanaAtual: novoDiaSemana,
     mesAtual: novoMes,
     anoAtual: novoAno,
     mesesTotais: novoMesesTotais,
@@ -464,36 +725,59 @@ export function avancarMesSimulacao(estado: EstadoJogo, propostaIA?: PropostaFec
     }].slice(-48),
   };
 
-  // O evento proposto pela IA é novo, mas limitado a atributos verificáveis.
-  // Nenhum texto da IA recebe permissão para criar dinheiro, cargo ou emprego.
-  const contexto = propostaIA?.acontecimento;
-  const categoriaValida = contexto?.categoria !== 'empresa' || novasEmpresas.some(e => e.ativa);
-  const trabalhoValido = contexto?.categoria !== 'trabalho' || !!novaVida.empregoAtual;
-  const politicaValida = contexto?.categoria !== 'politica' || politicaFinal.cargoAtual !== 'cidadao';
-  if (contexto && categoriaValida && trabalhoValido && politicaValida &&
-      contexto.opcoes.length >= 2 && contexto.opcoes.length <= 3) {
-    const eventoIA: EventoDecisao = {
-      id: `ev_ia_${novoAno}_${novoMes}_${novoMesesTotais}`,
-      categoria: contexto.categoria,
-      urgencia: contexto.urgencia,
-      titulo: contexto.titulo,
-      descricao: contexto.descricao,
-      dataOcorrencia: `1/${novoMes}/${novoAno}`,
-      opcoes: contexto.opcoes.map((opcao, indice) => ({
-        id: `ia_opcao_${indice + 1}`,
-        texto: opcao.texto,
-        descricaoImpacto: opcao.descricaoImpacto,
-        consequencias: {
-          deltaSaude: impactoContextualSeguro(opcao.deltaSaude, 10),
-          deltaFelicidade: impactoContextualSeguro(opcao.deltaFelicidade, 12),
-          deltaEnergia: impactoContextualSeguro(opcao.deltaEnergia, 15),
-          deltaIntelecto: impactoContextualSeguro(opcao.deltaIntelecto, 3),
-          deltaReputacao: impactoContextualSeguro(opcao.deltaReputacao, 5),
-          mensagemResultado: opcao.mensagemResultado,
-        },
-      })),
-    };
-    return { ...atualizado, eventosPendentes: [eventoIA] };
+  // O(s) evento(s) proposto(s) pela IA são validados contra o estado atual
+  const listaPropostos: AcontecimentoPropostoIA[] = [
+    ...(propostaIA?.acontecimentos || []),
+    ...(propostaIA?.acontecimento ? [propostaIA.acontecimento] : []),
+  ];
+
+  const eventosIAValidos: EventoDecisao[] = [];
+  for (let idx = 0; idx < listaPropostos.length; idx++) {
+    const contexto = listaPropostos[idx];
+    const categoriaValida = contexto.categoria !== 'empresa' || novasEmpresas.some(e => e.ativa);
+    const trabalhoValido = contexto.categoria !== 'trabalho' || !!novaVida.empregoAtual;
+    const politicaValida = contexto.categoria !== 'politica' || politicaFinal.cargoAtual !== 'cidadao';
+    if (
+      categoriaValida &&
+      trabalhoValido &&
+      politicaValida &&
+      contexto.opcoes.length >= 2 &&
+      contexto.opcoes.length <= 3 &&
+      !eventosIAValidos.some(ev => ev.titulo === contexto.titulo)
+    ) {
+      eventosIAValidos.push({
+        id: `ev_ia_${novoAno}_${novoMes}_${novoMesesTotais}_${idx}`,
+        categoria: contexto.categoria,
+        urgencia: contexto.urgencia,
+        titulo: contexto.titulo,
+        descricao: contexto.descricao,
+        ilustracao: contexto.ilustracao || contexto.categoria,
+        dataOcorrencia: `${novoDia}/${novoMes}/${novoAno}`,
+        opcoes: contexto.opcoes.map((opcao, indice) => {
+          const custoFin = impactoContextualSeguro(opcao.custoFinanceiro, 5000);
+          const ganhoFin = impactoContextualSeguro(opcao.ganhoFinanceiro, 5000);
+          return {
+            id: `ia_opcao_${indice + 1}`,
+            texto: opcao.texto,
+            descricaoImpacto: opcao.descricaoImpacto,
+            consequencias: {
+              ...(custoFin > 0 ? { custoFinanceiro: Math.round(custoFin) } : {}),
+              ...(ganhoFin > 0 ? { ganhoFinanceiro: Math.round(ganhoFin) } : {}),
+              deltaSaude: impactoContextualSeguro(opcao.deltaSaude, 15),
+              deltaFelicidade: impactoContextualSeguro(opcao.deltaFelicidade, 15),
+              deltaEnergia: impactoContextualSeguro(opcao.deltaEnergia, 25),
+              deltaIntelecto: impactoContextualSeguro(opcao.deltaIntelecto, 4),
+              deltaReputacao: impactoContextualSeguro(opcao.deltaReputacao, 6),
+              mensagemResultado: opcao.mensagemResultado,
+            },
+          };
+        }),
+      });
+    }
+  }
+
+  if (eventosIAValidos.length > 0) {
+    return { ...atualizado, eventosPendentes: eventosIAValidos.slice(0, 3) };
   }
 
   // Reserva local em caso de resposta ausente/inválida ou falta de crédito da API.
@@ -515,73 +799,156 @@ export function avancarMultiplosMeses(estado: EstadoJogo, qtdMeses: number): Est
 }
 
 /**
- * Calendário principal. A simulação não depende de horas: cada passo representa
- * um dia completo e os fechamentos financeiros acontecem nas viradas mensais.
- * O relógio legado é mantido somente para compatibilidade de partidas antigas.
+ * Avança um ciclo completo de 12 meses (+1 Ano), processando salários, despesas,
+ * energia vital, saúde, semestres acadêmicos e empresas durante todo o ano sem
+ * travar no 1º mês, consolidando as consequências e os fatores ao final do período.
  */
-export type PeriodoAvanco = 'dia' | 'semana' | 'mes' | 'semestre' | 'ano';
+export function avancarCicloAnualSimulacao(
+  estado: EstadoJogo,
+  propostaIA?: PropostaFechamentoIA
+): EstadoJogo {
+  const saldoInicialAno = estado.vida.saldoBancario;
+  const energiaInicialAno = Math.round(estado.vida.energia ?? 85);
+  const saudeInicialAno = Math.round(estado.vida.saude);
 
-function dataUTC(ano: number, mes: number, dia: number): Date {
-  return new Date(Date.UTC(ano, mes - 1, Math.min(Math.max(1, dia), diasNoMes(ano, mes))));
-}
+  let est: EstadoJogo = {
+    ...estado,
+    eventosPendentes: [],
+  };
 
-export function avancarDiaCalendario(estado: EstadoJogo, proposta?: PropostaFechamentoIA): EstadoJogo {
-  if (estado.eventosPendentes.length > 0) return estado;
-  const ultimoDia = diasNoMes(estado.anoAtual, estado.mesAtual);
-  let atualizado: EstadoJogo;
-  if (estado.diaAtual >= ultimoDia) {
-    atualizado = avancarMesSimulacao(estado, proposta);
-  } else {
-    const dia = estado.diaAtual + 1;
-    atualizado = {
-      ...estado,
-      diaAtual: dia,
-      diaSemanaAtual: diaSemanaDaData(dia, estado.mesAtual, estado.anoAtual),
+  let receitasAcumuladas = 0;
+  let despesasAcumuladas = 0;
+  let lucroEmpresasAcumulado = 0;
+  const destaquesAno: string[] = [];
+
+  if (propostaIA?.justificativa && propostaIA.justificativa.length <= 250) {
+    destaquesAno.push(`🧠 Leitura Anual da Simulação: ${propostaIA.justificativa}`);
+  }
+
+  for (let m = 0; m < 12; m++) {
+    // Aplica o choque da IA distribuído no início do ciclo e limpa eventos intermediários
+    const fechado = avancarMesSimulacao(
+      { ...est, eventosPendentes: [] },
+      m === 0 ? propostaIA : undefined
+    );
+
+    if (fechado.ultimoResumoMes) {
+      receitasAcumuladas += fechado.ultimoResumoMes.receitasPessoais;
+      despesasAcumuladas += fechado.ultimoResumoMes.despesasPessoais;
+      lucroEmpresasAcumulado += fechado.ultimoResumoMes.lucroEmpresarialTotal;
+
+      for (const d of fechado.ultimoResumoMes.destaques) {
+        if (
+          (d.includes('COLAÇÃO DE GRAU') ||
+            d.includes('Semestre Aprovado') ||
+            d.includes('Parabéns à família') ||
+            d.includes('Alerta de Exaustão') ||
+            d.includes('Contas em Atraso')) &&
+          !destaquesAno.includes(d)
+        ) {
+          destaquesAno.push(d);
+        }
+      }
+    }
+
+    est = {
+      ...fechado,
+      eventosPendentes: [],
     };
   }
-  const idade = calcularIdadeExata(atualizado.vida.dataNascimento, {
-    dia: atualizado.diaAtual, mes: atualizado.mesAtual, ano: atualizado.anoAtual,
-  });
-  return {
-    ...atualizado,
-    vida: processarDiaVida({ ...atualizado.vida, idade }),
-  };
-}
 
-/** Avança até a data-alvo, parando no primeiro evento pendente. */
-export function avancarPeriodoCalendario(
-  estado: EstadoJogo,
-  periodo: PeriodoAvanco,
-  proposta?: PropostaFechamentoIA
-): EstadoJogo {
-  const inicio = dataUTC(estado.anoAtual, estado.mesAtual, estado.diaAtual);
-  const destino = dataUTC(estado.anoAtual, estado.mesAtual, estado.diaAtual);
-  switch (periodo) {
-    case 'dia': destino.setUTCDate(destino.getUTCDate() + 1); break;
-    case 'semana': destino.setUTCDate(destino.getUTCDate() + 7); break;
-    case 'mes':
-    case 'semestre':
-    case 'ano': {
-      const meses = periodo === 'mes' ? 1 : periodo === 'semestre' ? 6 : 12;
-      const diaDesejado = destino.getUTCDate();
-      destino.setUTCDate(1);
-      destino.setUTCMonth(destino.getUTCMonth() + meses);
-      const anoDestino = destino.getUTCFullYear();
-      const mesDestino = destino.getUTCMonth() + 1;
-      destino.setUTCDate(Math.min(diaDesejado, diasNoMes(anoDestino, mesDestino)));
-      break;
+  const diaFinalAno = sortearDiaVariadoDoMes(
+    est.anoAtual,
+    est.mesAtual,
+    estado.diaAtual || 1,
+    est.mesesTotais + 19,
+    estado.diaSemanaAtual
+  );
+  est = {
+    ...est,
+    diaAtual: diaFinalAno,
+    diaSemanaAtual: calcularDiaSemanaCalendario(est.anoAtual, est.mesAtual, diaFinalAno),
+  };
+
+  const energiaFinalAno = Math.round(est.vida.energia ?? 85);
+  const deltaEnergiaAno = energiaFinalAno - energiaInicialAno;
+  const saudeFinalAno = Math.round(est.vida.saude);
+  const deltaSaudeAno = saudeFinalAno - saudeInicialAno;
+
+  destaquesAno.unshift(
+    `⚡ Balanço Vital do Ano: Energia ${deltaEnergiaAno >= 0 ? `+${deltaEnergiaAno}%` : `${deltaEnergiaAno}%`} (atual ${energiaFinalAno}%) • Saúde ${deltaSaudeAno >= 0 ? `+${deltaSaudeAno}%` : `${deltaSaudeAno}%`} (atual ${saudeFinalAno}%).`
+  );
+
+  // Coleta eventos propostos pela IA ou sorteia 2 acontecimentos variados para o fechamento anual
+  const listaPropostos: AcontecimentoPropostoIA[] = [
+    ...(propostaIA?.acontecimentos || []),
+    ...(propostaIA?.acontecimento ? [propostaIA.acontecimento] : []),
+  ];
+
+  const eventosFinais: EventoDecisao[] = [];
+  for (let idx = 0; idx < listaPropostos.length; idx++) {
+    const contexto = listaPropostos[idx];
+    const categoriaValida = contexto.categoria !== 'empresa' || (est.empresas || []).some(e => e.ativa);
+    const trabalhoValido = contexto.categoria !== 'trabalho' || !!est.vida.empregoAtual;
+    const politicaValida = contexto.categoria !== 'politica' || est.politica.cargoAtual !== 'cidadao';
+    if (
+      categoriaValida &&
+      trabalhoValido &&
+      politicaValida &&
+      contexto.opcoes.length >= 2 &&
+      contexto.opcoes.length <= 3
+    ) {
+      eventosFinais.push({
+        id: `ev_ia_ano_${est.anoAtual}_${est.mesAtual}_${idx}`,
+        categoria: contexto.categoria,
+        urgencia: contexto.urgencia,
+        titulo: contexto.titulo,
+        descricao: contexto.descricao,
+        ilustracao: contexto.ilustracao || contexto.categoria,
+        dataOcorrencia: `${est.diaAtual}/${est.mesAtual}/${est.anoAtual}`,
+        opcoes: contexto.opcoes.map((opcao, indice) => {
+          const custoFin = impactoContextualSeguro(opcao.custoFinanceiro, 5000);
+          const ganhoFin = impactoContextualSeguro(opcao.ganhoFinanceiro, 5000);
+          return {
+            id: `ia_ano_op_${indice + 1}`,
+            texto: opcao.texto,
+            descricaoImpacto: opcao.descricaoImpacto,
+            consequencias: {
+              ...(custoFin > 0 ? { custoFinanceiro: Math.round(custoFin) } : {}),
+              ...(ganhoFin > 0 ? { ganhoFinanceiro: Math.round(ganhoFin) } : {}),
+              deltaSaude: impactoContextualSeguro(opcao.deltaSaude, 15),
+              deltaFelicidade: impactoContextualSeguro(opcao.deltaFelicidade, 15),
+              deltaEnergia: impactoContextualSeguro(opcao.deltaEnergia, 25),
+              deltaIntelecto: impactoContextualSeguro(opcao.deltaIntelecto, 4),
+              deltaReputacao: impactoContextualSeguro(opcao.deltaReputacao, 6),
+              mensagemResultado: opcao.mensagemResultado,
+            },
+          };
+        }),
+      });
     }
   }
-  const passos = Math.min(370, Math.max(0, Math.round(
-    (destino.getTime() - inicio.getTime()) / 86_400_000
-  )));
-  let atual = estado;
-  let propostaUsada = false;
-  for (let dia = 0; dia < passos; dia++) {
-    if (atual.eventosPendentes.length > 0) break;
-    const viraMes = atual.diaAtual >= diasNoMes(atual.anoAtual, atual.mesAtual);
-    atual = avancarDiaCalendario(atual, viraMes && !propostaUsada ? proposta : undefined);
-    if (viraMes) propostaUsada = true;
+
+  if (eventosFinais.length < 2) {
+    const complementares = sortearMultiplosEventosPeriodo(
+      { ...est, eventosPendentes: eventosFinais },
+      2 - eventosFinais.length
+    );
+    eventosFinais.push(...complementares);
   }
-  return atual;
+
+  const resumoAnual = {
+    saldoAnterior: Math.round(saldoInicialAno),
+    saldoAtual: Math.round(est.vida.saldoBancario),
+    receitasPessoais: Math.round(receitasAcumuladas),
+    despesasPessoais: Math.round(despesasAcumuladas),
+    lucroEmpresarialTotal: Math.round(lucroEmpresasAcumulado),
+    destaques: destaquesAno.slice(0, 8),
+  };
+
+  return {
+    ...est,
+    ultimoResumoMes: resumoAnual,
+    eventosPendentes: eventosFinais.slice(0, 3),
+  };
 }

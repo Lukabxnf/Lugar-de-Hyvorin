@@ -11,10 +11,11 @@ interface WorkHubProps {
   onUpdateEstado: (estado: EstadoJogo) => void;
   onShowMessage: (mensagem: string) => void;
   onElectionVictory: (cargo: string, votos: number) => void;
+  onStartTime: () => void;
 }
 
 export const WorkHub: React.FC<WorkHubProps> = ({
-  estado, onUpdateEstado, onShowMessage, onElectionVictory,
+  estado, onUpdateEstado, onShowMessage, onElectionVictory, onStartTime,
 }) => {
   const [area, setArea] = useState<'emprego' | 'empresa' | 'politica'>('emprego');
   const [empresaSecao, setEmpresaSecao] = useState<'gestao' | 'mercado'>('gestao');
@@ -65,7 +66,7 @@ export const WorkHub: React.FC<WorkHubProps> = ({
       </section>
 
       {area === 'emprego' && (
-        <LifeView estado={estado} onUpdateEstado={onUpdateEstado} onShowMessage={onShowMessage} modo="trabalho" />
+        <LifeView estado={estado} onUpdateEstado={onUpdateEstado} onShowMessage={onShowMessage} onStartTime={onStartTime} modo="trabalho" />
       )}
       {area === 'empresa' && (
         <div className="space-y-4">

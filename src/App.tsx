@@ -9,17 +9,19 @@ import { TabNavigation } from './components/TabNavigation';
 import { LifeView } from './components/LifeView';
 import { WorkHub } from './components/WorkHub';
 import { AgendaView } from './components/AgendaView';
-import { GazetaView } from './components/GazetaView';
+import { WorldView } from './components/WorldView';
 import { NewGameModal } from './components/NewGameModal';
 import { ElectionModal } from './components/ElectionModal';
 import { EventDecisionModal } from './components/EventDecisionModal';
+import { VisualIllustration } from './components/VisualIllustration';
 
 import { EstadoJogo, OpcaoEvento } from './engine/types';
 import { aplicarImpactoAfinidadeFamiliar } from './engine/events';
 import { registrarTransacaoFinanceira } from './engine/finance';
 import { migrarImoveisLegados } from './engine/imoveis';
 import { criarEstadoInicial } from './engine/presets';
-import { avancarPeriodoCalendario, diaSemanaDaData, diasNoMes, type PeriodoAvanco } from './engine/simulation';
+import { avancarCicloAnualSimulacao, avancarDiasSimulacao, avancarMesSimulacao, avancarMultiplosMeses } from './engine/simulation';
+import { simularHoraVida } from './engine/life';
 import { GROQ_STORAGE_KEY, analisarFechamentoMes, montarLeituraIA, narrarFato, narrarGazeta } from './services/groq';
 
 const STORAGE_KEY = 'cidadao_sim_save_v1';
@@ -41,7 +43,7 @@ function sanitizarEstado(raw: any): EstadoJogo {
     horaAtual: raw.horaAtual ?? 8,
     minutoAtual: 0,
     diaAtual: raw.diaAtual ?? 1,
-    diaSemanaAtual: diaSemanaDaData(raw.diaAtual ?? 1, raw.mesAtual ?? 1, raw.anoAtual ?? 2026),
+    diaSemanaAtual: raw.diaSemanaAtual ?? 'Segunda-feira',
     horasTotais: raw.horasTotais ?? 0,
     empresas,
     empresa: empresas[0],
@@ -59,9 +61,9 @@ function sanitizarEstado(raw: any): EstadoJogo {
       titulosConquistados: raw.vida?.titulosConquistados || ['Certificado de Ensino Médio'],
       habilidades: raw.vida?.habilidades || base.vida.habilidades,
       rotinaHorarios: raw.vida?.rotinaHorarios || base.vida.rotinaHorarios,
-      atividadeAtual: 'livre',
-      horasRestantesAtividade: 0,
-      aulaFormal: false,
+      atividadeAtual: (raw.vida?.horasRestantesAtividade || 0) > 0 ? (raw.vida?.atividadeAtual || 'livre') : 'livre',
+      horasRestantesAtividade: Math.max(0, Math.floor(raw.vida?.horasRestantesAtividade || 0)),
+      aulaFormal: (raw.vida?.horasRestantesAtividade || 0) > 0 ? !!raw.vida?.aulaFormal : false,
       energia: raw.vida?.energia ?? 85,
       familia: raw.vida?.familia || base.vida.familia,
       veiculos: raw.vida?.veiculos || base.vida.veiculos,
@@ -106,9 +108,9 @@ export default function App() {
     try { return localStorage.getItem(GROQ_STORAGE_KEY) || ''; } catch { return ''; }
   });
 
-  // Modals
+  // Modals: eventoAbertoId só abre quando o jogador clica em Acontecimentos do Mês (nunca sozinho na tela)
   const [showNewGameModal, setShowNewGameModal] = useState<boolean>(false);
-  const [mostrarEventoModal, setMostrarEventoModal] = useState(false);
+  const [eventoAbertoId, setEventoAbertoId] = useState<string | null>(null);
   const [electionVictoryData, setElectionVictoryData] = useState<{
     cargoNome: string;
     votos: number;
@@ -193,7 +195,7 @@ export default function App() {
     try {
       localStorage.setItem(GROQ_STORAGE_KEY, key.trim());
       setGroqKey(key.trim());
-      showToast('Chave da Groq salva neste navegador.');
+      showToast('Chave de API salva com sucesso neste navegador.');
     } catch {
       showToast('Não foi possível salvar a chave neste navegador.');
     }
@@ -202,7 +204,7 @@ export default function App() {
   const handleDeleteGroqKey = useCallback(() => {
     try { localStorage.removeItem(GROQ_STORAGE_KEY); } catch { /* armazenamento indisponível */ }
     setGroqKey('');
-    showToast('Chave da Groq apagada deste navegador.');
+    showToast('Chave de IA apagada deste navegador.');
   }, [showToast]);
 
 
@@ -254,54 +256,87 @@ export default function App() {
     setEstado(novo);
     setShowNewGameModal(false);
     setActiveTab('vida');
-    setMostrarEventoModal(false);
+    setEventoAbertoId(null);
     showToast(`Nova jornada iniciada com sucesso!`);
   }, [showToast]);
 
-  // O calendário processa cada dia até o destino; eventos obrigatórios interrompem o avanço.
-  const handleAdvancePeriod = useCallback(async (periodo: PeriodoAvanco) => {
-    if (fechamentoEmCursoRef.current) return;
+  // Avanço por dias (+1 Dia ou +1 Semana = 7 Dias) — sem abrir pop-up na tela
+  const handleAdvanceDays = useCallback((qtdDias: number) => {
+    if (fechandoPeriodo || fechamentoEmCursoRef.current) return;
     const anterior = estadoRef.current;
-    if (anterior.eventosPendentes.length > 0) {
-      setMostrarEventoModal(true);
-      return;
-    }
+    const base = anterior.eventosPendentes.length > 0
+      ? { ...anterior, eventosPendentes: [] }
+      : anterior;
+    const proximo = avancarDiasSimulacao(base, qtdDias);
+    setEstado(proximo);
+  }, [fechandoPeriodo]);
+
+  // Avanço por meses (+1 Mês ou +1 Ano) — os acontecimentos vão direto para o card lateral "Acontecimentos do Mês"
+  const handleAdvanceMonths = useCallback(async (quantidade: number) => {
+    if (![1, 6, 12].includes(quantidade) || fechamentoEmCursoRef.current) return;
+    const anterior = estadoRef.current;
+    const baseLimpa: EstadoJogo = anterior.eventosPendentes.length > 0
+      ? { ...anterior, eventosPendentes: [] }
+      : anterior;
+
     fechamentoEmCursoRef.current = true;
     setFechandoPeriodo(true);
+    setEventoAbertoId(null);
     try {
-      const diasParaVirada = diasNoMes(anterior.anoAtual, anterior.mesAtual) - anterior.diaAtual;
-      const cruzaFechamento = periodo === 'dia'
-        ? diasParaVirada === 0
-        : periodo === 'semana' ? diasParaVirada < 7 : true;
-      const proposta = groqKey && cruzaFechamento
-        ? await analisarFechamentoMes(groqKey, anterior)
-        : null;
-      setEstado(avancarPeriodoCalendario(anterior, periodo, proposta || undefined));
+      const proposta = groqKey ? await analisarFechamentoMes(groqKey, baseLimpa) : null;
+      let proximo: EstadoJogo;
+
+      if (quantidade === 12) {
+        proximo = avancarCicloAnualSimulacao(baseLimpa, proposta || undefined);
+      } else {
+        proximo = avancarMesSimulacao(baseLimpa, proposta || undefined);
+        if (quantidade > 1 && proximo.eventosPendentes.length === 0) {
+          proximo = avancarMultiplosMeses(proximo, quantidade - 1);
+        }
+      }
+
+      setEstado(proximo);
+      if (quantidade === 12) {
+        showToast(
+          `Ciclo de 1 ano concluído (${String(proximo.mesAtual).padStart(2, '0')}/${proximo.anoAtual})! Energia: ${Math.round(proximo.vida.energia)}% • Saúde: ${Math.round(proximo.vida.saude)}%`
+        );
+      }
     } finally {
       fechamentoEmCursoRef.current = false;
       setFechandoPeriodo(false);
     }
-  }, [groqKey]);
+  }, [groqKey, showToast]);
 
-  // Resolução de Evento de Decisão Interativo
+  // Ações opcionais de rotina são resolvidas de imediato, sem criar um relógio
+  // de cliques obrigatório para trabalhar ou estudar em um jogo mensal.
+  const handleConcluirAtividade = useCallback(() => {
+    setEstado((anterior) => {
+      let vidaAtual = anterior.vida;
+      const horas = Math.min(24, Math.max(0, Math.floor(vidaAtual.horasRestantesAtividade || 0)));
+      for (let i = 0; i < horas; i++) {
+        vidaAtual = simularHoraVida(
+          vidaAtual, anterior.macro, anterior.horaAtual, anterior.diaSemanaAtual
+        ).novaVida;
+      }
+      return { ...anterior, vida: vidaAtual };
+    });
+  }, []);
+
+  // Resolução de Evento de Decisão Interativo (apenas quando o jogador escolhe uma opção)
   const handleEscolherOpcaoEvento = useCallback((opcao: OpcaoEvento) => {
-    const atual = estadoRef.current;
-    if (!atual.eventosPendentes.length) return;
-    if ((opcao.consequencias.custoFinanceiro || 0) > atual.vida.saldoBancario) {
-      showToast('Saldo insuficiente para essa decisão. Escolha outra alternativa do evento.');
-      return;
-    }
-    setMostrarEventoModal(false);
     setEstado((prev) => {
-      const eventoAtual = prev.eventosPendentes[0];
-      if (!eventoAtual) return prev;
+      const eventoAlvo = prev.eventosPendentes.find((e) => e.id === eventoAbertoId) || prev.eventosPendentes[0];
+      if (!eventoAlvo) {
+        setEventoAbertoId(null);
+        return prev;
+      }
 
       const c = opcao.consequencias;
       if (
         c.custoFinanceiro !== undefined &&
         c.custoFinanceiro > prev.vida.saldoBancario
       ) {
-        showToast('Saldo insuficiente para essa decisão. Escolha outra alternativa do evento.');
+        showToast('Saldo insuficiente para essa decisão. Escolha outra alternativa ou clique no X para sair.');
         return prev;
       }
       let novoSaldo = prev.vida.saldoBancario;
@@ -311,30 +346,21 @@ export default function App() {
       const novaSaude = Math.max(10, Math.min(100, prev.vida.saude + (c.deltaSaude || 0)));
       const novaFelicidade = Math.max(5, Math.min(100, prev.vida.felicidade + (c.deltaFelicidade || 0)));
       const novaEnergia = Math.max(0, Math.min(100, prev.vida.energia + (c.deltaEnergia || 0)));
-      const novoIntelecto = Math.min(100, prev.vida.intelecto + (c.deltaIntelecto || 0));
       const novaReputacao = Math.min(100, prev.vida.reputacao + (c.deltaReputacao || 0));
 
-      const familiaComAfinidade = c.deltaAfinidadeRelId && c.deltaAfinidadeValor !== undefined
+      const novaFamilia = c.deltaAfinidadeRelId && c.deltaAfinidadeValor !== undefined
         ? aplicarImpactoAfinidadeFamiliar(
             prev.vida.familia,
             c.deltaAfinidadeRelId,
             c.deltaAfinidadeValor
           )
         : prev.vida.familia;
-      const contatoNovo = c.novoContato;
-      const jaConhece = contatoNovo && [
-        ...(familiaComAfinidade.conhecidos || []),
-        ...(familiaComAfinidade.amigos || []),
-      ].some(pessoa => pessoa.id === contatoNovo.id);
-      const novaFamilia = contatoNovo && !jaConhece
-        ? { ...familiaComAfinidade, conhecidos: [...(familiaComAfinidade.conhecidos || []), contatoNovo] }
-        : familiaComAfinidade;
 
       const resolvido = {
-        id: eventoAtual.id,
-        titulo: eventoAtual.titulo,
+        id: eventoAlvo.id,
+        titulo: eventoAlvo.titulo,
         opcaoEscolhida: opcao.texto,
-        data: eventoAtual.dataOcorrencia,
+        data: eventoAlvo.dataOcorrencia,
         resultado: c.mensagemResultado,
       };
 
@@ -350,10 +376,11 @@ export default function App() {
           intelecto: Math.max(0, Math.min(100, prev.vida.intelecto + (c.deltaIntelecto || 0))),
           reputacao: Math.max(0, Math.min(100, novaReputacao)),
           familia: novaFamilia,
-          // Eventos não iniciam mais contadores de horas. Compromissos legados são encerrados.
-          atividadeAtual: 'livre',
-          aulaFormal: false,
-          horasRestantesAtividade: 0,
+          atividadeAtual: c.atividade || prev.vida.atividadeAtual,
+          aulaFormal: c.atividade ? !!c.aulaFormal : (prev.vida.aulaFormal || false),
+          horasRestantesAtividade: c.atividade
+            ? Math.max(1, Math.floor(c.duracaoAtividadeHoras || 1))
+            : (prev.vida.horasRestantesAtividade || 0),
           empregoAtual: c.deltaFaltasTrabalho && prev.vida.empregoAtual
             ? {
                 ...prev.vida.empregoAtual,
@@ -363,34 +390,38 @@ export default function App() {
         },
         { dia: prev.diaAtual, mes: prev.mesAtual, ano: prev.anoAtual },
         'evento',
-        `${eventoAtual.titulo}: ${opcao.texto}`,
+        `${eventoAlvo.titulo}: ${opcao.texto}`,
         (c.ganhoFinanceiro || 0) - (c.custoFinanceiro || 0)
       );
+
+      const restantes = prev.eventosPendentes.filter((e) => e.id !== eventoAlvo.id);
+      setEventoAbertoId(null);
 
       return {
         ...prev,
         vida: vidaComRegistro,
-        eventosPendentes: prev.eventosPendentes.slice(1),
+        eventosPendentes: restantes,
         eventosResolvidos: [resolvido, ...prev.eventosResolvidos].slice(0, 30),
       };
     });
-  }, [showToast]);
+  }, [eventoAbertoId, showToast]);
 
   // Election victory trigger
   const handleElectionVictory = useCallback((cargoNome: string, votos: number) => {
     setElectionVictoryData({ cargoNome, votos });
   }, []);
 
-  const eventoPendenteAtual = estado.eventosPendentes && estado.eventosPendentes.length > 0
-    ? estado.eventosPendentes[0]
+  const eventoAberto = eventoAbertoId
+    ? estado.eventosPendentes.find((e) => e.id === eventoAbertoId) || null
     : null;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
-      {/* Calendário mensal com avanço de 1, 6 ou 12 meses. */}
+    <div className="min-h-screen xl:h-screen xl:overflow-hidden bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
+      {/* Calendário com avanço por dias ou meses. */}
       <Header
         estado={estado}
-        onAdvancePeriod={handleAdvancePeriod}
+        onAdvanceDays={handleAdvanceDays}
+        onAdvanceMonths={handleAdvanceMonths}
         fechandoPeriodo={fechandoPeriodo}
         onOpenNewGame={() => setShowNewGameModal(true)}
         onSaveGame={handleSaveGame}
@@ -404,7 +435,7 @@ export default function App() {
       {fechandoPeriodo && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/65 backdrop-blur-sm" role="status" aria-live="polite">
           <div className="rounded-xl border border-slate-700 bg-slate-900 px-6 py-4 text-sm font-semibold text-slate-100 shadow-xl">
-            Fechando o período e preparando o próximo mês...
+            Analisando sua vida, patrimônio e economia para o próximo período...
           </div>
         </div>
       )}
@@ -416,44 +447,112 @@ export default function App() {
         eventosPendentes={estado.eventosPendentes.length}
       />
 
-      {/* Áreas de vida: carreira e políticas são ferramentas contextuais. */}
-      <main className="flex-1 mx-auto w-full max-w-[1480px] p-4 sm:p-6">
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_290px] gap-5 items-start">
-          <section className="min-w-0">
+      {/* Áreas de vida com scroll independente na esquerda e painel Acontecimentos do Mês fixo na direita */}
+      <main className="flex-1 min-h-0 mx-auto w-full max-w-[1480px] p-4 sm:p-5 xl:overflow-hidden">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-5 items-start xl:h-full">
+          <section className="min-w-0 xl:h-full xl:overflow-y-auto xl:pr-2 pb-6">
             {activeTab === 'vida' && (
-              <LifeView estado={estado} onUpdateEstado={setEstado} onShowMessage={showToast} modo="vida" />
+              <LifeView
+                estado={estado}
+                onUpdateEstado={setEstado}
+                onShowMessage={showToast}
+                onStartTime={handleConcluirAtividade}
+                modo="vida"
+                onOpenDecision={() => {
+                  if (estado.eventosPendentes[0]) setEventoAbertoId(estado.eventosPendentes[0].id);
+                }}
+              />
             )}
             {activeTab === 'trabalho' && (
               <WorkHub estado={estado} onUpdateEstado={setEstado} onShowMessage={showToast}
-                onElectionVictory={handleElectionVictory} />
+                onElectionVictory={handleElectionVictory} onStartTime={handleConcluirAtividade} />
             )}
             {activeTab === 'patrimonio' && (
-              <LifeView estado={estado} onUpdateEstado={setEstado} onShowMessage={showToast} modo="patrimonio" />
+              <LifeView
+                estado={estado}
+                onUpdateEstado={setEstado}
+                onShowMessage={showToast}
+                modo="patrimonio"
+                onOpenDecision={() => {
+                  if (estado.eventosPendentes[0]) setEventoAbertoId(estado.eventosPendentes[0].id);
+                }}
+              />
             )}
-            {activeTab === 'mundo' && <GazetaView noticias={estado.noticias} />}
+            {activeTab === 'mundo' && (
+              <WorldView
+                estado={estado}
+                onUpdateEstado={setEstado}
+                onShowMessage={showToast}
+              />
+            )}
             {activeTab === 'agenda' && (
-              <AgendaView estado={estado} onResolverEvento={() => setMostrarEventoModal(true)} />
+              <AgendaView
+                estado={estado}
+                onAbrirEvento={(id) => setEventoAbertoId(id)}
+              />
             )}
           </section>
 
-          <aside className="space-y-4 xl:sticky xl:top-24">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Precisa de você</h3>
-              {estado.eventosPendentes.length ? (
-                <>
-                  <p className="text-sm font-semibold text-amber-300">{estado.eventosPendentes[0].titulo}</p>
-                  <p className="line-clamp-4 text-xs leading-relaxed text-slate-400">{estado.eventosPendentes[0].descricao}</p>
-                  <button type="button" onClick={() => setMostrarEventoModal(true)}
-                    className="w-full rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-600">
-                    Abrir decisão
-                  </button>
-                </>
+          <aside className="space-y-4 xl:h-full xl:overflow-y-auto xl:pl-1 pb-4">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 space-y-3 shadow-xl">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                    Precisa de você {estado.eventosPendentes.length > 0 ? `(${estado.eventosPendentes.length})` : ''}
+                  </h3>
+                  <span className="text-[10px] text-slate-400 block">Acontecimentos do Mês</span>
+                </div>
+                {estado.eventosPendentes.length > 0 && (
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-400 animate-pulse" />
+                )}
+              </div>
+              {estado.eventosPendentes.length > 0 ? (
+                <div className="space-y-3">
+                  {estado.eventosPendentes.map((ev) => (
+                    <div
+                      key={ev.id}
+                      onClick={() => setEventoAbertoId(ev.id)}
+                      className="cursor-pointer rounded-xl border border-slate-800 hover:border-emerald-600/60 bg-slate-950/60 p-3 space-y-2 transition group"
+                    >
+                      <VisualIllustration
+                        tipo={ev.ilustracao || ev.categoria}
+                        compact
+                      />
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-950/70 text-amber-300 border border-amber-700/40">
+                          {ev.categoria}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {ev.dataOcorrencia}
+                        </span>
+                      </div>
+                      <p className="text-sm font-semibold text-amber-300 group-hover:text-emerald-300 transition leading-snug">
+                        {ev.titulo}
+                      </p>
+                      <p className="line-clamp-3 text-xs leading-relaxed text-slate-400">
+                        {ev.descricao}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEventoAbertoId(ev.id);
+                        }}
+                        className="w-full rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-600 transition"
+                      >
+                        Resolver agora
+                      </button>
+                    </div>
+                  ))}
+                </div>
               ) : (
-                <p className="text-sm text-slate-400">Nenhuma decisão obrigatória no momento. O mundo continua evoluindo ao avançar os meses.</p>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Nenhuma decisão pendente no momento. O mundo continua evoluindo conforme você avança os dias e meses.
+                </p>
               )}
             </div>
             <button type="button" onClick={() => setActiveTab('agenda')}
-              className="w-full rounded-2xl border border-slate-800 bg-slate-900/80 p-4 text-left hover:border-slate-600">
+              className="w-full rounded-2xl border border-slate-800 bg-slate-900/90 p-4 text-left hover:border-slate-600 shadow-lg">
               <span className="block text-xs font-bold uppercase tracking-wider text-slate-300">Último fechamento</span>
               {estado.ultimoResumoMes ? (
                 <>
@@ -468,7 +567,7 @@ export default function App() {
       </main>
 
       {/* Rodapé Institucional */}
-      <footer className="border-t border-slate-900 bg-slate-950 py-4 px-6 text-center text-xs text-slate-500">
+      <footer className="border-t border-slate-900 bg-slate-950 py-2.5 px-6 text-center text-[11px] text-slate-500 shrink-0">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>
             🇧🇷 <strong>CIDADÃO:</strong> Simulador de Vida, Negócios, Macroeconomia & Política Brasileira
@@ -480,7 +579,7 @@ export default function App() {
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-slate-700 text-slate-100 text-xs px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          <div className="w-2 h-2 rounded-full bg-emerald-400" />
           <span>{toastMessage}</span>
         </div>
       )}
@@ -501,10 +600,12 @@ export default function App() {
         />
       )}
 
-      {/* Modal de Crises & Decisões Interativas */}
+      {/* Modal de Acontecimento — só abre quando o jogador clica no card em "Acontecimentos do Mês" */}
       <EventDecisionModal
-        evento={mostrarEventoModal ? eventoPendenteAtual : null}
+        evento={eventoAberto}
+        totalPendentes={estado.eventosPendentes.length}
         onEscolherOpcao={handleEscolherOpcaoEvento}
+        onClose={() => setEventoAbertoId(null)}
       />
     </div>
   );

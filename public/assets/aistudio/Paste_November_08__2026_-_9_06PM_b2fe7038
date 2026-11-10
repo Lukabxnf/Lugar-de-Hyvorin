@@ -1,0 +1,1044 @@
+# CIDADÃO: REFORMA ESTRUTURAL, VISUAL E DE REALISMO DO SIMULADOR
+
+## INSTRUÇÃO PRINCIPAL
+
+Você está trabalhando no desenvolvimento do jogo **CIDADÃO: Simulador de Vida, Negócios, Economia e Política**.
+
+O objetivo desta atualização é realizar uma reforma profunda na experiência do jogador, na interface, no calendário, nas atividades, nos relacionamentos e na lógica de simulação.
+
+**O foco absoluto é REALISMO, COERÊNCIA E PROGRESSÃO DE VIDA.**
+
+Use o BitLife como referência conceitual para escolhas de vida, envelhecimento, acontecimentos e relações humanas. Use o PLANALTO como referência de profundidade institucional e consequências políticas.
+
+Não copie a interface, as artes ou o código desses jogos. O CIDADÃO precisa ter sua própria identidade visual e oferecer uma experiência mais ampla.
+
+### PROJETO EXISTENTE
+
+Repositório GitHub:
+
+https://github.com/Lukabxnf/Lugar-de-Hyvorin
+
+O projeto utiliza React, TypeScript e um motor de simulação em `src/engine/`.
+
+A integração existente com a API Groq permite análises contextuais e memória de simulação.
+
+**Antes de modificar qualquer arquivo, examine o estado real do projeto.**
+
+Verifique se a versão aberta no Google AI Studio está sincronizada com o código mais recente do GitHub. Não sobrescreva atualizações anteriores por trabalhar sobre uma versão desatualizada.
+
+Não crie outro jogo. Não substitua o motor TypeScript por Python. Não apague saves existentes.
+
+Entretanto, NÃO preserve componentes, mecânicas e interfaces ruins apenas porque já existem.
+
+Você tem autorização para remover sistemas ultrapassados, reorganizar arquivos, substituir componentes e reformular a interface, desde que mantenha o funcionamento essencial e a compatibilidade dos dados.
+
+---
+
+# 1. REFORMA COMPLETA DA INTERFACE
+
+A interface atual parece um painel administrativo de indicadores econômicos. Ela não transmite a experiência de estar vivendo a história de um personagem.
+
+Precisamos transformar o CIDADÃO em um simulador de vida visualmente agradável, moderno, intuitivo e organizado.
+
+## Nova identidade visual
+
+Criar uma identidade própria, com:
+
+- Design moderno, limpo e profissional.
+- Tema escuro elegante, sem excesso de caixas e bordas.
+- Hierarquia visual bem definida.
+- Tipografia agradável e legível.
+- Cards mais bem proporcionados.
+- Menos informações técnicas desnecessárias.
+- Animações discretas e naturais.
+- Retratos dos personagens integrados à interface.
+- Ícones consistentes.
+- Melhor aproveitamento do espaço disponível.
+- Layout responsivo para computadores e celulares.
+
+Evitar excesso de verde, textos minúsculos, efeitos exagerados e elementos repetidos.
+
+A interface precisa lembrar um jogo de simulação, não um aplicativo bancário.
+
+## Estrutura principal
+
+Organizar a navegação em cinco áreas:
+
+**Minha Vida**
+
+Perfil, aparência, saúde, bem-estar, relações familiares, amizades, vida amorosa, educação e hábitos.
+
+**Trabalho**
+
+Empregos, profissões, carreira, empreendedorismo e caminhos profissionais especiais, como política.
+
+**Patrimônio**
+
+Dinheiro, extratos, imóveis, veículos, investimentos, empréstimos, dívidas e bens.
+
+**Mundo**
+
+Notícias, acontecimentos do país, economia pública resumida, mercado de trabalho e situação social.
+
+**Agenda**
+
+Histórico de acontecimentos, compromissos futuros, decisões anteriores, resultados mensais e consequências pendentes.
+
+As ferramentas de cada profissão devem ficar dentro de Trabalho.
+
+Não colocar Política & Poder ou Macroeconomia como abas principais do cidadão comum.
+
+## Tela principal
+
+Criar uma tela inicial que represente a vida atual do personagem.
+
+Ela deverá mostrar:
+
+- Retrato do protagonista.
+- Nome e idade.
+- Data atual completa.
+- Profissão ou situação de trabalho.
+- Dinheiro disponível e patrimônio.
+- Saúde, felicidade e energia.
+- Situação familiar e amorosa.
+- Atividades e projetos em andamento.
+- Acontecimentos recentes.
+- Decisões que precisam de atenção.
+
+A informação precisa ser apresentada de maneira natural e organizada.
+
+A tela inicial não deve parecer uma planilha.
+
+---
+
+# 2. SISTEMA DE CALENDÁRIO REALISTA
+
+Esta é uma das mudanças mais importantes.
+
+**Eliminar definitivamente a mecânica de relógio por horas.**
+
+O jogo não precisa mostrar horários como 08:00, 15:00 ou 23:00.
+
+O calendário deve funcionar com:
+
+- Dia.
+- Dia da semana.
+- Mês.
+- Ano.
+- Data de nascimento.
+- Aniversários.
+- Duração real dos meses.
+- Anos bissextos.
+- Datas importantes e acontecimentos futuros.
+
+Exemplo:
+
+**Quarta-feira, 14 de outubro de 2026.**
+
+## Avanço do tempo
+
+Permitir avanço por períodos:
+
+- Um dia.
+- Uma semana.
+- Um mês.
+- Seis meses.
+- Um ano.
+
+Os períodos devem ser processados cronologicamente pelo motor.
+
+Se o jogador avançar um ano, o sistema deverá calcular os acontecimentos dos meses intermediários, incluindo aniversários, salários, despesas, relacionamentos, saúde, empresas, educação e economia.
+
+Não simplesmente adicionar 12 ao contador de meses.
+
+O avanço deve interromper quando existir uma decisão obrigatória que não possa ser ignorada.
+
+## Idade
+
+Corrigir o envelhecimento do personagem.
+
+A idade deve avançar automaticamente quando o calendário alcançar o aniversário.
+
+Por exemplo:
+
+Personagem nascido em 15 de maio de 2007.
+
+Em 14 de maio de 2026, tem 18 anos.
+
+Em 15 de maio de 2026, completa 19 anos.
+
+Não permitir que o aniversário seja calculado com atraso por causa de o calendário estar sempre no primeiro dia do mês.
+
+O envelhecimento também precisa afetar, gradualmente:
+
+- Aparência.
+- Saúde.
+- Energia.
+- Oportunidades de carreira.
+- Fertilidade e planejamento familiar.
+- Aposentadoria.
+- Envelhecimento dos familiares.
+- Expectativa de vida e mortalidade.
+
+Não aplicar morte automática por idade fixa. Utilizar probabilidades contextualizadas e condições de saúde.
+
+---
+
+# 3. RETIRAR O ANTIGO SISTEMA DE HORAS E ATIVIDADES
+
+O jogo ainda contém mecânicas antigas como:
+
+- Dormir oito horas.
+- Trabalhar durante determinado horário.
+- Fazer exercício por uma hora.
+- Estudar durante duas horas.
+- Cronômetros e horários simulados.
+
+Essas mecânicas precisam ser substituídas.
+
+**O novo jogo será baseado em calendário, hábitos, decisões e consequências.**
+
+## Funcionamento correto
+
+O personagem deve possuir uma rotina básica automática.
+
+Ele dorme, se alimenta, realiza compromissos e exerce sua profissão sem exigir um clique para cada atividade cotidiana.
+
+O jogador controla decisões relevantes, não cada hora da existência do personagem.
+
+Exemplo:
+
+Se o personagem possui emprego formal, o jogo presume que ele comparece regularmente ao trabalho.
+
+Faltas, atrasos, afastamentos ou situações excepcionais podem ocorrer como acontecimentos e decisões.
+
+## Atividades opcionais
+
+O jogador poderá escolher hábitos e atividades:
+
+- Treinar.
+- Estudar por conta própria.
+- Descansar.
+- Participar de atividades sociais.
+- Praticar esportes.
+- Dedicar tempo à família.
+- Fazer terapia.
+- Desenvolver habilidades.
+
+Entretanto, todas precisam possuir limites coerentes.
+
+## Impedir exploração por cliques infinitos
+
+Atualmente o jogador consegue repetir algumas atividades indefinidamente e acumular benefícios.
+
+Isso deve acabar.
+
+Exemplo:
+
+O jogador pratica exercícios.
+
+O sistema registra que houve treino naquele período e calcula o benefício conforme sua condição física, frequência e recuperação.
+
+Treinar repetidamente sem descanso não pode gerar saúde infinita. Pode causar exaustão e aumentar o risco de lesões.
+
+Dormir várias vezes no mesmo dia não pode recuperar energia indefinidamente.
+
+O sono deve ser considerado parte da rotina diária automática. Descanso adicional deve ter benefício limitado, conforme a necessidade real.
+
+## Energia
+
+A energia deve depender de:
+
+- Sono e recuperação.
+- Saúde.
+- Estresse.
+- Alimentação.
+- Trabalho.
+- Estudos.
+- Atividades físicas.
+- Problemas pessoais.
+- Doenças.
+
+A recuperação e o desgaste devem acontecer naturalmente com a passagem do calendário.
+
+O jogador não deve precisar clicar diversas vezes em Dormir para continuar jogando.
+
+---
+
+# 4. REFORMA COMPLETA DA EDUCAÇÃO
+
+O sistema atual de frequência está excessivamente dependente de cliques.
+
+Um curso com 120 aulas não pode exigir 120 cliques e consumir energia absurda.
+
+## Funcionamento desejado
+
+Ao se matricular em um curso, o personagem passa a frequentá-lo automaticamente durante o calendário.
+
+O progresso acadêmico deve ocorrer mensalmente.
+
+Exemplo:
+
+Curso com 120 aulas em um semestre de seis meses.
+
+Com frequência regular, o personagem poderá completar aproximadamente 20 aulas por mês.
+
+Isso corresponde a aproximadamente 16,7% das aulas do semestre por mês.
+
+A quantidade deve variar conforme o calendário e a estrutura do curso.
+
+O progresso deve ser gradual, mas não artificialmente lento.
+
+## Frequência
+
+As aulas frequentadas devem depender de:
+
+- Matrícula ativa.
+- Tempo decorrido.
+- Situação de saúde.
+- Trabalho e outros compromissos.
+- Faltas justificadas e injustificadas.
+- Eventos pessoais.
+- Dedicação.
+
+O jogador não precisa confirmar presença individualmente.
+
+## Aprendizado e avaliações
+
+Separar três indicadores:
+
+**Frequência:** participação nas aulas.
+
+**Aprendizado:** conhecimento adquirido durante o curso.
+
+**Desempenho:** notas e resultados das avaliações.
+
+Estudar por conta própria pode melhorar aprendizado e desempenho, mas não substitui automaticamente a frequência formal.
+
+Avaliações devem ocorrer em momentos apropriados.
+
+O personagem poderá:
+
+- Ser aprovado.
+- Ser reprovado.
+- Repetir um semestre.
+- Trancar matrícula.
+- Abandonar curso.
+- Concluir formação.
+- Receber diploma.
+
+Cursos devem possuir requisitos e duração coerentes.
+
+O diploma precisa permanecer registrado no histórico educacional.
+
+Não exigir dezenas de cliques para concluir uma formação.
+
+---
+
+# 5. RELACIONAMENTOS E PERSONAGENS COMO NO BITLIFE
+
+O jogo precisa criar uma sociedade viva.
+
+Não quero que conhecer alguém seja simplesmente clicar em um botão e pagar R$ 35.
+
+**Novos personagens devem surgir naturalmente durante acontecimentos e experiências.**
+
+## Como conhecer pessoas
+
+O protagonista poderá conhecer pessoas ao:
+
+- Estudar.
+- Trabalhar.
+- Participar de atividades sociais.
+- Frequentar ambientes.
+- Mudar de cidade.
+- Participar de eventos.
+- Desenvolver uma profissão.
+- Ter amigos em comum.
+
+Exemplo:
+
+O personagem começa um novo emprego.
+
+Alguns meses depois, surge um acontecimento:
+
+"Uma colega de trabalho convidou você para almoçar."
+
+O jogador pode aceitar ou recusar.
+
+A partir da interação, o personagem poderá se tornar um contato permanente.
+
+## Personagens persistentes
+
+Cada NPC importante deve possuir:
+
+- Identidade própria.
+- Nome.
+- Idade e aniversário.
+- Retrato.
+- Ocupação.
+- Situação financeira aproximada, quando relevante.
+- Personalidade.
+- Estado emocional.
+- Afinidade com o protagonista.
+- Histórico de relacionamento.
+- Interesses e objetivos.
+- Condições de vida.
+
+As pessoas não podem existir apenas como nomes em uma lista.
+
+## Relações humanas
+
+Adicionar progressão natural:
+
+Desconhecido → Conhecido → Amigo → Amigo próximo.
+
+A vida amorosa poderá evoluir por aproximação, interesse recíproco, namoro, casamento e formação de família.
+
+Também devem existir possibilidades de:
+
+- Rejeição.
+- Brigas.
+- Reconciliação.
+- Separação.
+- Divórcio.
+- Infidelidade.
+- Desentendimentos.
+- Distanciamento.
+- Perda de contato.
+- Novas amizades.
+- Relações familiares difíceis.
+
+Nenhum relacionamento deve avançar automaticamente apenas porque o jogador repetiu uma opção muitas vezes.
+
+O outro personagem também precisa possuir vontade própria.
+
+---
+
+# 6. REFORMA VISUAL DOS PERSONAGENS
+
+O avatar atual precisa ser reformulado profundamente.
+
+Não basta acrescentar opções de cor ou formato de rosto ao mesmo boneco.
+
+**Criar um novo sistema de retratos com qualidade visual superior.**
+
+## Direção artística
+
+Usar um estilo de ilustração semi-cartoon moderno, com:
+
+- Proporções faciais mais naturais.
+- Olhos bem desenhados.
+- Nariz e boca mais proporcionais.
+- Cabelos detalhados.
+- Roupas variadas.
+- Expressões faciais.
+- Sombras suaves.
+- Contornos consistentes.
+- Paleta equilibrada.
+- Boa aparência em miniaturas e retratos grandes.
+
+Pode ser desenho vetorial em camadas, sprites ou imagens integradas ao projeto.
+
+Não depender de chamadas pagas de geração de imagem a cada NPC.
+
+O sistema deve funcionar offline depois que os recursos gráficos estiverem disponíveis.
+
+## Personalização do protagonista
+
+Permitir escolher:
+
+- Sexo e aparência.
+- Tom de pele.
+- Formato do rosto.
+- Olhos.
+- Sobrancelhas.
+- Nariz.
+- Boca.
+- Estilo e cor do cabelo.
+- Barba e bigode, quando aplicável.
+- Roupas.
+- Acessórios.
+- Características físicas básicas.
+
+A personalização deve ter prévia visual imediata.
+
+## Retratos dos NPCs
+
+Cada personagem deve receber uma aparência estável e distinta.
+
+Não criar dezenas de pessoas visualmente idênticas com apenas cores de cabelo diferentes.
+
+O retrato precisa acompanhar o personagem durante a vida.
+
+Exemplo:
+
+Uma pessoa de 18 anos deve ter aparência diferente quando chegar aos 45 ou 70 anos.
+
+Não precisa gerar imagens hiper-realistas. A prioridade é qualidade artística, variedade, consistência e desempenho.
+
+---
+
+# 7. ACONTECIMENTOS E CONSEQUÊNCIAS REAIS
+
+O jogo precisa ter acontecimentos frequentes, mas coerentes.
+
+Não gerar eventos aleatórios desconectados da vida do protagonista.
+
+Utilizar o histórico da partida, a situação dos personagens, profissões e acontecimentos anteriores.
+
+## Categorias
+
+**Vida pessoal**
+
+Doenças, acidentes, problemas financeiros, mudanças de comportamento, oportunidades e situações inesperadas.
+
+**Família**
+
+Discussões, problemas emocionais, dificuldades de saúde, nascimento de filhos, separações, reconciliações, mortes e heranças.
+
+**Vida amorosa**
+
+Convites, crises, aproximações, desconfianças, ciúmes, discussões, términos e acontecimentos positivos.
+
+**Educação**
+
+Problemas acadêmicos, oportunidades, avaliações, bolsas, conflitos e mudanças de formação.
+
+**Trabalho**
+
+Entrevistas, contratações, promoções, demissões, acidentes profissionais, conflitos com colegas e mudanças salariais.
+
+**Empresas**
+
+Problemas com fornecedores, queda de demanda, concorrência, fiscalização, oportunidades comerciais, inadimplência e crises operacionais.
+
+**Política**
+
+Eleições, campanhas, crises institucionais, negociações, votações, oposição, denúncias e acontecimentos sociais.
+
+**Mundo**
+
+Mudanças econômicas, desastres naturais, crises internacionais e acontecimentos nacionais.
+
+## Tragédias e acontecimentos graves
+
+O simulador também deve representar acontecimentos negativos e graves, respeitando probabilidades plausíveis.
+
+Uma tragédia não deve ocorrer apenas para criar drama artificial.
+
+Ela precisa ter causas, consequências e impacto permanente quando apropriado.
+
+## Consequências persistentes
+
+Cada decisão pode alterar:
+
+- Saúde.
+- Felicidade.
+- Energia.
+- Dinheiro.
+- Relações.
+- Confiança.
+- Reputação.
+- Emprego.
+- Empresas.
+- Patrimônio.
+- Oportunidades futuras.
+
+As consequências não precisam ser sempre financeiras.
+
+Um desentendimento familiar poderá gerar novas dificuldades meses depois.
+
+Uma decisão profissional poderá melhorar a carreira no futuro.
+
+A IA poderá ajudar a produzir essas relações causais.
+
+---
+
+# 8. CORRIGIR DEFINITIVAMENTE O PAINEL "PRECISA DE VOCÊ"
+
+Essa regra deve ser respeitada rigorosamente.
+
+Quando surgir um acontecimento que exige uma decisão, ele deverá aparecer no painel **Precisa de você**, na tela principal.
+
+O jogador clica no acontecimento.
+
+Abre-se uma janela de decisão na própria tela, mostrando:
+
+- Título.
+- Contexto.
+- Personagens envolvidos.
+- Alternativas.
+- Consequências previsíveis, quando conhecidas.
+
+O jogador escolhe uma alternativa.
+
+A decisão é aplicada imediatamente.
+
+O acontecimento desaparece do painel de pendências e entra no histórico.
+
+**NÃO REDIRECIONAR AUTOMATICAMENTE PARA A AGENDA.**
+
+A Agenda não é uma etapa obrigatória.
+
+Se o jogador já resolveu a situação na tela principal, não existe motivo para mandá-lo à Agenda.
+
+A Agenda funciona como consulta e histórico.
+
+Também impedir:
+
+- Repetição da mesma decisão.
+- Acontecimentos resolvidos aparecendo como pendentes.
+- Eventos perdidos durante avanços longos.
+- Mudança automática de aba sem necessidade.
+
+---
+
+# 9. FECHAMENTO DOS MESES
+
+O encerramento mensal precisa ocorrer nos bastidores.
+
+Remover avisos grandes de carregamento, telas intrusivas e mudanças automáticas para outras abas.
+
+O jogador escolhe avançar o período.
+
+O motor processa o tempo, a economia, a vida e os acontecimentos.
+
+Quando necessário, a IA analisa as decisões relevantes e propõe consequências.
+
+O resultado deve aparecer de maneira discreta na interface.
+
+## Histórico mensal
+
+Guardar os resultados na Agenda:
+
+- Receitas.
+- Despesas.
+- Salários.
+- Investimentos.
+- Lucros e prejuízos.
+- Acontecimentos importantes.
+- Mudanças nos relacionamentos.
+- Progresso acadêmico.
+- Mudanças de saúde.
+- Consequências das decisões.
+- Riscos futuros.
+
+O jogador poderá consultar os fechamentos anteriores.
+
+Não abrir automaticamente um resumo em modal após cada mês.
+
+Se houver uma decisão obrigatória, ela ficará disponível em Precisa de você, sem obrigar o jogador a navegar até a Agenda.
+
+---
+
+# 10. TRABALHO COMO SISTEMA DE PROFISSÕES
+
+O CIDADÃO não é um simulador exclusivamente político.
+
+O personagem deve poder construir trajetórias muito diferentes.
+
+A área Trabalho deve representar oportunidades profissionais e atividades econômicas.
+
+## Caminhos possíveis
+
+Incluir progressivamente:
+
+- Emprego formal.
+- Trabalho autônomo.
+- Trabalho rural.
+- Comércio.
+- Indústria.
+- Serviços.
+- Tecnologia.
+- Saúde.
+- Educação.
+- Segurança.
+- Transporte.
+- Empreendedorismo.
+- Carreira pública.
+- Carreira militar.
+- Carreira política.
+- Desemprego e atividades informais.
+
+Também podem existir trajetórias ilegais como escolhas narrativas, com riscos, consequências criminais, prisão e danos às relações. Essas trajetórias não devem oferecer sucesso fácil nem impunidade automática.
+
+## Progressão
+
+O jogador não deve receber uma profissão importante sem cumprir requisitos.
+
+Uma carreira poderá exigir:
+
+- Idade mínima.
+- Formação.
+- Experiência.
+- Recursos.
+- Concurso.
+- Certificações.
+- Indicação.
+- Processo seletivo.
+- Eleição, quando aplicável.
+
+## Ferramentas por ocupação
+
+As ferramentas devem aparecer conforme a atividade exercida.
+
+Um empregado vê informações de trabalho.
+
+Um empresário vê gestão financeira, funcionários, preços, produção e mercado.
+
+Um político vê suas competências institucionais.
+
+Um cidadão comum não deve receber ferramentas para comandar o governo federal.
+
+A progressão profissional não deve interromper a vida pessoal.
+
+---
+
+# 11. ECONOMIA, PATRIMÔNIO E REALISMO FINANCEIRO
+
+Preservar e aperfeiçoar as melhorias recentes do sistema financeiro e imobiliário.
+
+## Propriedade permanente
+
+Qualquer bem adquirido deve permanecer no patrimônio até ocorrer:
+
+- Venda.
+- Transferência.
+- Perda.
+- Destruição.
+- Desapropriação legal.
+- Outro acontecimento justificado.
+
+Comprar um apartamento não pode apagar uma kitnet anterior.
+
+O jogador deve poder acumular imóveis, veículos e participações empresariais.
+
+## Imóveis
+
+Preservar as funcionalidades de:
+
+- Compra.
+- Múltiplas propriedades.
+- Moradia.
+- Aluguel.
+- Anúncio de venda.
+- Negociação.
+- Contraproposta.
+- Venda concluída.
+- Valorização ou desvalorização.
+- Custos de manutenção.
+
+A venda deve depender de interessados e condições de mercado, não acontecer automaticamente ao anunciar.
+
+## Inflação
+
+Os preços devem evoluir conforme a inflação e as condições específicas dos mercados.
+
+Não simplesmente aplicar exatamente a mesma porcentagem a todos os itens.
+
+A inflação agregada influencia o nível geral dos preços, mas imóveis, alimentos, combustíveis, serviços, salários e veículos podem variar de maneira diferente.
+
+Considerar oferta, demanda, juros, câmbio, produtividade, região e concorrência quando relevantes.
+
+Também respeitar contratos com valores fixos e regras próprias de reajuste.
+
+## Funcionários
+
+Manter entrada numérica livre para contratações, demissões, salários e preços.
+
+O usuário poderá digitar o número desejado, mas o motor deverá validar capacidade financeira, equipamentos, demanda e demais requisitos.
+
+Não criar limites numéricos arbitrários para esconder problemas econômicos.
+
+---
+
+# 12. CAMPOS NUMÉRICOS EM TODA A INTERFACE
+
+Padronizar os controles numéricos.
+
+Sempre que o jogador precisar informar uma quantidade ou valor, priorizar:
+
+**Digitação direta + ajuste pelo scroll do mouse.**
+
+Exemplos:
+
+- Salários.
+- Funcionários.
+- Preços.
+- Valores de venda.
+- Aluguéis.
+- Investimentos.
+- Empréstimos.
+- Doações.
+- Quantidades de produção.
+- Valores de negociação.
+
+Remover barras deslizantes e botões obrigatórios de mais/menos quando a função for definir um valor numérico.
+
+O usuário deve poder digitar livremente.
+
+Entretanto, o motor precisa validar se o valor é possível.
+
+Se a operação for recusada, mostrar o motivo e não fingir que o valor foi aplicado.
+
+---
+
+# 13. CONFIGURAÇÕES
+
+Simplificar o cabeçalho.
+
+Mostrar apenas o ícone de engrenagem.
+
+Remover o texto "Configurações" ao lado.
+
+Ao clicar na engrenagem, abrir um menu organizado.
+
+Dentro dele:
+
+- Configurações gerais.
+- Interface.
+- Áudio, quando existir.
+- API de inteligência artificial.
+- Salvamento.
+- Preferências de jogo.
+
+Não transformar a configuração da API em uma aba principal.
+
+Não expor chaves secretas no código, em logs ou em arquivos exportados.
+
+---
+
+# 14. INTELIGÊNCIA ARTIFICIAL COMO PARTE DO SIMULADOR
+
+A integração com a Groq deve continuar funcionando.
+
+O objetivo é que a IA participe da evolução contextual do mundo, não apenas reescreva notícias.
+
+No fechamento de períodos relevantes, a IA poderá analisar:
+
+- Histórico de decisões.
+- Perfil do protagonista.
+- Relações sociais.
+- Situação profissional.
+- Patrimônio.
+- Empresas.
+- Estado econômico.
+- Eventos anteriores.
+- Consequências ainda não resolvidas.
+
+Ela poderá propor acontecimentos e efeitos futuros.
+
+## Responsabilidade do motor
+
+A IA não deve possuir autoridade irrestrita sobre os números.
+
+O motor TypeScript deverá validar:
+
+- Valores financeiros.
+- Limites físicos.
+- Contratos.
+- Datas.
+- Estado das relações.
+- Elegibilidade para cargos.
+- Consequências econômicas.
+- Capacidade produtiva.
+
+Nenhuma resposta da IA poderá criar dinheiro infinito, cargos inexistentes ou bens sem origem.
+
+## Funcionamento sem API
+
+Se a API estiver indisponível, sem chave ou com limite excedido, o jogo deve continuar funcionando com seu motor local.
+
+Não depender exclusivamente de uma chamada externa para calcular a vida do personagem.
+
+A memória precisa permanecer salva na partida.
+
+---
+
+# 15. CORREÇÕES ESTRUTURAIS OBRIGATÓRIAS
+
+Verifique especialmente estes problemas existentes:
+
+1. Idade que não atualiza corretamente.
+2. Calendário que avança meses sem processar corretamente os dias.
+3. Sistemas antigos de horas que continuam interferindo na vida.
+4. Atividades repetidas ilimitadamente.
+5. Energia recuperada sem passagem coerente de tempo.
+6. Frequência acadêmica dependente de cliques.
+7. Progressão de cursos inconsistente com sua duração.
+8. Personagens gerados instantaneamente por botão.
+9. Eventos que não aparecem ou não possuem consequências reais.
+10. Redirecionamento desnecessário para a Agenda.
+11. Falta de variedade visual entre NPCs.
+12. Editor de personagem visualmente limitado.
+13. Elementos técnicos exibidos fora do contexto profissional.
+14. Valores econômicos incompatíveis com inflação, mercado e patrimônio.
+15. Sistemas antigos mantidos na interface apesar de já terem sido substituídos no motor.
+
+Corrigir as causas, não apenas esconder os componentes.
+
+---
+
+# 16. SALVAMENTOS E COMPATIBILIDADE
+
+Preservar:
+
+- Personagens existentes.
+- Dinheiro.
+- Dívidas.
+- Imóveis.
+- Veículos.
+- Empresas.
+- Carreiras.
+- Formação.
+- Familiares.
+- Relacionamentos.
+- Histórico político.
+- Histórico de eventos.
+- Memória da IA.
+
+Criar migrações quando estruturas antigas precisarem ser substituídas.
+
+Novas partidas deverão utilizar o modelo atualizado.
+
+Não redefinir a partida do jogador sem sua autorização.
+
+Não presumir que um sistema está conectado apenas porque aparece na interface.
+
+---
+
+# 17. TESTES OBRIGATÓRIOS
+
+Depois das alterações, executar os testes existentes e adicionar testes para as novas regras.
+
+Verificar, no mínimo:
+
+**Calendário e idade**
+
+- Avanço correto de dias, semanas, meses e anos.
+- Anos bissextos.
+- Dias da semana.
+- Aniversários nas datas corretas.
+- Envelhecimento dos familiares.
+
+**Educação**
+
+- Matrícula ativa progride automaticamente.
+- Frequência aumenta gradualmente com o calendário.
+- Não exige 120 cliques.
+- Faltas afetam o resultado.
+- Diploma exige conclusão verdadeira.
+
+**Atividades**
+
+- Dormir não recupera energia infinitamente.
+- Treinar repetidamente não gera saúde infinita.
+- Hábitos afetam atributos com limites coerentes.
+
+**Eventos**
+
+- Ocorrem em contextos apropriados.
+- Alteram o estado do jogo.
+- Não se repetem após resolução.
+- Podem ser resolvidos diretamente na tela principal.
+- Permanecem registrados no histórico.
+
+**Personagens**
+
+- NPCs possuem identidade persistente.
+- Aparência não muda aleatoriamente ao abrir a tela.
+- Relações e idades evoluem com o calendário.
+
+**Patrimônio**
+
+- Compras não apagam bens anteriores.
+- Vendas exigem negociação ou regras próprias.
+- Inflação e condições de mercado afetam valores.
+
+**Interface**
+
+- Política não aparece como aba principal.
+- Macro está integrada ao contexto empresarial.
+- Não existem cronômetros antigos.
+- Configurações aparecem apenas pela engrenagem.
+- Não há redirecionamento automático para Agenda após resolver eventos.
+
+Executar também:
+
+- Verificação de tipos.
+- Testes automatizados.
+- Build de produção.
+- Verificação de regressões dos saves antigos.
+
+Não declarar conclusão se houver erros de compilação ou testes falhando.
+
+---
+
+# 18. COMO EXECUTAR ESTA REFORMA
+
+Não entregue apenas uma explicação ou uma lista de sugestões.
+
+**Quero implementação real no projeto.**
+
+Primeiro, examine os arquivos e identifique os sistemas que precisam ser substituídos.
+
+Depois, execute as mudanças em etapas coordenadas:
+
+### Etapa 1: Motor da vida
+
+Reformar calendário, idade, energia, atividades e educação.
+
+Eliminar a dependência de horas.
+
+### Etapa 2: Relações e acontecimentos
+
+Reformular encontros, vínculos sociais, eventos e consequências persistentes.
+
+Corrigir o painel Precisa de você.
+
+### Etapa 3: Interface
+
+Criar uma identidade visual melhor e reorganizar a navegação.
+
+Eliminar componentes ultrapassados.
+
+### Etapa 4: Personagens
+
+Reformular retratos, personalização e aparência dos NPCs.
+
+### Etapa 5: Integração e testes
+
+Conectar os sistemas, atualizar saves e validar o jogo inteiro.
+
+Se a atualização não couber em uma única execução, priorize uma etapa funcional e testada, mantendo o projeto compilável. Não realize dezenas de mudanças desconectadas que deixem o jogo quebrado.
+
+Ao final, informe objetivamente:
+
+- O que foi realmente implementado.
+- Os arquivos alterados.
+- Os sistemas substituídos.
+- Os testes executados e seus resultados.
+- O que ainda precisa ser desenvolvido.
+
+Não confunda uma tela visualmente pronta com um sistema funcional.
+
+## RESULTADO FINAL ESPERADO
+
+O CIDADÃO deve se tornar um simulador em que o jogador sente que está vivendo a história de uma pessoa.
+
+A vida precisa evoluir naturalmente com o tempo.
+
+O personagem envelhece, aprende, trabalha, conhece pessoas, constrói relações, adquire patrimônio, enfrenta dificuldades e toma decisões que podem modificar seu futuro.
+
+A economia e a sociedade continuam evoluindo independentemente do jogador.
+
+A política é apenas um dos caminhos possíveis.
+
+As profissões devem abrir oportunidades próprias.
+
+A inteligência artificial deve ajudar o mundo a responder às escolhas do jogador.
+
+**O objetivo não é um jogo com centenas de botões. É um mundo simulado, coerente, visualmente bonito e com liberdade para construir diferentes histórias de vida.**
+
+Implemente a reforma diretamente no projeto existente, preservando dados importantes e corrigindo os sistemas antigos que impedem esse funcionamento.

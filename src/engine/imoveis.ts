@@ -120,11 +120,23 @@ export function simularMesImoveis(
   vida: VidaPessoal, macro: Macroeconomia, data: DataCalendario, indiceAnterior: number, indiceNovo: number
 ): { novaVida: VidaPessoal; logs: string[] } {
   const logs: string[] = [];
-  const reajuste = indiceAnterior > 0 ? indiceNovo / indiceAnterior : 1;
+  const reajusteBase = indiceAnterior > 0 ? indiceNovo / indiceAnterior : 1;
+  // Juros altos (Selic > 11%) encarecem financiamento e freiam imóveis médios; PIB forte aquece o setor
+  const efeitoSelicMensal = ((10.5 - (macro.taxaSelic || 10.5)) * 0.00045);
+  const efeitoPibMensal = ((macro.crescimentoAnualPib || 2.0) * 0.0003);
   let saldo = vida.saldoBancario;
   let novaVida = { ...vida };
   const novos = inventario(vida).map(original => {
-    let imovel = { ...original, valorMercadoAtual: arred(original.valorMercadoAtual * reajuste) };
+    const sensibilidadeTipo =
+      original.tipo === 'aluguel_simples'
+        ? 0.0006 // Alta procura por compactos urbanos
+        : original.tipo === 'apartamento_padrao'
+          ? efeitoSelicMensal * 1.2 // Mais sensível ao financiamento imobiliário
+          : original.tipo === 'apartamento_luxo' || original.tipo === 'mansao'
+            ? efeitoPibMensal * 1.35 + efeitoSelicMensal * 0.5
+            : 0;
+    const fatorSetorial = Math.max(0.985, Math.min(1.028, reajusteBase + sensibilidadeTipo + efeitoPibMensal));
+    let imovel = { ...original, valorMercadoAtual: arred(original.valorMercadoAtual * fatorSetorial) };
     const referencia = imovel.valorMercadoAtual;
     if (imovel.anuncio) {
       const anuncio = { ...imovel.anuncio, mesesAnunciado: imovel.anuncio.mesesAnunciado + 1 };
@@ -150,7 +162,7 @@ export function simularMesImoveis(
         logs.push(`Inquilino encontrado para ${imovel.nome}. O aluguel começará a render no próximo fechamento.`);
       }
     } else if (imovel.alugadoParaTerceiros && imovel.aluguelMensal > 0) {
-      const aluguel = arred(imovel.aluguelMensal * reajuste);
+      const aluguel = arred(imovel.aluguelMensal * reajusteBase);
       imovel.aluguelMensal = aluguel;
       // Reserva 12% para administração, vacância e desgaste.
       const liquido = arred(aluguel * 0.88);

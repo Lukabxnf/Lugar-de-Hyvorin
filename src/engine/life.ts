@@ -43,6 +43,7 @@ export function evoluirRelacionamentoMensal(
     ...rel,
     mesesConvivencia,
     mesesSemContato,
+    interacoesNoMes: 0,
     nivelAfinidade: afinidade,
     mesesNoRelacionamento: relacionamentoAmoroso
       ? (rel.mesesNoRelacionamento ?? 0) + 1
@@ -644,13 +645,59 @@ export function simularMesVida(
     };
   });
 
-  // 11. Vitalidade, Saúde e Felicidade
+  // 11. Vitalidade, Energia, Saúde e Felicidade
+  const horasSono = novaVida.rotina.horasSono || 8;
+  let deltaEnergia = 0;
+
+  // Recuperação pelo sono e conforto residencial
+  if (horasSono >= 8) deltaEnergia += 4.5;
+  else if (horasSono === 7) deltaEnergia += 2;
+  else deltaEnergia -= 4.5;
+
+  if (moradiaInfo.conforto >= 75) deltaEnergia += 3;
+  else if (moradiaInfo.conforto >= 50) deltaEnergia += 1.5;
+  else if (moradiaInfo.conforto < 35) deltaEnergia -= 1.5;
+
+  // Hábitos de estilo de vida e lazer
+  if (novaVida.rotina.academia) deltaEnergia += 2;
+  if (novaVida.rotina.padraoAlimentacao === 'saudavel') deltaEnergia += 1.5;
+  if (novaVida.rotina.padraoAlimentacao === 'premium') deltaEnergia += 3;
+  if (novaVida.rotina.terapia) deltaEnergia += 2;
+  if (novaVida.rotina.lazerNivel === 'moderado') deltaEnergia += 2.5;
+  if (novaVida.rotina.lazerNivel === 'ostentacao') deltaEnergia += 4.5;
+
+  // Desgaste por trabalho, jornada dupla de estudos e preocupações financeiras
+  if (!novaVida.empregoAtual) {
+    deltaEnergia += 4; // Tempo livre permite descansar mais
+  } else {
+    deltaEnergia -= estresseTrabalho * 1.15;
+  }
+
+  if (novaVida.empregoAtual && novaVida.cursoMatriculado && !novaVida.cursoMatriculado.concluido) {
+    deltaEnergia -= 3.5; // Jornada dupla (trabalho + estudos)
+  }
+
+  if (novaVida.contasVencidas.length > 0) {
+    deltaEnergia -= Math.min(8, novaVida.contasVencidas.length * 2.5);
+  }
+
+  novaVida.energia = Math.max(5, Math.min(100, Number(((novaVida.energia ?? 85) + deltaEnergia).toFixed(1))));
+
   let deltaSaude = moradiaInfo.bonusSaude;
   if (novaVida.rotina.planoSaude === 'completo') deltaSaude += 2;
   if (novaVida.rotina.academia) deltaSaude += 2.5;
   if (novaVida.rotina.padraoAlimentacao === 'saudavel') deltaSaude += 2;
   if (novaVida.rotina.padraoAlimentacao === 'premium') deltaSaude += 3;
   deltaSaude -= estresseTrabalho * 0.35;
+
+  if (novaVida.energia < 30) {
+    deltaSaude -= 3.5; // Exaustão derruba imunidade
+    logs.push(
+      `⚡ Alerta de Exaustão: sua energia vital caiu para ${Math.round(novaVida.energia)}%. Descanse, tire férias ou reduza a sobrecarga para proteger sua saúde.`
+    );
+  } else if (novaVida.energia >= 80) {
+    deltaSaude += 1.5;
+  }
 
   if (novaVida.contasVencidas.length > 0) {
     deltaSaude -= novaVida.contasVencidas.length * 0.8;
@@ -664,6 +711,8 @@ export function simularMesVida(
   if (novaVida.rotina.lazerNivel === 'ostentacao') deltaFelicidade += 5;
   if (novaVida.rotina.terapia) deltaFelicidade += 3;
   if (novaVida.familia.estadoCivil === 'casado') deltaFelicidade += 2;
+  if (novaVida.energia < 30) deltaFelicidade -= 3;
+  if (novaVida.energia >= 80) deltaFelicidade += 1.5;
   if (novaVida.contasVencidas.length > 0) {
     deltaFelicidade -= novaVida.contasVencidas.length * 4; // Contas atrasadas trazem infelicidade e ansiedade
   }
@@ -683,6 +732,7 @@ export function simularMesVida(
   // Networking cresce com intelecto e reputação
   const ganhoNetworking = novaVida.reputacao * 0.02 + novaVida.intelecto * 0.015;
   novaVida.redeContatos = Math.min(100, Number((novaVida.redeContatos + ganhoNetworking).toFixed(1)));
+  novaVida.acoesRealizadasNoMes = 0;
 
   return { novaVida, logs };
 }

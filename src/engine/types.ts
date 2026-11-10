@@ -176,7 +176,9 @@ export type TipoRelacionamento =
   | 'pai'
   | 'mae'
   | 'irmao'
+  | 'irma'
   | 'filho'
+  | 'filha'
   | 'colega_trabalho';
 
 export interface Relacionamento {
@@ -190,8 +192,10 @@ export interface Relacionamento {
   mesesConvivencia?: number;
   mesesSemContato?: number;
   interacoesSignificativas?: number;
+  interacoesNoMes?: number;
   mesesNoRelacionamento?: number;
   mesesCasado?: number;
+  avatar?: AvatarConfig;
   custoMensalApoio?: number; // Filhos geram despesas de criação
   filhoDetalhes?: {
     diaNascimento: number;
@@ -399,12 +403,7 @@ export interface VidaPessoal {
   atividadeAtual: TipoAtividadeRotina;
   horasRestantesAtividade?: number;
   aulaFormal?: boolean;
-  controleAtividades?: {
-    data: string;
-    acoesNoDia: string[];
-    semanaInicio: string;
-    quantidadesSemana: Record<string, number>;
-  };
+  acoesRealizadasNoMes?: number;
 
   rotina: {
     padraoAlimentacao: 'economica' | 'saudavel' | 'premium';
@@ -514,7 +513,6 @@ export interface OpcaoEvento {
     deltaReputacao?: number;
     deltaAfinidadeRelId?: string;
     deltaAfinidadeValor?: number;
-    novoContato?: Relacionamento; // adicionado somente após escolha explícita do jogador
     atividade?: TipoAtividadeRotina;
     duracaoAtividadeHoras?: number;
     aulaFormal?: boolean;
@@ -530,6 +528,7 @@ export interface EventoDecisao {
   titulo: string;
   descricao: string;
   dataOcorrencia: string;
+  ilustracao?: string;
   opcoes: OpcaoEvento[];
 }
 
@@ -541,6 +540,26 @@ export interface EventoHistoricoResolvido {
   resultado: string;
 }
 
+export interface AcontecimentoPropostoIA {
+  categoria: EventoDecisao['categoria'];
+  urgencia: EventoDecisao['urgencia'];
+  titulo: string;
+  descricao: string;
+  ilustracao?: string;
+  opcoes: Array<{
+    texto: string;
+    descricaoImpacto: string;
+    mensagemResultado: string;
+    custoFinanceiro?: number;
+    ganhoFinanceiro?: number;
+    deltaSaude?: number;
+    deltaFelicidade?: number;
+    deltaEnergia?: number;
+    deltaIntelecto?: number;
+    deltaReputacao?: number;
+  }>;
+}
+
 /** Proposta contextual da IA. Efeitos são limites, jamais saldos ou salários finais. */
 export interface PropostaFechamentoIA {
   justificativa: string;
@@ -548,22 +567,8 @@ export interface PropostaFechamentoIA {
   choquePib: number; // pontos percentuais, -0.8 a +0.8
   choqueDolar: number; // R$/US$, -0.15 a +0.15
   impactoApoioParlamento: number; // pontos, -3 a +3
-  acontecimento?: {
-    categoria: EventoDecisao['categoria'];
-    urgencia: EventoDecisao['urgencia'];
-    titulo: string;
-    descricao: string;
-    opcoes: Array<{
-      texto: string;
-      descricaoImpacto: string;
-      mensagemResultado: string;
-      deltaSaude?: number;
-      deltaFelicidade?: number;
-      deltaEnergia?: number;
-      deltaIntelecto?: number;
-      deltaReputacao?: number;
-    }>;
-  };
+  acontecimento?: AcontecimentoPropostoIA;
+  acontecimentos?: AcontecimentoPropostoIA[];
 }
 
 export interface MemoriaMesIA {

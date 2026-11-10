@@ -5,9 +5,9 @@ import { calcularIdadeExata, calcularTaxaMensalEfetiva, evoluirRelacionamentoMen
 import { avaliarContratacaoEmpresa, simularMesEmpresa } from './business';
 import { analisarCreditoPessoal, calcularPatrimonioLiquido, formatarMoedaCompacta } from './finance';
 import { cargoCompativelComEleicao, isAnoEleitoral } from './politics';
-import { aplicarImpactoAfinidadeFamiliar, sortearEventoDecisao } from './events';
+import { aplicarImpactoAfinidadeFamiliar, dispensarEventoDecisao, executarAcaoVidaPessoal, sortearEventoDecisao, sortearMultiplosEventosPeriodo } from './events';
 import { criarEstadoInicial } from './presets';
-import { avancarHorasSimulacao, avancarMinutosSimulacao, avancarMesSimulacao, avancarMultiplosMeses, diasNoMes } from './simulation';
+import { avancarCicloAnualSimulacao, avancarDiasSimulacao, avancarHorasSimulacao, avancarMinutosSimulacao, avancarMesSimulacao, avancarMultiplosMeses, diasNoMes, sortearEncontroOrganico } from './simulation';
 import { Macroeconomia, VidaPessoal, Empresa, DataCalendario, Relacionamento, PropostaFechamentoIA } from './types';
 
 /** Cenário de emprego e curso já iniciados, distinto da nova partida aos 18 anos. */
@@ -184,7 +184,7 @@ test('Time & Clock: full-hour advancement keeps the clock aligned and retains we
   };
   assert.equal(estado.horaAtual, 8);
   assert.equal(estado.diaAtual, 1);
-  assert.equal(estado.diaSemanaAtual, 'Quinta-feira');
+  assert.equal(estado.diaSemanaAtual, 'Segunda-feira');
 
   const estado1h = avancarHorasSimulacao(estado, 1);
   assert.equal(estado1h.horaAtual, 9);
@@ -195,7 +195,7 @@ test('Time & Clock: full-hour advancement keeps the clock aligned and retains we
   assert.equal(estado24h.horaAtual, 0);
   assert.equal(estado24h.minutoAtual, 0);
   assert.equal(estado24h.diaAtual, 2);
-  assert.equal(estado24h.diaSemanaAtual, 'Sexta-feira');
+  assert.equal(estado24h.diaSemanaAtual, 'Terça-feira');
 });
 
 test('Clock: legacy minute advancement remains compatible for saves and tests', () => {
@@ -761,3 +761,183 @@ test('Politics: candidate offices match the correct election level', () => {
   assert.equal(cargoCompativelComEleicao('geral', 'presidente'), true);
   assert.equal(cargoCompativelComEleicao('geral', 'prefeito'), false);
 });
+
+test('Calendar: advancing days steps chronologically and rotates weekdays', () => {
+  const originalRandom = Math.random;
+  Math.random = () => 0.99; // avoid random events during deterministic test
+  try {
+    const base = criarEstadoInicial('estudante');
+    assert.equal(base.diaAtual, 1);
+    assert.equal(base.diaSemanaAtual, 'Segunda-feira');
+
+    const dia2 = avancarDiasSimulacao(base, 1);
+    assert.equal(dia2.diaAtual, 2);
+    assert.equal(dia2.diaSemanaAtual, 'Terça-feira');
+
+    const semana = avancarDiasSimulacao(base, 7);
+    assert.equal(semana.diaAtual, 8);
+    assert.equal(semana.diaSemanaAtual, 'Segunda-feira');
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
+test('Calendar: exact birthday trigger on specific day updates character age', () => {
+  const originalRandom = Math.random;
+  Math.random = () => 0.99;
+  try {
+    const base = criarEstadoInicial('estudante');
+    // Set birthday on January 15th
+    const custom = {
+      ...base,
+      diaAtual: 14,
+      mesAtual: 1,
+      anoAtual: 2026,
+      vida: {
+        ...base.vida,
+        idade: 18,
+        dataNascimento: { dia: 15, mes: 1, ano: 2008 },
+      },
+    };
+
+    const aniversario = avancarDiasSimulacao(custom, 1);
+    assert.equal(aniversario.diaAtual, 15);
+    assert.equal(aniversario.vida.idade, 18); // 2026 - 2008 = 18 exactly
+
+    const anterior = {
+      ...custom,
+      vida: {
+        ...custom.vida,
+        idade: 17,
+        dataNascimento: { dia: 15, mes: 1, ano: 2008 },
+      },
+    };
+    const apos = avancarDiasSimulacao(anterior, 1);
+    assert.equal(apos.vida.idade, 18);
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
+test('Calendar: month rollover at end of month triggers monthly cycle and advances month', () => {
+  const originalRandom = Math.random;
+  Math.random = () => 0.99;
+  try {
+    const base = criarEstadoInicial('estudante');
+    const fimDeJaneiro = {
+      ...base,
+      diaAtual: 31,
+      mesAtual: 1,
+      anoAtual: 2026,
+    };
+
+    const novoMes = avancarDiasSimulacao(fimDeJaneiro, 1);
+    assert.equal(novoMes.diaAtual, 1);
+    assert.equal(novoMes.mesAtual, 2);
+    assert.equal(novoMes.mesesTotais, 1);
+    assert.ok(novoMes.ultimoResumoMes !== undefined);
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
+test('Organic encounters: sortearEncontroOrganico generates persistent avatar and valid citizen data', () => {
+  const base = criarEstadoInicial('estudante');
+  const contato = sortearEncontroOrganico(base);
+
+  assert.ok(contato.id.startsWith('contato_'));
+  assert.ok(contato.nome.length > 3);
+  assert.equal(contato.tipo, 'conhecido');
+  assert.ok(contato.nivelAfinidade >= 35 && contato.nivelAfinidade <= 55);
+  assert.ok(contato.avatar);
+  assert.ok(contato.avatar.sexo === 'masculino' || contato.avatar.sexo === 'feminino');
+  assert.ok(['clara', 'morena', 'negra', 'oriental'].includes(contato.avatar.pele));
+});
+
+test('Energy & Annual Cycle (+1 Ano): energy recovers when resting and drops under heavy double-shift stress, and +1 Ano processes all 12 months', () => {
+  const base = criarEstadoInicial('estudante');
+
+  // 1. Cidadão descansando (sem emprego estressante, 8h de sono) recupera energia
+  const cansado = {
+    ...base,
+    vida: {
+      ...base.vida,
+      energia: 50,
+      empregoAtual: undefined,
+      rotina: { ...base.vida.rotina, horasSono: 8, lazerNivel: 'moderado' as const },
+    },
+  };
+  const aposDescanso = avancarCicloAnualSimulacao(cansado);
+  assert.equal(aposDescanso.mesesTotais, 12);
+  assert.ok(aposDescanso.vida.energia > 50, 'Energia deve subir após 1 ano de rotina leve e descanso');
+  assert.ok(aposDescanso.eventosPendentes.length >= 1, 'Deve apresentar acontecimentos de fim de ciclo');
+
+  // 2. Cidadão sobrecarregado (cargo executivo de alto estresse + faculdade + pouco sono) perde energia
+  const sobrecarregado = criarEstudanteComVinculos();
+  sobrecarregado.vida.energia = 90;
+  sobrecarregado.vida.empregoAtual = { carreiraId: 'diretor_executivo', mesesNoCargo: 2, salarioAcordado: 28000 };
+  sobrecarregado.vida.rotina = { ...sobrecarregado.vida.rotina, horasSono: 6, lazerNivel: 'economico' };
+
+  const aposSobrecarga = avancarCicloAnualSimulacao(sobrecarregado);
+  assert.equal(aposSobrecarga.mesesTotais, 12);
+  assert.ok(aposSobrecarga.vida.energia < 90, 'Energia deve cair após 1 ano de sobrecarga intensa');
+});
+
+test('Events & Life Actions: X button dismisses pending events and proactive life actions restore energy', () => {
+  const base = criarEstadoInicial('estudante');
+  const eventos = sortearMultiplosEventosPeriodo(base, 3);
+  assert.equal(eventos.length, 3);
+  assert.notEqual(eventos[0].titulo, eventos[1].titulo);
+  assert.notEqual(eventos[1].titulo, eventos[2].titulo);
+
+  const comEventos = { ...base, eventosPendentes: [eventos[0]] };
+  const dispensado = dispensarEventoDecisao(comEventos, eventos[0].id);
+  assert.equal(dispensado.eventosPendentes.length, 0);
+  assert.equal(dispensado.eventosResolvidos[0].titulo, eventos[0].titulo);
+
+  const comEnergiaBaixa = { ...base, vida: { ...base.vida, energia: 40 } };
+  const { novoEstado } = executarAcaoVidaPessoal(comEnergiaBaixa, 'descansar_casa');
+  assert.ok(novoEstado.vida.energia > 40);
+});
+
+test('Calendar: +1 Mês and +1 Ano advance to varied days and weekdays instead of staying stuck on day 1 Tuesday', () => {
+  const base = criarEstadoInicial('estudante');
+  const mesSeguinte = avancarMesSimulacao({ ...base, eventosPendentes: [] });
+  assert.equal(mesSeguinte.mesAtual, 2);
+  assert.ok(mesSeguinte.diaAtual >= 1 && mesSeguinte.diaAtual <= 28);
+  assert.notEqual(mesSeguinte.diaAtual, 1, 'Monthly advance should pick a varied day of the month');
+
+  const anoSeguinte = avancarCicloAnualSimulacao({ ...mesSeguinte, eventosPendentes: [] });
+  assert.equal(anoSeguinte.anoAtual, 2027);
+  assert.ok(anoSeguinte.diaAtual >= 1 && anoSeguinte.diaAtual <= 28);
+  assert.ok(
+    anoSeguinte.diaAtual !== mesSeguinte.diaAtual || anoSeguinte.diaSemanaAtual !== mesSeguinte.diaSemanaAtual,
+    'Annual advance should progress to a new date/weekday'
+  );
+});
+
+test('BitLife Real-Life Mechanics: CNH license, weekend freelance gig, nightlife social encounter, and SUS clinic work properly', () => {
+  const base = criarEstadoInicial('estudante');
+
+  // 1. Bico de Fim de Semana increases cash immediately
+  const aposBico = executarAcaoVidaPessoal(base, 'bico_fim_de_semana');
+  assert.ok(aposBico.novoEstado.vida.saldoBancario > base.vida.saldoBancario);
+
+  // 2. Tirar CNH adds Habilitação CNH to titulosConquistados
+  const aposCnh = executarAcaoVidaPessoal(base, 'tirar_cnh_detran');
+  assert.ok(aposCnh.novoEstado.vida.titulosConquistados.includes('CNH Definitiva Categoria AB (Detran)'));
+
+  // 3. Noitada introduces a new person to conhecidos
+  const qtdConhecidosAntes = base.vida.familia.conhecidos.length;
+  const aposNoitada = executarAcaoVidaPessoal(base, 'noitada_balada_bar');
+  assert.equal(aposNoitada.novoEstado.vida.familia.conhecidos.length, qtdConhecidosAntes + 1);
+
+  // 4. Consulta SUS works for free and improves health
+  const comSaudeBaixa = { ...base, vida: { ...base.vida, saude: 60 } };
+  const aposSus = executarAcaoVidaPessoal(comSaudeBaixa, 'consulta_sus');
+  assert.ok(aposSus.novoEstado.vida.saude > 60);
+  assert.equal(aposSus.novoEstado.vida.saldoBancario, comSaudeBaixa.vida.saldoBancario);
+});
+
+
+
